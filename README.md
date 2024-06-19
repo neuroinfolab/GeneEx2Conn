@@ -1,5 +1,5 @@
 # Gene2Conn
-Repository for linking the human transcriptome to connectome.
+Repository for linking gene expression in the human brain to the connectome
 
 ## Basic overview 
 This notebook contains modalities for predicting the connectome from the transcriptome. 
