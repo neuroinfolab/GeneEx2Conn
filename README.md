@@ -15,3 +15,4 @@ This notebook contains modalities for predicting the connectome from the transcr
     - /finetune_demo shows single sim runs with specified parameter grids
 - /sim_results contains pickle files with the results of different simulation runs
 
+To use this repo, setup a conda environment using Gene2Conn_env.yml
