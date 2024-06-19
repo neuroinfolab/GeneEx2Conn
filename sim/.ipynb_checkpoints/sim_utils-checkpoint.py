@@ -163,6 +163,7 @@ def random_search_init(gpu_acceleration, model, X_combined, Y_combined, param_di
         
     return random_search, X_combined, Y_combined
 
+
 def find_best_params(grid_search_cv_results):
     """
     Helper function to score custom gridsearch

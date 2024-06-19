@@ -140,7 +140,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     return
 
 
-def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0):
+def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, save_sim=False):
     """
     Function to run simulations for all possible feature types: connectome only, transcriptome only, connectome+transcriptome
     """
@@ -183,16 +183,16 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
     multi_model_results.append(trans_conn_sim.results)
 
     # Save sim data
-    '''commented out for hand tuning'''
-    # save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution)
+    if save_sim:
+        save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution)
     
     return multi_model_results
 
 
 
-def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0):
+def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, save_sim=False):
     """
-    Function to run simulations for all possible feature types: connectome only, transcriptome only, connectome+transcriptome
+    Function to run a simulations for single feature type: connectome only, transcriptome only, connectome+transcriptome
     """
     
     # List to store each model types results
@@ -229,10 +229,8 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_region
         single_model_results.append(trans_conn_sim.results)
 
     # Save sim data
-    ''' remove saving for hand tuning '''
-    # save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution)
+    if save_sim: 
+        save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution)
     
     return single_model_results
-
-
 

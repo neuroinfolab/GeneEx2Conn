@@ -22,12 +22,57 @@ class BaseModel:
         return self.param_dist
 
 
+class RidgeModel(BaseModel):
+    """Ridge Regression model with parameter grid."""
+
+    def __init__(self):
+        super().__init__()
+        self.model = Ridge()
+        self.param_grid = {
+            'alpha': [0.01, 0.1, 0.5, 1.0, 10, 100],
+            'solver': ['auto'] #, 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga']
+        }
+
+
+class PLSModel(BaseModel):
+    """Partial Least Squares Regression model with parameter grid."""
+
+    def __init__(self):
+        super().__init__()
+        self.model = PLSRegression()
+        self.param_grid = {
+            'n_components': [1, 3, 5, 7, 9, 15],
+            'max_iter': [1000],
+            'tol': [1e-07], 
+            'scale': [True, False] #, False]
+        }
+
+
 class XGBModel(BaseModel):
     """XGBoost model with parameter grid."""
 
     def __init__(self):
         super().__init__()
         self.model = XGBRegressor()
+            
+        self.param_grid = {
+            'n_estimators': [50, 100, 150, 200, 250],
+            'max_depth': [2, 3, 5, 7],           # Maximum depth of each tree - makes a big diff
+            'learning_rate': [0.01, 0.1, 0.3],     # Learning rate (shrinkage)
+            'subsample': [0.6, 0.8, 1],              # Subsample ratio of the training data
+            'colsample_bytree': [0.5, 0.8, 1],  # Subsample ratio of columns when constructing each tree
+            'gamma': [0, 0.1],             # Minimum loss reduction required to make a split
+            'reg_lambda': [0.01, 0.1, 1],              # L2 regularization term (Ridge penalty)
+            'reg_alpha': [0.01, 0.1, 1],             # L1 regularization term (Lasso penalty)
+            'random_state': [42],        # Seed for reproducibility
+            'min_child_weight': [1, 3, 5], 
+            'tree_method':['hist'],  # Use the GPU
+            'device':['cuda'],  # Use GPU predictor
+            'verbosity': [2]
+        }
+
+        # syntax to specify params for a fine tuned run
+        '''
         best_params = {
             'n_estimators': [250],
             'max_depth': [3],           # Maximum depth of each tree - makes a big diff
@@ -44,27 +89,14 @@ class XGBModel(BaseModel):
             'verbosity': [2]
         }
         self.param_grid = best_params
-
-        ''' consider adding this hyperparam
+        '''
+        '''
+        consider adding this hyperparam
         Sampling method. Used only by the GPU version of hist tree method. uniform: select random training instances uniformly. gradient_based select random training instances with higher probability when the gradient and hessian are larger. (cf. CatBoost)
         '''
         
+        # can also specify distributions
         '''
-        self.param_grid = {
-            'n_estimators': [50, 100, 150, 200, 250],
-            'max_depth': [2, 3, 5, 7],           # Maximum depth of each tree - makes a big diff
-            'learning_rate': [0.01, 0.1, 0.3],     # Learning rate (shrinkage)
-            'subsample': [0.6, 0.8, 1],              # Subsample ratio of the training data
-            'colsample_bytree': [0.5, 0.8, 1],  # Subsample ratio of columns when constructing each tree
-            'gamma': [0, 0.1],             # Minimum loss reduction required to make a split
-            'reg_lambda': [0.01, 0.1, 1],              # L2 regularization term (Ridge penalty)
-            'reg_alpha': [0.01, 0.1, 1],             # L1 regularization term (Lasso penalty)
-            'random_state': [42],        # Seed for reproducibility
-            'min_child_weight': [1, 3, 5], 
-            'tree_method':['hist'],  # Use the GPU
-            'device':['cuda'],  # Use GPU predictor
-            'verbosity': [2]
-        }'''
         self.param_dist = {
             'n_estimators': [50, 100, 150, 200, 250, 300],  # Number of trees in the forest
             'max_depth': randint(3, 10),  # Maximum depth of each tree
@@ -79,7 +111,7 @@ class XGBModel(BaseModel):
             'tree_method': ['hist'],  # Use the GPU
             'device': ['cuda'],  # Use GPU predictor
             'verbosity': [2]  # Verbosity level
-        }
+        }'''
 
 
 class LGBMModel(BaseModel):
@@ -163,32 +195,6 @@ class RandomForestModel(BaseModel):
             'min_samples_leaf': randint(1, 5),  # Minimum number of samples required to be at a leaf node
             'max_features': ['auto', 'sqrt', 'log2'],  # Number of features to consider when looking for the best split
             'bootstrap': [True, False]  # Whether bootstrap samples are used when building trees
-        }
-
-
-class RidgeModel(BaseModel):
-    """Ridge Regression model with parameter grid."""
-
-    def __init__(self):
-        super().__init__()
-        self.model = Ridge()
-        self.param_grid = {
-            'alpha': [0.01, 0.1, 0.5, 1.0, 10, 100],
-            'solver': ['auto'] #, 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga']
-        }
-
-
-class PLSModel(BaseModel):
-    """Partial Least Squares Regression model with parameter grid."""
-
-    def __init__(self):
-        super().__init__()
-        self.model = PLSRegression()
-        self.param_grid = {
-            'n_components': [1, 3, 5, 7, 9, 15],
-            'max_iter': [1000],
-            'tol': [1e-07], 
-            'scale': [True, False] #, False]
         }
 
 
