@@ -56,18 +56,18 @@ class XGBModel(BaseModel):
         self.model = XGBRegressor()
             
         self.param_grid = {
-            'n_estimators': [50, 100, 150, 200, 250],
-            'max_depth': [2, 3, 5, 7],           # Maximum depth of each tree - makes a big diff
-            'learning_rate': [0.01, 0.1, 0.3],     # Learning rate (shrinkage)
-            'subsample': [0.6, 0.8, 1],              # Subsample ratio of the training data
-            'colsample_bytree': [0.5, 0.8, 1],  # Subsample ratio of columns when constructing each tree
-            'gamma': [0, 0.1],             # Minimum loss reduction required to make a split
+            'n_estimators': [50, 100, 150, 200, 250],  # Num trees
+            'max_depth': [2, 3, 5, 7],                 # Maximum depth of each tree
+            'learning_rate': [0.01, 0.1, 0.3],         # Learning rate (shrinkage)
+            'subsample': [0.6, 0.8, 1],                # Subsample ratio of the training data
+            'colsample_bytree': [0.5, 0.8, 1],         # Subsample ratio of columns when constructing each tree
+            'gamma': [0, 0.1],                         # Minimum loss reduction required to make a split
             'reg_lambda': [0.01, 0.1, 1],              # L2 regularization term (Ridge penalty)
-            'reg_alpha': [0.01, 0.1, 1],             # L1 regularization term (Lasso penalty)
-            'random_state': [42],        # Seed for reproducibility
-            'min_child_weight': [1, 3, 5], 
-            'tree_method':['hist'],  # Use the GPU
-            'device':['cuda'],  # Use GPU predictor
+            'reg_alpha': [0.01, 0.1, 1],               # L1 regularization term (Lasso penalty)
+            'random_state': [42],                      # Seed for reproducibility
+            'min_child_weight': [1, 3, 5],             # Child weight for pruning
+            'tree_method':['hist'],                    # Use the GPU
+            'device':['cuda'],                         # Use GPU predictor
             'verbosity': [2]
         }
 
