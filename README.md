@@ -1,4 +1,4 @@
-# Gene2Conn
+# GeneExp2Conn
 Repository for linking gene expression in the human brain to the connectome
 
 ## Basic overview 
