@@ -21,4 +21,4 @@ To use this repo, setup a conda environment using Gene2Conn_env.yml
 
 ## Developer notes
 - Note on replacing .csv file in abagen package
-- 
+- location of data dir
