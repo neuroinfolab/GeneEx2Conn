@@ -16,7 +16,6 @@ import psutil
 from collections import Counter
 import ast
 
-
 # plotting 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -28,7 +27,6 @@ from matplotlib.patches import Patch
 import umap
 import umap.umap_ as umap
 from mpl_toolkits.mplot3d import Axes3D
-
 
 # stats 
 from scipy import stats
@@ -70,6 +68,11 @@ from tensorflow.keras.layers import Dense, Dropout
 import cupy as cp
 import torch
 import GPUtil
+
+# gene expression
+import scib
+import inmoose
+from inmoose.pycombat import pycombat_norm, pycombat_seq
 
 # network analysis
 import networkx as nx
