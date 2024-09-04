@@ -1,4 +1,4 @@
-# GeneExp2Conn
+# GeneEx2Conn
 
 ## Description
 This repository contains code for linking gene expression in the human brain to the connectome. The repo contains two primary modalities: transcriptome harmonization and connectome prediction. See overleaf for more details. 
