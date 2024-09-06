@@ -2,6 +2,7 @@
 
 from imports import *
 from scipy.stats import entropy
+from anndata import AnnData
 
 # useful global paths
 par_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
@@ -88,48 +89,135 @@ class Harmonizer:
                 
         self.processed_df = processed_df  # Store processed version
         return processed_df
-
-    def apply_combat(self, covariates=["age decade", "sex", "macro region"]):
+        
+    ### APPLY COMBAT
+    def apply_combat(self, df, covariates=["age decade", "sex", "macro region"]):
         """
-        Apply batch correction using pycombat on the processed_df.
-        The batches are based on the dataset, and the covariates are categorical (age decade, sex, macro region).
+        Apply ComBat batch effect correction on the provided dataframe.
+        
+        Parameters:
+        - df: DataFrame, the dataframe on which to apply ComBat.
+        - covariates: list, list of covariates to include in the batch correction (categorical variables).
+        
+        Returns:
+        - combat_df: DataFrame, the batch-corrected dataframe.
         """
-        if self.processed_df is None:
-            raise ValueError("Processed dataframe is empty. Apply preprocessing before applying Combat.")
+        # Make a copy of the input dataframe to avoid modifying the original
+        combat_df = df.copy()
 
         # Extract the gene expression data (rows: genes, columns: samples)
-        gene_data = self.processed_df[self.gene_columns].T  # Transpose for combat (samples as columns)
+        gene_data = combat_df[self.gene_columns].T  # Transpose for Combat (samples as columns)
 
         # Extract the batch information (which dataset each sample belongs to)
-        batch_info = self.processed_df['dataset'].values
+        batch_info = combat_df['dataset'].values
 
-        # Ensure that the covariates are categorical
+        # Ensure that the covariates are categorical and properly formatted
         for covar in covariates:
-            if self.processed_df[covar].dtype != 'category':
-                self.processed_df[covar] = self.processed_df[covar].astype('category')
+            if combat_df[covar].dtype != 'category':
+                combat_df[covar] = combat_df[covar].astype('category')
 
         # Prepare the covariate matrix (one-hot encoded)
-        covariate_data = self.processed_df[covariates]
-    
+        covariate_data = combat_df[covariates]
+
         # Rename covariate columns to make them compatible with patsy (replace spaces, hyphens)
         covariate_data = covariate_data.rename(columns=lambda x: x.replace(' ', '_').replace('-', '_'))
 
-        covar_mod = pd.get_dummies(covariate_data, drop_first=True)
+        # Clean up the categorical values (replace spaces and hyphens in the covariate values)
+        for covar in covariate_data.columns:
+            covariate_data[covar] = covariate_data[covar].apply(lambda x: str(x).replace(' ', '_').replace('-', '_'))
 
         # Run pycombat to adjust for batch effects
         adjusted_data = pycombat_norm(
             counts=gene_data, 
             batch=batch_info, 
-            covar_mod=covar_mod, 
+            covar_mod=covariate_data, 
             par_prior=True,  # Parametric adjustment
             mean_only=False  # Adjust both means and individual batch effects
         )
 
-        # Reconstruct the processed_df by updating the gene columns with the Combat-adjusted data
-        self.processed_df[self.gene_columns] = adjusted_data.T  # Transpose back to original shape
+        # Reconstruct the dataframe by updating the gene columns with the Combat-adjusted data
+        combat_df[self.gene_columns] = adjusted_data.T  # Transpose back to the original shape
+        
+        return combat_df
 
-        return self.processed_df
+    ### SCIB
+    def df_to_anndata(self, df):
+        """
+        Converts a DataFrame to AnnData format, required for scib metrics.
+        
+        Parameters:
+        - df: pd.DataFrame, the DataFrame to convert
+        
+        Returns:
+        - AnnData object with metadata and gene expression data
+        """
+        gene_data = df[self.gene_columns].to_numpy()
+        adata = AnnData(X=gene_data)
+        
+        # Add metadata as annotations
+        for col in self.metadata_columns:
+            adata.obs[col] = df[col].values
+        
+        return adata
 
+    def run_scib_metrics(self, df_before, df_after, batch_key="dataset", label_key="macro region"):
+        """
+        Runs scib 'metrics_fast' on the pre-processed and post-processed data.
+
+        Parameters:
+        - df_before: pd.DataFrame, DataFrame before batch correction
+        - df_after: pd.DataFrame, DataFrame after batch correction
+        - batch_key: str, the column name to be used as batch identifier (default: "dataset")
+        - label_key: str, the column name to be used as biological label (default: "macro region")
+
+        Returns:
+        - pd.DataFrame with scib metrics for both biological conservation and batch correction
+        """
+        # Convert the dataframes to AnnData format
+        adata_pre = self.df_to_anndata(df_before)
+        adata_post = self.df_to_anndata(df_after)
+
+        # Run scib fast metrics
+        metrics_result = scib.metrics.metrics_fast(
+            adata=adata_pre,
+            adata_int=adata_post,
+            batch_key=batch_key,  # Treat dataset as batch
+            label_key=label_key  # Treat macro region as biological label
+        )
+
+        return metrics_result
+
+    ### Example run for evaluating harmonization using scib metrics ###
+    def evaluate_harmonization_with_scib(self, df_before=None, df_after=None, batch_key="dataset", label_key="macro region"):
+        """
+        Evaluate the harmonization quality of the dataset before and after processing using scib metrics.
+        The user can specify which DataFrames to compare (e.g., original vs processed, minmax vs processed).
+
+        Parameters:
+        - df_before: pd.DataFrame, DataFrame before harmonization (default: self.original_df)
+        - df_after: pd.DataFrame, DataFrame after harmonization (default: self.processed_df)
+        - batch_key: str, the column name to be used as batch identifier (default: "dataset")
+        - label_key: str, the column name to be used as biological label (default: "macro region")
+
+        Returns:
+        - pd.DataFrame with scib metrics for both biological conservation and batch correction
+        """
+        # Default to original and processed DataFrames if not provided
+        if df_before is None:
+            df_before = self.original_df
+
+        if df_after is None:
+            df_after = self.processed_df
+
+        # Run the metrics
+        metrics_result = self.run_scib_metrics(df_before, df_after, batch_key=batch_key, label_key=label_key)
+
+        # Print or return the metrics for evaluation
+        print(f"Metrics between {df_before} and {df_after}:")
+        print(metrics_result)
+
+        return metrics_result
+    
     
     ### VISUALIZATION
     def run_umap(self, dataframe, n_components=2, n_neighbors=15, min_dist=0.1, metric='euclidean', n_jobs=-1):
