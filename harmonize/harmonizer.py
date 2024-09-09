@@ -1,8 +1,7 @@
 # GeneEx2Conn/harmonize/harmonizer.py
 
 from imports import *
-from scipy.stats import entropy
-from anndata import AnnData
+import scanpy as sc
 
 # useful global paths
 par_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
@@ -141,80 +140,91 @@ class Harmonizer:
         return combat_df
 
     ### SCIB
-    def df_to_anndata(self, df):
+    def df_to_anndata(self, df, perform_pca=True, compute_neighbors=True):
         """
         Converts a DataFrame to AnnData format, required for scib metrics.
-        
+        Optionally performs PCA and stores the embedding in .obsm['X_pca'].
+
         Parameters:
         - df: pd.DataFrame, the DataFrame to convert
-        
+        - perform_pca: bool, whether to perform PCA on the data and store it in the AnnData object
+
         Returns:
-        - AnnData object with metadata and gene expression data
+        - AnnData object with metadata and gene expression data, optionally with PCA embedding
         """
+        # Convert relevant columns to categorical
+        df['dataset'] = df['dataset'].astype('category')
+        df['macro region'] = df['macro region'].astype('category')
+    
         gene_data = df[self.gene_columns].to_numpy()
         adata = AnnData(X=gene_data)
-        
+
         # Add metadata as annotations
         for col in self.metadata_columns:
             adata.obs[col] = df[col].values
-        
+
+        # Optionally perform PCA and store the results in .obsm['X_pca']
+        if perform_pca:
+            pca_model = PCA(n_components=100)  # Adjust number of components if needed
+            pca_result = pca_model.fit_transform(gene_data)
+            adata.obsm['X_pca'] = pca_result
+
+        # Optionally compute neighborhood graph after PCA
+        if compute_neighbors:
+            sc.pp.neighbors(adata, use_rep='X_pca')  # Use PCA results to compute neighbors
+            
         return adata
 
-    def run_scib_metrics(self, df_before, df_after, batch_key="dataset", label_key="macro region"):
+    def run_scib_metrics(self, df_pre, df_post, batch_key='dataset', label_key='macro region', **kwargs):
         """
         Runs scib 'metrics_fast' on the pre-processed and post-processed data.
 
         Parameters:
-        - df_before: pd.DataFrame, DataFrame before batch correction
-        - df_after: pd.DataFrame, DataFrame after batch correction
-        - batch_key: str, the column name to be used as batch identifier (default: "dataset")
-        - label_key: str, the column name to be used as biological label (default: "macro region")
+        - df_pre: pd.DataFrame, DataFrame before batch correction
+        - df_post: pd.DataFrame, DataFrame after batch correction
+        - batch_key: str, Column name for batch effect (default: 'dataset')
+        - label_key: str, Column name for biological label (default: 'macro region')
+        - kwargs: Additional parameters for scib.metrics.metrics_fast
 
         Returns:
         - pd.DataFrame with scib metrics for both biological conservation and batch correction
         """
         # Convert the dataframes to AnnData format
-        adata_pre = self.df_to_anndata(df_before)
-        adata_post = self.df_to_anndata(df_after)
+        adata_pre = self.df_to_anndata(df_pre)
+        adata_post = self.df_to_anndata(df_post)
 
         # Run scib fast metrics
         metrics_result = scib.metrics.metrics_fast(
             adata=adata_pre,
             adata_int=adata_post,
             batch_key=batch_key,  # Treat dataset as batch
-            label_key=label_key  # Treat macro region as biological label
+            label_key=label_key,  # Treat macro region as biological label
+            **kwargs  # Additional parameters
         )
 
         return metrics_result
 
-    ### Example run for evaluating harmonization using scib metrics ###
-    def evaluate_harmonization_with_scib(self, df_before=None, df_after=None, batch_key="dataset", label_key="macro region"):
+    def evaluate_harmonization_with_scib(self, df_pre=None, df_post=None, batch_key='dataset', label_key='macro region', **kwargs):
         """
-        Evaluate the harmonization quality of the dataset before and after processing using scib metrics.
-        The user can specify which DataFrames to compare (e.g., original vs processed, minmax vs processed).
+        Evaluate the harmonization quality of the dataset using scib metrics.
+        Allows users to pass any combination of DataFrames (original, minmax, processed) to evaluate.
 
         Parameters:
-        - df_before: pd.DataFrame, DataFrame before harmonization (default: self.original_df)
-        - df_after: pd.DataFrame, DataFrame after harmonization (default: self.processed_df)
-        - batch_key: str, the column name to be used as batch identifier (default: "dataset")
-        - label_key: str, the column name to be used as biological label (default: "macro region")
+        - df_pre: pd.DataFrame, DataFrame before batch correction (default: original_df)
+        - df_post: pd.DataFrame, DataFrame after batch correction (default: processed_df)
+        - batch_key: str, Column name for batch effect (default: 'dataset')
+        - label_key: str, Column name for biological label (default: 'macro region')
+        - kwargs: Additional parameters for scib.metrics.metrics_fast
 
         Returns:
-        - pd.DataFrame with scib metrics for both biological conservation and batch correction
+        - pd.DataFrame with scib metrics
         """
-        # Default to original and processed DataFrames if not provided
-        if df_before is None:
-            df_before = self.original_df
+        # Use default DataFrames if none provided
+        df_pre = df_pre if df_pre is not None else self.original_df
+        df_post = df_post if df_post is not None else self.processed_df
 
-        if df_after is None:
-            df_after = self.processed_df
-
-        # Run the metrics
-        metrics_result = self.run_scib_metrics(df_before, df_after, batch_key=batch_key, label_key=label_key)
-
-        # Print or return the metrics for evaluation
-        print(f"Metrics between {df_before} and {df_after}:")
-        print(metrics_result)
+        # Run the scib metrics
+        metrics_result = self.run_scib_metrics(df_pre, df_post, batch_key=batch_key, label_key=label_key, **kwargs)
 
         return metrics_result
     
@@ -545,13 +555,16 @@ class Harmonizer:
         - similarity_df: DataFrame, the pairwise similarity matrix
         - metric: str, name of the metric to display in the title
         """
-        plt.figure(figsize=(8, 6))
-        sns.heatmap(similarity_df, annot=True, cmap="coolwarm", cbar_kws={'label': metric}, fmt=".2f")
-        plt.title(f"Dataset Similarity - {metric}")
-        plt.xlabel('Dataset')
-        plt.ylabel('Dataset')
+        plt.figure(figsize=(8, 8))  # Set figure size to make the heatmap more square
+        sns.heatmap(similarity_df, annot=True, cmap="coolwarm", cbar_kws={'label': metric}, fmt=".2f", square=True, linewidths=0.5)
+        plt.title(f"Dataset Similarity - {metric}", fontsize=14)
+        plt.xlabel('Dataset', fontsize=12)
+        plt.ylabel('Dataset', fontsize=12)
+        plt.xticks(rotation=45, ha='right')  # Rotate x-tick labels for better readability
+        plt.yticks(rotation=0)  # Keep y-tick labels horizontal
         plt.tight_layout()
         plt.show()
+
         
     
     

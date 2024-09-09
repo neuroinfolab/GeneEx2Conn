@@ -72,6 +72,8 @@ import GPUtil
 
 # gene expression
 import scib
+import scanpy as sc
+from anndata import AnnData
 import inmoose
 from inmoose.pycombat import pycombat_norm, pycombat_seq
 
