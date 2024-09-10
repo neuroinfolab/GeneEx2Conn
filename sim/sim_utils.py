@@ -164,6 +164,41 @@ def random_search_init(gpu_acceleration, model, X_combined, Y_combined, param_di
     return random_search, X_combined, Y_combined
 
 
+def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_space, train_test_indices, n_iter=50):
+    """
+    Helper function to initialize BayesSearchCV object based on if GPU acceleration is being used
+    """
+
+    if gpu_acceleration:
+        X_combined = cp.array(X_combined)
+        Y_combined = cp.array(Y_combined)
+        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True)
+        bayes_search = BayesSearchCV(
+            model.get_model(),
+            search_space,
+            n_iter=n_iter,
+            cv=train_test_indices,
+            scoring=cupy_scorer,
+            verbose=2,
+            refit=False,
+            random_state=42
+        )
+    else:
+        bayes_search = BayesSearchCV(
+            model.get_model(),
+            search_space,
+            n_iter=n_iter,
+            cv=train_test_indices,
+            scoring='neg_mean_squared_error',
+            verbose=2,
+            refit=False,
+            n_jobs=-1,
+            random_state=42
+        )
+        
+    return bayes_search, X_combined, Y_combined
+
+
 def find_best_params(grid_search_cv_results):
     """
     Helper function to score custom gridsearch
