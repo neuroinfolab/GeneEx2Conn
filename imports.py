@@ -13,21 +13,32 @@ from itertools import combinations
 from collections import defaultdict
 import importlib
 import psutil
+from collections import Counter
+import ast
 
 # plotting 
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import matplotlib.colors as mcolors
+import plotly.express as px
+import plotly.graph_objects as go
+from matplotlib.patches import Patch
+import umap
+import umap.umap_ as umap
+from mpl_toolkits.mplot3d import Axes3D
 
 # stats 
 from scipy import stats
 from scipy.stats import pearsonr
+from scipy.stats import entropy
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from scipy.stats import ttest_ind, shapiro, levene
 from sklearn.metrics import make_scorer
 from scipy.stats import randint, uniform
+from sklearn.preprocessing import MinMaxScaler
+from scipy.signal import savgol_filter
 
 # modeling
 from sklearn.model_selection import train_test_split
@@ -43,6 +54,7 @@ from sklearn.utils import resample
 from sklearn.model_selection import BaseCrossValidator
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import RandomizedSearchCV
+from sklearn.decomposition import PCA
 from skopt import BayesSearchCV
 import xgboost
 from xgboost import XGBRFRegressor
@@ -58,6 +70,13 @@ from tensorflow.keras.layers import Dense, Dropout
 import cupy as cp
 import torch
 import GPUtil
+
+# gene expression
+import scib
+import scanpy as sc
+from anndata import AnnData
+import inmoose
+from inmoose.pycombat import pycombat_norm, pycombat_seq
 
 # network analysis
 import networkx as nx

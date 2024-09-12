@@ -72,6 +72,8 @@ class XGBModel(BaseModel):
             'verbosity': [0]
         }
 
+        self.param_dist = self.param_grid
+
         # syntax to specify params for a fine tuned run
         '''
         best_params = {
@@ -96,8 +98,7 @@ class XGBModel(BaseModel):
         Sampling method. Used only by the GPU version of hist tree method. uniform: select random training instances uniformly. gradient_based select random training instances with higher probability when the gradient and hessian are larger. (cf. CatBoost)
         '''
         
-        # can also specify distributions
-        
+        # can also specify distributions        
         # self.param_dist = {
         #     'n_estimators': [50, 100, 150, 200, 250, 300],  # Number of trees in the forest
         #     'max_depth': randint(3, 10),  # Maximum depth of each tree
@@ -113,6 +114,10 @@ class XGBModel(BaseModel):
         #     'device': ['cuda'],  # Use GPU predictor
         #     'verbosity': [2]  # Verbosity level
         # }
+
+=======
+        '''
+
 
         self.param_dist = {
             'learning_rate': Real(1e-6, 1e-1, prior='log-uniform'),

@@ -231,7 +231,7 @@ class Simulation:
                 Y_test = cp.array(Y_test)
             
             # Step 5: Inner CV on training data
-            best_model = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100) # random, grid, bayes
+            best_model = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100) # search_method options: random, grid, bayes
 
             # Step 6: Retrain the best parameter model on training data and test on testing data
             best_model.fit(X_train, Y_train)
@@ -257,7 +257,7 @@ class Simulation:
                 # this parameter only works for xgb or others with .feature_importances_
                 'feature_importances': best_model.feature_importances_
             })
-
+            
             # Display CPU and RAM utilization 
             print_system_usage()
             
