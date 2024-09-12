@@ -349,7 +349,6 @@ dependencies:
   - scikit-learn=1.3.0
   - scikit-plot=0.3.7
   - scipy=1.11.3
-  - seaborn=0.12.2
   - secretstorage=3.3.1
   - send2trash=1.8.2
   - setuptools=68.0.0
@@ -425,9 +424,13 @@ dependencies:
   - zstd=1.5.5
   - pip:
       - absl-py==2.1.0
+      - anndata==0.10.9
+      - array-api-compat==1.8
       - astunparse==1.6.3
       - cupy-cuda12x==13.1.0
+      - deprecated==1.2.14
       - enigmatoolbox==2.0.3
+      - fastcluster==1.2.6
       - fastrlock==0.8.2
       - flatbuffers==24.3.25
       - fonttools==4.49.0
@@ -436,22 +439,43 @@ dependencies:
       - grpcio==1.64.1
       - gseapy==1.1.2
       - h5py==3.11.0
+      - igraph==0.11.6
+      - inmoose==0.7.2
       - ipynb==0.5.1
       - keras==3.3.3
+      - legacy-api-wrap==1.4
+      - leidenalg==0.10.2
       - libclang==18.1.1
+      - llvmlite==0.43.0
       - ml-dtypes==0.3.2
       - namex==0.0.8
+      - natsort==8.4.0
       - nbimporter==0.3.4
       - nibabel==5.2.0
       - nilearn==0.10.4
+      - numba==0.60.0
       - opt-einsum==3.3.0
       - optree==0.11.0
+      - patsy==0.5.6
+      - plotly==5.24.0
       - protobuf==4.25.3
+      - pydot==3.0.1
+      - pynndescent==0.5.13
+      - scanpy==1.10.2
+      - scib==1.1.5
+      - scikit-misc==0.5.1
+      - seaborn==0.13.2
+      - session-info==1.0.0
+      - statsmodels==0.14.2
+      - stdlib-list==0.10.0
+      - tenacity==9.0.0
       - tensorboard==2.16.2
       - tensorboard-data-server==0.7.2
       - tensorflow==2.16.1
       - tensorflow-io-gcs-filesystem==0.37.0
       - termcolor==2.4.0
+      - texttable==1.7.0
+      - umap-learn==0.5.6
       - vtk==9.3.20230807rc0
       - werkzeug==3.0.3
       - xgboost==2.0.3
