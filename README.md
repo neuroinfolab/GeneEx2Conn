@@ -25,8 +25,8 @@ The repo contains two primary modalities: transcriptome harmonization and connec
     - parameter grids and distributions for hyperparameter search
 - /harmonize
     - classes and functions for loading and harmonizing gene expression datasets
-    - transcriptome_harmonization_EDA.ipynb demos harmonizer utilities     
-/demo_notebooks
+    - transcriptome_harmonization_EDA.ipynb demos harmonizer utilities
+- /demo_notebooks
     - notebooks demonstrating repo functionality
     - demo notebooks they need to be moved to the root directory to run 
     - data_demo shows how to load and split the data
