@@ -5,7 +5,7 @@ This repository contains code for linking gene expression in the human brain to 
 The repo contains two primary modalities: transcriptome harmonization and connectome prediction. See overleaf for more details.
 
 ## Setup instructions
-- To use this repo, setup a conda environment using GeneEx2Conn_env.yml. If there are missing packages delete and recreate the environment with GeneEx2Conn_env_all.yml. Then setup ENIGMA as specified in 'Developer notes' below
+- To use this repo, setup a conda environment using GeneEx2Conn_env.yml from 'env' directory. If there are missing packages delete and recreate the environment with GeneEx2Conn_env_all.yml. Then setup ENIGMA as specified in 'Developer notes' below
 - If using harmonize.py the assumption is that there is a data folder stored locally, one directory up from where the repo is setup.
 
 ## Repo overview 
