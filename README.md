@@ -26,9 +26,8 @@ The repo contains two primary modalities: transcriptome harmonization and connec
 - /harmonize
     - classes and functions for loading and harmonizing gene expression datasets
     - transcriptome_harmonization_EDA.ipynb demos harmonizer utilities
-- /demo_notebooks
-    - notebooks demonstrating repo functionality
-    - demo notebooks they need to be moved to the root directory to run 
+- /notebooks
+    - notebooks demonstrating repo functionality. need to be moved to the root directory to run 
     - data_demo shows how to load and split the data
     - plot_demo shows the plotting modalities for outputted simulations
     - sim_demo shows how to run single and multi sims
