@@ -1,6 +1,7 @@
 # Gene2Conn/models/prebuilt_models.py
 
 from imports import *
+from skopt.space import Real, Categorical, Integer
 
 class BaseModel:
     """Base class for all models."""
@@ -68,7 +69,7 @@ class XGBModel(BaseModel):
             'min_child_weight': [1, 3, 5],             # Child weight for pruning
             'tree_method':['hist'],                    # Use the GPU
             'device':['cuda'],                         # Use GPU predictor
-            'verbosity': [2]
+            'verbosity': [0]
         }
 
         self.param_dist = self.param_grid
@@ -96,23 +97,37 @@ class XGBModel(BaseModel):
         consider adding this hyperparam
         Sampling method. Used only by the GPU version of hist tree method. uniform: select random training instances uniformly. gradient_based select random training instances with higher probability when the gradient and hessian are larger. (cf. CatBoost)
         '''
+        
+        # can also specify distributions        
+        # self.param_dist = {
+        #     'n_estimators': [50, 100, 150, 200, 250, 300],  # Number of trees in the forest
+        #     'max_depth': randint(3, 10),  # Maximum depth of each tree
+        #     'learning_rate': uniform(0.01, 0.3),  # Learning rate (shrinkage)
+        #     'subsample': uniform(0.6, 0.4),  # Subsample ratio of the training data
+        #     'colsample_bytree': uniform(0.5, 0.5),  # Subsample ratio of columns when constructing each tree
+        #     'gamma': uniform(0, 0.3),  # Minimum loss reduction required to make a split
+        #     'reg_lambda': uniform(0.01, 1),  # L2 regularization term (Ridge penalty)
+        #     'reg_alpha': uniform(0.01, 1),  # L1 regularization term (Lasso penalty)
+        #     'random_state': [42],  # Seed for reproducibility
+        #     'min_child_weight': randint(1, 6),  # Minimum sum of instance weight needed in a child
+        #     'tree_method': ['hist'],  # Use the GPU
+        #     'device': ['cuda'],  # Use GPU predictor
+        #     'verbosity': [2]  # Verbosity level
+        # }
+
+=======
         '''
-        # can also specify distributions
+
+
         self.param_dist = {
-            'n_estimators': [50, 100, 150, 200, 250, 300],  # Number of trees in the forest
-            'max_depth': randint(3, 10),  # Maximum depth of each tree
-            'learning_rate': uniform(0.01, 0.3),  # Learning rate (shrinkage)
-            'subsample': uniform(0.6, 0.4),  # Subsample ratio of the training data
-            'colsample_bytree': uniform(0.5, 0.5),  # Subsample ratio of columns when constructing each tree
-            'gamma': uniform(0, 0.3),  # Minimum loss reduction required to make a split
-            'reg_lambda': uniform(0.01, 1),  # L2 regularization term (Ridge penalty)
-            'reg_alpha': uniform(0.01, 1),  # L1 regularization term (Lasso penalty)
-            'random_state': [42],  # Seed for reproducibility
-            'min_child_weight': randint(1, 6),  # Minimum sum of instance weight needed in a child
-            'tree_method': ['hist'],  # Use the GPU
-            'device': ['cuda'],  # Use GPU predictor
-            'verbosity': [2]  # Verbosity level
-        }'''
+            'learning_rate': Real(1e-6, 1e-1, prior='log-uniform'),
+            'n_estimators': Integer(50, 400),
+            'max_depth': Integer(1, 10),
+            'subsample': Real(0.6, 1.0),
+            'colsample_bytree': Real(0.6, 1.0),
+            'device':['cuda'],
+            'verbosity': [0]
+        }
 
 
 class LGBMModel(BaseModel):

@@ -22,3 +22,7 @@ To use this repo, setup a conda environment using Gene2Conn_env.yml
 ## Developer notes
 - Note on replacing .csv file in abagen package
 - location of data dir
+A few extra steps are required to get `enigmatoolbox` working:
+- Manually install enigma: `git clone https://github.com/MICA-MNI/ENIGMA.git; cd ENIGMA; python setup.py install`
+- Replace all references to `error_bad_lines=False` in code with `on_bad_lines='skip'` following [this](https://stackoverflow.com/questions/69513799/pandas-read-csv-the-error-bad-lines-argument-has-been-deprecated-and-will-be-re).
+- In `enigmatoolbox/datasets/matrices/hcp_connectivity/` rename all `funcMatrix_with_ctx_schaefer_{100,200,300,400}` to `funcMatrix_with_sctx_schaefer_{100,200,300,400}`.

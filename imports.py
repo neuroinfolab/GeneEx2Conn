@@ -55,6 +55,7 @@ from sklearn.model_selection import BaseCrossValidator
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.decomposition import PCA
+from skopt import BayesSearchCV
 import xgboost
 from xgboost import XGBRFRegressor
 from xgboost import XGBRegressor
