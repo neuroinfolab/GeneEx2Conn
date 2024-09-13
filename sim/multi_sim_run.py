@@ -28,14 +28,14 @@ import data.data_utils
 importlib.reload(data.data_utils)
 
 # cross-validation classes
-from cv_split.cv_split import (
+from data.cv_split import (
     RandomCVSplit, 
     SchaeferCVSplit, 
     CommunityCVSplit, 
     SubnetworkCVSplit
 )
-import cv_split.cv_split
-importlib.reload(cv_split.cv_split)
+import data.cv_split
+importlib.reload(data.cv_split)
 
 # prebuilt model classes
 from models.prebuilt_models import ModelBuild

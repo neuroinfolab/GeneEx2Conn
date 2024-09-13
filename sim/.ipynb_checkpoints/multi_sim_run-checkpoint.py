@@ -28,14 +28,14 @@ import data.data_utils
 importlib.reload(data.data_utils)
 
 # cross-validation classes
-from cv_split.cv_split import (
+from data.cv_split import (
     RandomCVSplit, 
     SchaeferCVSplit, 
     CommunityCVSplit, 
     SubnetworkCVSplit
 )
-import cv_split.cv_split
-importlib.reload(cv_split.cv_split)
+import data.cv_split
+importlib.reload(data.cv_split)
 
 # prebuilt model classes
 from models.prebuilt_models import ModelBuild
@@ -140,7 +140,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     return
 
 
-def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, save_sim=False):
+def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, save_sim=False, search_method='random'):
     """
     Function to run simulations for all possible feature types: connectome only, transcriptome only, connectome+transcriptome
     """
@@ -157,7 +157,7 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
         )
 
     # Execute sim
-    conn_sim.run_sim()
+    conn_sim.run_sim(search_method)
     multi_model_results.append(conn_sim.results)
 
     # Transcriptome only 
@@ -168,7 +168,7 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
         )
 
     # Execute sim
-    trans_sim.run_sim()
+    trans_sim.run_sim(search_method)
     multi_model_results.append(trans_sim.results)
 
     # Connectome and transcriptome
@@ -179,7 +179,7 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
     )
 
     # Execute sim
-    trans_conn_sim.run_sim()
+    trans_conn_sim.run_sim(search_method)
     multi_model_results.append(trans_conn_sim.results)
 
     # Save sim data
@@ -190,7 +190,7 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
 
 
 
-def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, save_sim=False):
+def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, save_sim=False, search_method='random'):
     """
     Function to run a simulations for single feature type: connectome only, transcriptome only, connectome+transcriptome
     """
@@ -205,7 +205,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_region
                          predict_connectome_from_connectome=True, resolution=resolution,
                          use_shared_regions=use_shared_regions, include_conn_feats=False, test_shared_regions=test_shared_regions
             )
-        conn_sim.run_sim()
+        conn_sim.run_sim(search_method)
         single_model_results.append(conn_sim.results)
 
     elif feature_type == "trans only":
@@ -215,7 +215,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_region
                          predict_connectome_from_connectome=False, resolution=resolution,
                          use_shared_regions=use_shared_regions, include_conn_feats=False, test_shared_regions=test_shared_regions
             )
-        trans_sim.run_sim()
+        trans_sim.run_sim(search_method)
         single_model_results.append(trans_sim.results)
         
     elif feature_type == "trans plus conn":
@@ -225,7 +225,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_region
                      predict_connectome_from_connectome=False, resolution=resolution,
                      use_shared_regions=use_shared_regions, include_conn_feats=True, test_shared_regions=test_shared_regions
         )
-        trans_conn_sim.run_sim()
+        trans_conn_sim.run_sim(search_method)
         single_model_results.append(trans_conn_sim.results)
 
     # Save sim data

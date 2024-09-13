@@ -72,8 +72,6 @@ class XGBModel(BaseModel):
             'verbosity': [0]
         }
 
-        self.param_dist = self.param_grid
-
         # syntax to specify params for a fine tuned run
         '''
         best_params = {
@@ -93,12 +91,13 @@ class XGBModel(BaseModel):
         }
         self.param_grid = best_params
         '''
+        
         '''
         consider adding this hyperparam
         Sampling method. Used only by the GPU version of hist tree method. uniform: select random training instances uniformly. gradient_based select random training instances with higher probability when the gradient and hessian are larger. (cf. CatBoost)
         '''
         
-        # can also specify distributions        
+        # # can also specify distributions
         # self.param_dist = {
         #     'n_estimators': [50, 100, 150, 200, 250, 300],  # Number of trees in the forest
         #     'max_depth': randint(3, 10),  # Maximum depth of each tree
@@ -110,22 +109,20 @@ class XGBModel(BaseModel):
         #     'reg_alpha': uniform(0.01, 1),  # L1 regularization term (Lasso penalty)
         #     'random_state': [42],  # Seed for reproducibility
         #     'min_child_weight': randint(1, 6),  # Minimum sum of instance weight needed in a child
-        #     'tree_method': ['hist'],  # Use the GPU
+        #     'tree_method': ['gpu_hist'],  # Use the GPU
         #     'device': ['cuda'],  # Use GPU predictor
         #     'verbosity': [2]  # Verbosity level
         # }
 
-=======
-        '''
-
-
         self.param_dist = {
-            'learning_rate': Real(1e-6, 1e-1, prior='log-uniform'),
-            'n_estimators': Integer(50, 400),
-            'max_depth': Integer(1, 10),
-            'subsample': Real(0.6, 1.0),
-            'colsample_bytree': Real(0.6, 1.0),
+            'learning_rate': Categorical([1e-3]), #1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]), #Real(1e-6, 1e-1, prior='log-uniform'),
+            'n_estimators': Integer(50, 400), # Categorical([50, 100, 150, 200, 250, 300, 350, 400]),
+            'max_depth': [2], # Integer(2, 3),  #, 10),
+            'subsample': [0.6], # Categorical([0.6, 0.6]), #, 0.7, 0.8, 0.9, 1.0]),
+            'colsample_bytree': [0.6], # Categorical([0.6, 0.6]), # 0.7, 0.8, 0.9, 1.0]),
+            'tree_method': Categorical(['gpu_hist']),
             'device':['cuda'],
+            'random_state': [42],
             'verbosity': [0]
         }
 
@@ -156,38 +153,6 @@ class LGBMModel(BaseModel):
             'reg_alpha': uniform(0, 1),  # L1 regularization term
             'reg_lambda': uniform(0, 1)  # L2 regularization term
         }
-
-
-class DNNModel(BaseModel):
-    """Deep Neural Network model with parameter grid and distribution."""
-
-    def __init__(self):
-        super().__init__()
-        self.model = KerasRegressor(build_fn=self.create_model, verbose=0)
-        self.param_grid = {
-            'batch_size': [16, 32, 64],
-            'epochs': [10, 50, 100],
-            'optimizer': ['adam', 'rmsprop'],
-            'neurons': [32, 64, 128],
-            'dropout_rate': [0.2, 0.3, 0.4]
-        }
-        self.param_dist = {
-            'batch_size': [16, 32, 64],
-            'epochs': randint(10, 100),
-            'optimizer': ['adam', 'rmsprop'],
-            'neurons': randint(32, 128),
-            'dropout_rate': uniform(0.2, 0.2)
-        }
-
-    def create_model(self, optimizer='adam', neurons=32, dropout_rate=0.2):
-        model = Sequential()
-        model.add(Dense(neurons, input_dim=self.input_dim, activation='relu'))
-        model.add(Dropout(dropout_rate))
-        model.add(Dense(neurons, activation='relu'))
-        model.add(Dropout(dropout_rate))
-        model.add(Dense(1, activation='linear'))
-        model.compile(optimizer=optimizer, loss='mean_squared_error')
-        return model
 
 
 class RandomForestModel(BaseModel):

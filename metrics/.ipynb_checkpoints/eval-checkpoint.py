@@ -55,8 +55,7 @@ class Metrics:
         self.mae = mean_absolute_error(Y_true, Y_pred)
         self.r2 = r2_score(Y_true, Y_pred)
         self.pearson_corr = pearsonr(Y_true.flatten(), Y_pred.flatten())[0]
-            
-
+    
     def get_metrics(self):
         return {
             'mse': self.mse,
@@ -84,6 +83,7 @@ class ConnectomeMetrics(Metrics):
             'geodesic_distance': self.geodesic_distance
         }
         return {**base_metrics, **connectome_metrics}
+
 
 class ModelEvaluator:
     def __init__(self, model, X_train, Y_train, X_test, Y_test, split_params):
@@ -141,15 +141,25 @@ def r2_numpy(y_true, y_pred):
 
 # Can create a bunch of custom scorers for cupy 
 def pearson_cupy(y_true, y_pred):
+    print(type(y_pred))
+    y_true = cp.asarray(y_true)
+    y_pred = cp.asarray(y_pred)
+    print(type(y_pred))
+
     # Compute the correlation matrix
     corr_matrix = cp.corrcoef(y_true, y_pred)
     
     # Extract the Pearson correlation coefficient (off-diagonal element)
     corr = corr_matrix[0, 1]
+    
+    cp.cuda.Stream.null.synchronize()  # Ensure GPU operations complete
+
     return corr
 
 def mse_cupy(y_true, y_pred): # try treating as np? 
     print(type(y_pred))
+    y_true = cp.asarray(y_true)
+    y_pred = cp.asarray(y_pred)
     # Compute the squared differences
     squared_diff = cp.square(cp.subtract(y_true, y_pred))
     
@@ -158,6 +168,11 @@ def mse_cupy(y_true, y_pred): # try treating as np?
     return mse
     
 def r2_cupy(y_true, y_pred):
+    print(type(y_pred))
+    y_true = cp.asarray(y_true)
+    y_pred = cp.asarray(y_pred)
+    print(type(y_pred))
+
     # Compute the mean of the true values
     y_true_mean = cp.mean(y_true)
     

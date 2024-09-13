@@ -28,14 +28,14 @@ import data.data_utils
 importlib.reload(data.data_utils)
 
 # cross-validation classes
-from cv_split.cv_split import (
+from data.cv_split import (
     RandomCVSplit, 
     SchaeferCVSplit, 
     CommunityCVSplit, 
     SubnetworkCVSplit
 )
-import cv_split.cv_split
-importlib.reload(cv_split.cv_split)
+import data.cv_split
+importlib.reload(data.cv_split)
 
 # prebuilt model classes
 from models.prebuilt_models import ModelBuild
@@ -48,7 +48,9 @@ from metrics.eval import (
     pearson_numpy,
     pearson_cupy,
     mse_cupy,
-    r2_cupy
+    mse_numpy,
+    r2_cupy, 
+    r2_numpy
 )
 import metrics.eval
 importlib.reload(metrics.eval)
@@ -162,6 +164,43 @@ def random_search_init(gpu_acceleration, model, X_combined, Y_combined, param_di
                                            random_state=42)
         
     return random_search, X_combined, Y_combined
+
+
+def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_space, train_test_indices, n_iter=10):
+    """
+    Helper function to initialize BayesSearchCV object based on if GPU acceleration is being used
+    """
+
+    if gpu_acceleration:
+        print('ACCELERATING')
+        X_combined = cp.array(X_combined)
+        Y_combined = cp.array(Y_combined)
+        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True)
+        bayes_search = BayesSearchCV(
+            model.get_model(),
+            search_space,
+            n_iter=20, # n_iter
+            n_points=20,
+            cv=train_test_indices,
+            scoring=cupy_scorer,
+            verbose=3,
+            refit=True, # False
+            return_train_score=True
+        )
+    else:
+        bayes_search = BayesSearchCV(
+            model.get_model(),
+            search_space,
+            n_iter=n_iter,
+            cv=train_test_indices,
+            scoring='neg_mean_squared_error',
+            verbose=2,
+            refit=False,
+            n_jobs=-1,
+            random_state=42
+        )
+        
+    return bayes_search, X_combined, Y_combined
 
 
 def find_best_params(grid_search_cv_results):
