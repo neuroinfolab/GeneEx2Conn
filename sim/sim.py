@@ -137,7 +137,7 @@ class Simulation:
             for X_train, X_test, Y_train, Y_test in inner_fold_splits:
                 # Create single fold object for inner CV  
                 X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices_connectome(X_train, X_test, Y_train, Y_test)
-
+            
                 # Initialize model
                 model = ModelBuild.init_model(self.model_type)
                 param_grid = model.get_param_grid()
@@ -151,6 +151,10 @@ class Simulation:
                 elif search_method == 'bayes':
                     param_dist = model.get_param_dist()
                     grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter)
+
+                # convert to cupy if necessary
+                # print(type(X_combined))
+                # print(type(Y_combined))
                 
                 # Fit GridSearchCV on the current fold
                 grid_search.fit(X_combined, Y_combined)
@@ -174,7 +178,7 @@ class Simulation:
             return best_estimator
         else:
             X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
-    
+
             # Initialize model
             model = ModelBuild.init_model(self.model_type)
             param_grid = model.get_param_grid()
@@ -183,11 +187,14 @@ class Simulation:
             if search_method == 'grid':
                 grid_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices)
             elif search_method == 'random':
-                #param_dist = model.get_param_dist()
                 grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, n_iter=n_iter)
             elif search_method == 'bayes':
                 param_dist = model.get_param_dist()
-                grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=10)
+                grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
+            
+            # convert to cupy if necessary
+            # print(type(X_combined))
+            # print(type(Y_combined))
                 
             # Fit GridSearchCV on the combined data
             grid_search.fit(X_combined, Y_combined)
@@ -222,6 +229,10 @@ class Simulation:
             
             network_dict = self.cv_obj.networks
             train_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, i+1)
+    
+            # Step 5: Inner CV on training data
+            # search_method options: random, grid, bayes
+            best_model = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
 
             # convert to cupy if necessary
             if self.gpu_acceleration:
@@ -230,10 +241,6 @@ class Simulation:
                 X_test = cp.array(X_test)
                 Y_test = cp.array(Y_test)
             
-            # Step 5: Inner CV on training data
-            # search_method options: random, grid, bayes
-            best_model = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
-
             # Step 6: Retrain the best parameter model on training data and test on testing data
             best_model.fit(X_train, Y_train)
  

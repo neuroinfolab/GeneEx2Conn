@@ -175,18 +175,23 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
         print('ACCELERATING')
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True)
+        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True) # mse directionality needs to be debugged
+        error_score = 0.0
         bayes_search = BayesSearchCV(
             model.get_model(),
             search_space,
-            n_iter=20, # n_iter
-            n_points=20,
+            n_iter=50, # n_iter
+            n_points=5,
             cv=train_test_indices,
             scoring=cupy_scorer,
             verbose=3,
-            refit=True, # False
-            return_train_score=True
+            random_state=42,
+            refit=False, 
+            return_train_score=False, # should optimize on test score 
+            error_score=error_score,
+            optimizer_kwargs={'base_estimator': 'GP', 'acq_func': 'PI'}  # Use Expected Improvement for more exploitation
         )
+        print(bayes_search.optimizer_kwargs)
     else:
         bayes_search = BayesSearchCV(
             model.get_model(),

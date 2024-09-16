@@ -68,7 +68,7 @@ def open_pickled_results(file):# Specify the path to your pickle file
     """
     Function to open any pickle file from sim_results directory
     """
-    pickle_file_path = "./sim_results/" + file
+    pickle_file_path = "./sim/sim_results/" + file
     
     # Open the pickle file in read mode
     with open(pickle_file_path, "rb") as file:
@@ -96,7 +96,7 @@ def combine_results(conn_file, trans_file, transconn_file, output_file):
     combined_results = [conn_results, trans_results, transconn_results]
 
     # Save the combined results to a new pickle file
-    output_pickle_path = "./sim_results/" + output_file
+    output_pickle_path = "./sim/sim_results/" + output_file
     with open(output_pickle_path, "wb") as file:
         pickle.dump(combined_results, file)
 
@@ -108,7 +108,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     Function to save all sim results to a pickle file
     """
 
-    sim_results_file_path = os.getcwd() + '/sim_results/'
+    sim_results_file_path = os.getcwd() + '/sim/sim_results/'
     if feature_type == "all":
         results_file_str = "multi_sim_" + cv_type + "_" + model_type
     elif feature_type == "conn only":
@@ -187,7 +187,6 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
         save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution)
     
     return multi_model_results
-
 
 
 def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, save_sim=False, search_method='random'):

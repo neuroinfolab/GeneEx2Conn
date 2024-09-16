@@ -141,10 +141,8 @@ def r2_numpy(y_true, y_pred):
 
 # Can create a bunch of custom scorers for cupy 
 def pearson_cupy(y_true, y_pred):
-    print(type(y_pred))
-    y_true = cp.asarray(y_true)
+    # minimize moving to cupy (try to keep it on GPU once on) 
     y_pred = cp.asarray(y_pred)
-    print(type(y_pred))
 
     # Compute the correlation matrix
     corr_matrix = cp.corrcoef(y_true, y_pred)
@@ -157,21 +155,16 @@ def pearson_cupy(y_true, y_pred):
     return corr
 
 def mse_cupy(y_true, y_pred): # try treating as np? 
-    print(type(y_pred))
-    y_true = cp.asarray(y_true)
     y_pred = cp.asarray(y_pred)
-    # Compute the squared differences
-    squared_diff = cp.square(cp.subtract(y_true, y_pred))
     
-    # Compute the mean of the squared differences
-    mse = cp.mean(squared_diff)
+    mse = cp.sum((y_pred-y_true)**2)/y_pred.shape[0]
+    
+    cp.cuda.Stream.null.synchronize()  # Ensure GPU operations complete
+
     return mse
     
 def r2_cupy(y_true, y_pred):
-    print(type(y_pred))
-    y_true = cp.asarray(y_true)
     y_pred = cp.asarray(y_pred)
-    print(type(y_pred))
 
     # Compute the mean of the true values
     y_true_mean = cp.mean(y_true)
