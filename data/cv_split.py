@@ -148,10 +148,11 @@ class CommunityCVSplit(BaseCrossValidator):
     reference: https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.community.louvain.louvain_communities.html#networkx.algorithms.community.louvain.louvain_communities
     """
     
-    def __init__(self, X, Y, resolution=1.0):
+    def __init__(self, X, Y, resolution=1.0, random_seed=42):
         self.X = X
         self.Y = Y
         self.resolution = resolution
+        self.random_seed=random_seed
         self.connectome_net = self.create_connectome_net()
         self.communities = self.detect_communities()
         self.networks = self.create_networks()
@@ -164,7 +165,7 @@ class CommunityCVSplit(BaseCrossValidator):
 
     def detect_communities(self):
         """Detect communities using the Louvain community detection algorithm."""
-        communities = nx.community.louvain_communities(self.connectome_net, seed=42, resolution=self.resolution)
+        communities = nx.community.louvain_communities(self.connectome_net, seed=self.random_seed, resolution=self.resolution)
         return communities
 
     def create_networks(self):

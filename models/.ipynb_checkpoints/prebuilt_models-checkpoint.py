@@ -67,7 +67,7 @@ class XGBModel(BaseModel):
             'reg_alpha': [0.01, 0.1, 1],               # L1 regularization term (Lasso penalty)
             'random_state': [42],                      # Seed for reproducibility
             'min_child_weight': [1, 3, 5],             # Child weight for pruning
-            'tree_method':['hist'],                    # Use the GPU
+            'tree_method':['gpu_hist'],                    # Use the GPU
             'device':['cuda'],                         # Use GPU predictor
             'verbosity': [0]
         }

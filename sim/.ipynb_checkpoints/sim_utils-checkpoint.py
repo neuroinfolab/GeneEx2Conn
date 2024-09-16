@@ -142,15 +142,15 @@ def random_search_init(gpu_acceleration, model, X_combined, Y_combined, param_di
     if gpu_acceleration:
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True)
+        cupy_scorer = make_scorer(mse_cupy, greater_is_better=False)
         random_search = RandomizedSearchCV(model.get_model(), 
                                            param_distributions, 
                                            n_iter=n_iter, 
                                            cv=train_test_indices, 
                                            scoring=cupy_scorer, 
-                                           verbose=2, 
+                                           verbose=3, 
                                            refit=False,
-                                           #n_jobs=2,
+                                           n_jobs=1,
                                            random_state=42)
     else:
         random_search = RandomizedSearchCV(model.get_model(), 
@@ -175,13 +175,13 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
         print('ACCELERATING')
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True) # mse directionality needs to be debugged
+        cupy_scorer = make_scorer(mse_cupy, greater_is_better=True) # mse directionality needs to be debugged
         error_score = 0.0
         bayes_search = BayesSearchCV(
             model.get_model(),
             search_space,
-            n_iter=50, # n_iter
-            n_points=5,
+            n_iter=20, # n_iter=20
+            n_points=10,
             cv=train_test_indices,
             scoring=cupy_scorer,
             verbose=3,
@@ -210,7 +210,8 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
 
 def find_best_params(grid_search_cv_results):
     """
-    Helper function to score custom gridsearch
+    Helper function to score custom gridsearch, works for grid and random with random seed.
+    Computes parameter combo that ranked the highest over all possible folds for a given cv split.
     """
     
     parameter_combos = grid_search_cv_results[0]['params']
@@ -229,4 +230,30 @@ def find_best_params(grid_search_cv_results):
     print('BEST INNNER PARAMS', best_params)
     
     return best_params
+
+
+''' # THIS IS REALLY HARD TO DO MANUALLY DUE TO DIFFERING FEATURE SIZES OF CONN-CONN MODEL
+def find_best_params_bayes(grid_search_cv_results):
+    """
+    Helper function to score custom gridsearch
+    """
     
+    print(len(grid_search_cv_results))
+    
+    parameter_combos = grid_search_cv_results[0]['params']
+    print('PARAMETER COMBOS', parameter_combos)
+    
+    gridsearch_rank = []
+    for idx, result in enumerate(grid_search_cv_results):
+        rank = result['rank_test_score']
+        gridsearch_rank.append(rank)
+
+    print('GRIDSEARCH RANK', gridsearch_rank)
+    
+    rank_sum = np.sum(gridsearch_rank, 0)
+    best_params = parameter_combos[np.argmin(rank_sum)]
+
+    print('BEST INNNER PARAMS', best_params)
+    
+    return best_params
+''' 

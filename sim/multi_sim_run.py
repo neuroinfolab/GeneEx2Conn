@@ -103,7 +103,7 @@ def combine_results(conn_file, trans_file, transconn_file, output_file):
     print(f"Combined results saved to {output_pickle_path}")
     
 
-def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution): 
+def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution, random_seed): 
     """
     Function to save all sim results to a pickle file
     """
@@ -121,6 +121,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     
     if cv_type == "community": 
         results_file_str += str(resolution)
+        results_file_str += '_' + str(random_seed)
         
     if use_shared_regions: 
         results_file_str += "_useshared"
@@ -140,7 +141,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     return
 
 
-def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, save_sim=False, search_method='random'):
+def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method='random'):
     """
     Function to run simulations for all possible feature types: connectome only, transcriptome only, connectome+transcriptome
     """
@@ -152,8 +153,9 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
     # Connectome only 
     conn_sim = Simulation(
             cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
-                     predict_connectome_from_connectome=True, resolution=resolution,
-                     use_shared_regions=use_shared_regions, include_conn_feats=False, test_shared_regions=test_shared_regions
+                    predict_connectome_from_connectome=True, resolution=resolution, 
+                    random_seed=random_seed, use_shared_regions=use_shared_regions,
+                    include_conn_feats=False, test_shared_regions=test_shared_regions
         )
 
     # Execute sim
@@ -163,8 +165,10 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
     # Transcriptome only 
     trans_sim = Simulation(
             cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
-                     predict_connectome_from_connectome=False, resolution=resolution,
-                     use_shared_regions=use_shared_regions, include_conn_feats=False, test_shared_regions=test_shared_regions
+                    predict_connectome_from_connectome=False,
+                    resolution=resolution,random_seed=random_seed,
+                    use_shared_regions=use_shared_regions, include_conn_feats=False,
+                    test_shared_regions=test_shared_regions
         )
 
     # Execute sim
@@ -174,8 +178,9 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
     # Connectome and transcriptome
     trans_conn_sim = Simulation(
         cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
-                 predict_connectome_from_connectome=False, resolution=resolution,
-                 use_shared_regions=use_shared_regions, include_conn_feats=True, test_shared_regions=test_shared_regions
+                predict_connectome_from_connectome=False, resolution=resolution,
+                random_seed=random_seed, use_shared_regions=use_shared_regions, include_conn_feats=True,
+                test_shared_regions=test_shared_regions
     )
 
     # Execute sim
@@ -184,12 +189,12 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
 
     # Save sim data
     if save_sim:
-        save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution)
+        save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution, random_seed)
     
     return multi_model_results
 
 
-def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, save_sim=False, search_method='random'):
+def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method='random'):
     """
     Function to run a simulations for single feature type: connectome only, transcriptome only, connectome+transcriptome
     """
@@ -201,8 +206,10 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_region
         # Connectome only 
         conn_sim = Simulation(
                 cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
-                         predict_connectome_from_connectome=True, resolution=resolution,
-                         use_shared_regions=use_shared_regions, include_conn_feats=False, test_shared_regions=test_shared_regions
+                        predict_connectome_from_connectome=True, resolution=resolution,
+                        random_seed=random_seed,
+                        use_shared_regions=use_shared_regions, include_conn_feats=False,
+                        test_shared_regions=test_shared_regions
             )
         conn_sim.run_sim(search_method)
         single_model_results.append(conn_sim.results)
@@ -211,8 +218,9 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_region
         # Transcriptome only 
         trans_sim = Simulation(
                 cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
-                         predict_connectome_from_connectome=False, resolution=resolution,
-                         use_shared_regions=use_shared_regions, include_conn_feats=False, test_shared_regions=test_shared_regions
+                        predict_connectome_from_connectome=False, resolution=resolution, 
+                        random_seed=random_seed, use_shared_regions=use_shared_regions,
+                        include_conn_feats=False, test_shared_regions=test_shared_regions
             )
         trans_sim.run_sim(search_method)
         single_model_results.append(trans_sim.results)
@@ -221,15 +229,16 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_region
         # Connectome and transcriptome
         trans_conn_sim = Simulation(
             cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
-                     predict_connectome_from_connectome=False, resolution=resolution,
-                     use_shared_regions=use_shared_regions, include_conn_feats=True, test_shared_regions=test_shared_regions
+                    predict_connectome_from_connectome=False, resolution=resolution,
+                    random_seed=random_seed, use_shared_regions=use_shared_regions,
+                    include_conn_feats=True, test_shared_regions=test_shared_regions
         )
         trans_conn_sim.run_sim(search_method)
         single_model_results.append(trans_conn_sim.results)
 
     # Save sim data
     if save_sim: 
-        save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution)
+        save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution, random_seed)
     
     return single_model_results
 

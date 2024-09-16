@@ -64,7 +64,7 @@ importlib.reload(sim.sim_utils)
 
 
 class Simulation:
-    def __init__(self, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, resolution=1.0,
+    def __init__(self, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, resolution=1.0,random_seed=42,
                  use_shared_regions=False, include_conn_feats=False, test_shared_regions=False):        
         """
         Initialization of simulation parameters
@@ -74,6 +74,7 @@ class Simulation:
         self.gpu_acceleration = gpu_acceleration
         self.predict_connectome_from_connectome = predict_connectome_from_connectome
         self.resolution = resolution
+        self.random_seed=random_seed
         self.use_shared_regions = use_shared_regions
         self.include_conn_feats = include_conn_feats
         self.test_shared_regions = test_shared_regions
@@ -97,7 +98,7 @@ class Simulation:
         elif self.cv_type == 'schaefer':
             self.cv_obj = SchaeferCVSplit()
         elif self.cv_type == 'community':
-            self.cv_obj = CommunityCVSplit(self.X, self.Y, resolution=self.resolution)
+            self.cv_obj = CommunityCVSplit(self.X, self.Y, resolution=self.resolution, random_seed=self.random_seed)
 
     
     def expand_data(self):
@@ -152,10 +153,6 @@ class Simulation:
                     param_dist = model.get_param_dist()
                     grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter)
 
-                # convert to cupy if necessary
-                # print(type(X_combined))
-                # print(type(Y_combined))
-                
                 # Fit GridSearchCV on the current fold
                 grid_search.fit(X_combined, Y_combined)
                 
@@ -169,7 +166,8 @@ class Simulation:
                 grid_search_best_scores.append(grid_search.best_score_)
                 grid_search_best_params.append(grid_search.best_params_)
 
-            best_params = find_best_params(grid_search_cv_results)
+            # this is done automatically in true gridsearch
+            best_params = find_best_params(grid_search_cv_results) 
             
             model = ModelBuild.init_model(self.model_type)
             model = model.get_model()
@@ -191,11 +189,7 @@ class Simulation:
             elif search_method == 'bayes':
                 param_dist = model.get_param_dist()
                 grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
-            
-            # convert to cupy if necessary
-            # print(type(X_combined))
-            # print(type(Y_combined))
-                
+                        
             # Fit GridSearchCV on the combined data
             grid_search.fit(X_combined, Y_combined)
             
