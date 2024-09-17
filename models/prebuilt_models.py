@@ -57,7 +57,7 @@ class XGBModel(BaseModel):
         self.model = XGBRegressor()
             
         self.param_grid = {
-            'n_estimators': [50, 100, 150, 200, 250],  # Num trees
+            'n_estimators': [50, 150, 250, 250],  # Num trees
             'max_depth': [2, 3, 5, 7],                 # Maximum depth of each tree
             'learning_rate': [0.01, 0.1, 0.3],         # Learning rate (shrinkage)
             'subsample': [0.6, 0.8, 1],                # Subsample ratio of the training data
@@ -72,6 +72,20 @@ class XGBModel(BaseModel):
             'verbosity': [0]
         }
 
+        self.param_dist = {
+            'learning_rate': Categorical([1e-3, 1e-2, 1e-1, 0.3]), #1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]), #Real(1e-6, 1e-1, prior='log-uniform'),
+            'n_estimators': Categorical([50, 150, 250, 350]), # Categorical([10, 100, 300]), #Categorical([50, 100, 150, 200, 250, 300, 350, 400]), # Integer(50, 400)
+            'max_depth': Categorical([2, 4, 5, 7]), # Categorical([1, 2, 6]), # Integer(2, 6),  #, 10),
+            'subsample': Categorical([0.8, 1]), # Categorical([0.6, 0.6]), #, 0.7, 0.8, 0.9, 1.0]),
+            'colsample_bytree': Categorical([0.8, 1]), # Categorical([0.6, 0.6]), # 0.7, 0.8, 0.9, 1.0]),
+            'reg_lambda': Categorical([0, 1e-2, 1e-1, 1]),  # L2 regularization term (Ridge penalty)
+            'reg_alpha': Categorical([0, 1e-2, 1e-1, 1]),             # L1 regularization term (Lasso penalty)
+            'tree_method': Categorical(['gpu_hist']),
+            'device':['cuda'],
+            'random_state': [42],
+            'verbosity': [0]
+        }
+        
         # syntax to specify params for a fine tuned run
         '''
         best_params = {
@@ -90,71 +104,28 @@ class XGBModel(BaseModel):
             'verbosity': [2]
         }
         self.param_grid = best_params
-        '''
         
-        '''
-        consider adding this hyperparam
-        Sampling method. Used only by the GPU version of hist tree method. uniform: select random training instances uniformly. gradient_based select random training instances with higher probability when the gradient and hessian are larger. (cf. CatBoost)
-        '''
         
-        # # can also specify distributions
-        # self.param_dist = {
-        #     'n_estimators': [50, 100, 150, 200, 250, 300],  # Number of trees in the forest
-        #     'max_depth': randint(3, 10),  # Maximum depth of each tree
-        #     'learning_rate': uniform(0.01, 0.3),  # Learning rate (shrinkage)
-        #     'subsample': uniform(0.6, 0.4),  # Subsample ratio of the training data
-        #     'colsample_bytree': uniform(0.5, 0.5),  # Subsample ratio of columns when constructing each tree
-        #     'gamma': uniform(0, 0.3),  # Minimum loss reduction required to make a split
-        #     'reg_lambda': uniform(0.01, 1),  # L2 regularization term (Ridge penalty)
-        #     'reg_alpha': uniform(0.01, 1),  # L1 regularization term (Lasso penalty)
-        #     'random_state': [42],  # Seed for reproducibility
-        #     'min_child_weight': randint(1, 6),  # Minimum sum of instance weight needed in a child
-        #     'tree_method': ['gpu_hist'],  # Use the GPU
-        #     'device': ['cuda'],  # Use GPU predictor
-        #     'verbosity': [2]  # Verbosity level
-        # }
-
         self.param_dist = {
-            'learning_rate': Categorical([1e-3, 1e-2, 1e-1, 0.3]), #1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]), #Real(1e-6, 1e-1, prior='log-uniform'),
-            'n_estimators': Categorical([50, 150, 250, 350]), # Categorical([10, 100, 300]), #Categorical([50, 100, 150, 200, 250, 300, 350, 400]), # Integer(50, 400)
-            'max_depth': Categorical([2, 4, 5, 7]), # Categorical([1, 2, 6]), # Integer(2, 6),  #, 10),
-            'subsample': Categorical([0.8, 1]), # Categorical([0.6, 0.6]), #, 0.7, 0.8, 0.9, 1.0]),
-            'colsample_bytree': Categorical([0.8, 1]), # Categorical([0.6, 0.6]), # 0.7, 0.8, 0.9, 1.0]),
-            'reg_lambda': Categorical([0, 1e-2, 1e-1, 1]),  # L2 regularization term (Ridge penalty)
-            'reg_alpha': Categorical([0, 1e-2, 1e-1, 1]),             # L1 regularization term (Lasso penalty)
-            'tree_method': Categorical(['gpu_hist']),
-            'device':['cuda'],
-            'random_state': [42],
-            'verbosity': [0]
+            'n_estimators': [50, 100, 150, 200, 250, 300],  # Number of trees in the forest
+            'max_depth': randint(3, 10),  # Maximum depth of each tree
+            'learning_rate': uniform(0.01, 0.3),  # Learning rate (shrinkage)
+            'subsample': uniform(0.6, 0.4),  # Subsample ratio of the training data
+            'colsample_bytree': uniform(0.5, 0.5),  # Subsample ratio of columns when constructing each tree
+            'gamma': uniform(0, 0.3),  # Minimum loss reduction required to make a split
+            'reg_lambda': uniform(0.01, 1),  # L2 regularization term (Ridge penalty)
+            'reg_alpha': uniform(0.01, 1),  # L1 regularization term (Lasso penalty)
+            'random_state': [42],  # Seed for reproducibility
+            'min_child_weight': randint(1, 6),  # Minimum sum of instance weight needed in a child
+            'tree_method': ['gpu_hist'],  # Use the GPU
+            'device': ['cuda'],  # Use GPU predictor
+            'verbosity': [2]  # Verbosity level
         }
-
-
-class LGBMModel(BaseModel):
-    """LightGBM model with parameter grid and distribution."""
-
-    def __init__(self):
-        super().__init__()
-        self.model = LGBMRegressor(device='gpu')  # Use GPU for training
-        self.param_grid = {
-            'num_leaves': [31, 50, 70],  # number of leaves in one tree
-            'learning_rate': [0.01, 0.1, 0.2],  # shrinkage rate
-            'n_estimators': [100, 200, 300],  # number of boosting rounds
-            'boosting_type': ['gbdt', 'dart'],  # type of boosting algorithm
-            'subsample': [0.8, 0.9, 1.0],  # fraction of data used to train each base learner
-            'colsample_bytree': [0.8, 0.9, 1.0],  # fraction of features used for each base learner
-            'reg_alpha': [0, 0.1, 0.5],  # L1 regularization term
-            'reg_lambda': [0, 0.1, 0.5]  # L2 regularization term
-        }
-        self.param_dist = {
-            'num_leaves': randint(20, 150),  # number of leaves in one tree
-            'learning_rate': uniform(0.01, 0.3),  # shrinkage rate
-            'n_estimators': randint(100, 300),  # number of boosting rounds
-            'boosting_type': ['gbdt', 'dart'],  # type of boosting algorithm
-            'subsample': uniform(0.7, 0.3),  # fraction of data used to train each base learner
-            'colsample_bytree': uniform(0.7, 0.3),  # fraction of features used for each base learner
-            'reg_alpha': uniform(0, 1),  # L1 regularization term
-            'reg_lambda': uniform(0, 1)  # L2 regularization term
-        }
+        
+        # consider adding this hyperparam
+        # Sampling method. Used only by the GPU version of hist tree method. uniform: select random training instances uniformly. gradient_based select random training instances with higher probability when the gradient and hessian are larger. (cf. CatBoost)
+        #
+        '''
 
 
 class RandomForestModel(BaseModel):

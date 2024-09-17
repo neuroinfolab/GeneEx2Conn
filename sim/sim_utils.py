@@ -175,7 +175,7 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
         print('ACCELERATING')
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        cupy_scorer = make_scorer(mse_cupy, greater_is_better=True) # mse directionality needs to be debugged
+        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True) # mse directionality needs to be debugged
         error_score = 0.0
         bayes_search = BayesSearchCV(
             model.get_model(),

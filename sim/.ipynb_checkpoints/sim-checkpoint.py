@@ -85,7 +85,9 @@ class Simulation:
         """
         Load transcriptome and connectome data
         """
+        omit_subcortical=False
         self.X = load_transcriptome()
+        self.X_pca = load_transcriptome(run_PCA=True)
         self.Y = load_connectome()
 
     
@@ -142,15 +144,14 @@ class Simulation:
                 # Initialize model
                 model = ModelBuild.init_model(self.model_type)
                 param_grid = model.get_param_grid()
+                param_dist = model.get_param_dist()
 
                 # Initialize grid search and return cupy converted array if necessary
                 if search_method == 'grid':
                     grid_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices)
                 elif search_method == 'random':
-                    #param_dist = model.get_param_dist()
-                    grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, n_iter)
+                    grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter)
                 elif search_method == 'bayes':
-                    param_dist = model.get_param_dist()
                     grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter)
 
                 # Fit GridSearchCV on the current fold
@@ -180,14 +181,14 @@ class Simulation:
             # Initialize model
             model = ModelBuild.init_model(self.model_type)
             param_grid = model.get_param_grid()
+            param_dist = model.get_param_dist()
 
             # Initialize grid search and return cupy converted array if necessary
             if search_method == 'grid':
                 grid_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices)
             elif search_method == 'random':
-                grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, n_iter=n_iter)
+                grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
             elif search_method == 'bayes':
-                param_dist = model.get_param_dist()
                 grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
                         
             # Fit GridSearchCV on the combined data
@@ -249,6 +250,10 @@ class Simulation:
             print('BEST MODEL PARAMS', best_model.get_params())
 
             # Implement function to grab feature importances here
+            if self.model_type == 'pls': 
+                feature_importances_ = best_model.x_weights_[:, 0]  # Weights for the first component
+            elif self.model_type == 'xgboost': 
+                feature_importances_ = best_model.feature_importances_
             
             self.results.append({
                 'model_parameters': best_model.get_params(),
@@ -257,7 +262,7 @@ class Simulation:
                 'y_true': Y_test.get() if self.gpu_acceleration else Y_test,
                 'y_pred': best_model.predict(X_test) if self.gpu_acceleration else best_model.predict(X_test), 
                 # this parameter only works for xgb or others with .feature_importances_
-                'feature_importances': best_model.feature_importances_
+                'feature_importances': feature_importances_
             })
             
             # Display CPU and RAM utilization 

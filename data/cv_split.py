@@ -66,12 +66,13 @@ class SchaeferCVSplit(BaseCrossValidator):
     labels (list): List of region labels with network information.
     """
     
-    def __init__(self):
+    def __init__(self, omit_subcortical=False):
         fc_combined_mat_schaef_100, fc_combined_labels_schaef_100 = load_fc_as_one(parcellation='schaefer_100')
         
         self.labels = fc_combined_labels_schaef_100
         self.networks = {}
         self.folds = self.create_folds(self.labels)
+        self.omit_subcortical = omit_subcortical
     
     def create_folds(self, labels):
         """
@@ -101,6 +102,10 @@ class SchaeferCVSplit(BaseCrossValidator):
 
         # Iterate through each network
         for held_out_network, test_indices in self.networks.items():
+            if omit_subcortical and held_out_network == 'Subcortical':
+                continue 
+            
+            print(held_out_network)
             # Combine all the training indices except for the held-out network
             train_indices = [index for network, indices in self.networks.items() if network != held_out_network for index in indices]
 
