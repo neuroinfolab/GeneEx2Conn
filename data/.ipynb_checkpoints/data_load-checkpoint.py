@@ -38,22 +38,31 @@ def load_transcriptome(parcellation='schaefer_100', dataset='AHBA', run_PCA=Fals
             return schaefer114_genes_95_var
         else:
             return schaefer114_genes
-            
+        
     elif dataset == 'GTEx':
         relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)    
-        print(relative_data_path)
         gtex_in_ahba = relative_data_path + '/data/region_map_pickles/RxG_data_gtex_mean_gtex_ahba_space.pkl'
         with open(gtex_in_ahba, 'rb') as f:
             gtex_in_ahba = pickle.load(f)
         return np.array(gtex_in_ahba)
-        
+    elif dataset == 'AHBA in GTEx':
+        relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)    
+        ahba_in_gtex = relative_data_path + '/data/region_map_pickles/RxG_data_ahba_mean_gtex_ahba_space.pkl'
+        with open(ahba_in_gtex, 'rb') as f:
+            ahba_in_gtex = pickle.load(f)
+        return np.array(ahba_in_gtex)
     elif dataset == 'UTSW':
         relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)        
         ut_in_ahba = relative_data_path + '/data/region_map_pickles/RxG_data_utsmc_mean_ahba_utsmc_space.pkl'
         with open(ut_in_ahba, 'rb') as f:
             ut_in_ahba = pickle.load(f)
         return np.array(np.log1p(ut_in_ahba))
-            
+    elif dataset == 'AHBA in UTSW':
+        relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)
+        ahba_in_utsw = relative_data_path + '/data/region_map_pickles/RxG_data_ahba_mean_ahba_utsmc_space.pkl'
+        with open(ahba_in_utsw, 'rb') as f:
+            ahba_in_utsw = pickle.load(f)
+        return np.array(ahba_in_utsw)
 
 def load_connectome(parcellation='schaefer_100', dataset='AHBA', omit_subcortical=False, structural=False):
     if dataset == 'AHBA':

@@ -197,7 +197,7 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
     return multi_model_results
 
 
-def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method='random'):
+def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method='random'):
     """
     Function to run a simulations for single feature type: connectome only, transcriptome only, connectome+transcriptome
     """
@@ -208,7 +208,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_region
     if feature_type == "conn only":
         # Connectome only 
         conn_sim = Simulation(
-                cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
+                        cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
                         predict_connectome_from_connectome=True, resolution=resolution,
                         random_seed=random_seed,
                         use_shared_regions=use_shared_regions, include_conn_feats=False,
@@ -220,7 +220,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_region
     elif feature_type == "trans only":
         # Transcriptome only 
         trans_sim = Simulation(
-                cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
+                        cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
                         predict_connectome_from_connectome=False, resolution=resolution, 
                         random_seed=random_seed, use_shared_regions=use_shared_regions,
                         include_conn_feats=False, test_shared_regions=test_shared_regions
@@ -231,7 +231,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, use_shared_region
     elif feature_type == "trans plus conn":
         # Connectome and transcriptome
         trans_conn_sim = Simulation(
-            cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
+                    cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
                     predict_connectome_from_connectome=False, resolution=resolution,
                     random_seed=random_seed, use_shared_regions=use_shared_regions,
                     include_conn_feats=True, test_shared_regions=test_shared_regions
