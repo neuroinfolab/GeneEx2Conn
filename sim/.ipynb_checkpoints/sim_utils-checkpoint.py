@@ -142,7 +142,7 @@ def random_search_init(gpu_acceleration, model, X_combined, Y_combined, param_di
     if gpu_acceleration:
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        cupy_scorer = make_scorer(mse_cupy, greater_is_better=False)
+        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True)
         random_search = RandomizedSearchCV(model.get_model(), 
                                            param_distributions, 
                                            n_iter=n_iter, 
@@ -180,7 +180,7 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
         bayes_search = BayesSearchCV(
             model.get_model(),
             search_space,
-            n_iter=20, # n_iter=20
+            n_iter=25, # n_iter=20
             n_points=10,
             cv=train_test_indices,
             scoring=cupy_scorer,

@@ -69,6 +69,7 @@ class XGBModel(BaseModel):
             'min_child_weight': [1, 3, 5],             # Child weight for pruning
             'tree_method':['gpu_hist'],                    # Use the GPU
             'device':['cuda'],                         # Use GPU predictor
+            'n_gpus':[-1],
             'verbosity': [0]
         }
 
@@ -82,6 +83,7 @@ class XGBModel(BaseModel):
             'reg_alpha': Categorical([0, 1e-2, 1e-1, 1]),             # L1 regularization term (Lasso penalty)
             'tree_method': Categorical(['gpu_hist']),
             'device':['cuda'],
+            'n_gpus':[-1],
             'random_state': [42],
             'verbosity': [0]
         }
@@ -119,6 +121,7 @@ class XGBModel(BaseModel):
             'min_child_weight': randint(1, 6),  # Minimum sum of instance weight needed in a child
             'tree_method': ['gpu_hist'],  # Use the GPU
             'device': ['cuda'],  # Use GPU predictor
+            'n_gpus':[-1],
             'verbosity': [2]  # Verbosity level
         }
         

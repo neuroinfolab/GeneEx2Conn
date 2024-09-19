@@ -123,7 +123,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
         results_file_str += str(resolution)
         results_file_str += '_' + str(random_seed)
         # take in or out manually 
-        results_file_str += '_PCA' 
+        # results_file_str += '_PCA' 
 
         
     if use_shared_regions: 
