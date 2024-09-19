@@ -64,7 +64,7 @@ importlib.reload(sim.sim_utils)
 
 
 class Simulation:
-    def __init__(self, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, resolution=1.0,random_seed=42,
+    def __init__(self, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, summary_measure=None, resolution=1.0,random_seed=42,
                  use_shared_regions=False, include_conn_feats=False, test_shared_regions=False):        
         """
         Initialization of simulation parameters
@@ -73,6 +73,7 @@ class Simulation:
         self.model_type = model_type
         self.gpu_acceleration = gpu_acceleration
         self.predict_connectome_from_connectome = predict_connectome_from_connectome
+        self.summary_measure = summary_measure
         self.resolution = resolution
         self.random_seed=random_seed
         self.use_shared_regions = use_shared_regions
@@ -85,11 +86,15 @@ class Simulation:
         """
         Load transcriptome and connectome data
         """
+        # load everything but apply logic to expand data for different data types!!!
+        # reformatted needs to go in this way first
         omit_subcortical=False
         self.X = load_transcriptome()
-        self.X_pca = load_transcriptome(run_PCA=True)
-        self.Y = load_connectome()
+        self.Y = load_connectome(measure='FC')
 
+        self.X_pca = load_transcriptome(run_PCA=True)
+        self.Y_sc = load_connectome(measure='SC')
+        self.coords = load_coords()
     
     def select_cv(self):
         """
