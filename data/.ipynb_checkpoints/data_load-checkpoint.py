@@ -2,7 +2,7 @@
 
 from imports import *
 
-def load_transcriptome(parcellation='schaefer_100', stability = '-1', dataset='AHBA', run_PCA=False, omit_subcortical=False):
+def load_transcriptome(parcellation='schaefer_100', stability = '0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False):
     '''
     stability can be 0.2 or -1
     '''
@@ -28,17 +28,19 @@ def load_transcriptome(parcellation='schaefer_100', stability = '-1', dataset='A
             
             # Calculate cumulative variance
             cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
+
+            # threshold param
+            var_thresh = 0.95
             
             # Find the number of components that explain at least 95% of the variance
-            num_components_95_variance = np.argmax(cumulative_variance >= 0.95) + 1  # +1 because np.argmax returns the index
-            print(f"Number of components explaining 95% of the variance: {num_components_95_variance}")
+            num_components_variance = np.argmax(cumulative_variance >= var_thresh) + 1  # +1 because np.argmax returns the index
+            print(f"Number of components explaining {var_thresh*10}% of the variance: {num_components_variance}")
             
             # Get the principal components explaining 95% of the variance
-            schaefer114_genes_95_var = schaefer114_genes_pca[:, :num_components_95_variance]
-    
-            return schaefer114_genes_95_var
-        else:
-            return schaefer114_genes
+            schaefer114_genes_var = schaefer114_genes_pca[:, :num_components_variance]
+            schaefer114_genes = schaefer114_genes_var
+
+        return schaefer114_genes
         
     elif dataset == 'GTEx':
         relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)    

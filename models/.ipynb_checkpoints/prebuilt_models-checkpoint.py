@@ -90,8 +90,8 @@ class XGBModel(BaseModel):
         
         # syntax to specify params for a fine tuned run
         best_params = {
-            'n_estimators': [250],
-            'max_depth': [3],           # Maximum depth of each tree - makes a big diff
+            'n_estimators': [300],
+            'max_depth': [8],           # Maximum depth of each tree - makes a big diff
             'learning_rate': [0.01],     # Learning rate (shrinkage)
             'subsample': [1],              # Subsample ratio of the training data
             'colsample_bytree': [1],  # Subsample ratio of columns when constructing each tree

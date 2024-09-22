@@ -109,6 +109,30 @@ def expand_Y_symmetric(Y):
     
     return expanded_Y
 
+def expand_X_symmetric_kron(X):
+    """
+    Expands the X matrix symmetrically by computing the Kronecker product of 
+    gene expressions from pairs of regions.
+
+    Parameters:
+    X (numpy.ndarray): Input matrix of gene expressions.
+
+    Returns:
+    numpy.ndarray: Expanded symmetric matrix using Kronecker product.
+    """
+    num_regions, num_genes = X.shape
+    region_combinations = list(combinations(range(num_regions), 2))
+    num_combinations = len(region_combinations)
+
+    expanded_X = np.zeros((num_combinations * 2, num_genes**2))
+    
+    for i, (region1, region2) in enumerate(region_combinations):
+        # Kronecker product of the region1 and region2 gene expressions
+        expanded_X[i * 2] = np.kron(X[region1], X[region2])
+        expanded_X[i * 2 + 1] = np.kron(X[region2], X[region1])
+
+    return expanded_X
+
 def expand_X_symmetric_shared(X_train1, X_train2, Y_train2):
     """
     Expands rectangular X matrix symmetrically (including shared test regions).
@@ -251,73 +275,7 @@ def expand_X_symmetric_w_conn(X, Y, test=False):
 
     return expanded_X
 
-
-# Training-testing with different parts of the connectome
-# idea implementation
-'''
-def handle_all_train_true(X, Y, X_train, X_test, Y_train, Y_test, incl_conn, test_shared):
-    """Expand data when all_train is True."""
-    if incl_conn:
-        X_train2, Y_train2 = X[test_index], Y[train_index][:, test_index]
-        Y_train_feats1 = Y[train_index][:, train_index]
-        Y_train_feats2 = Y[test_index][:, train_index]
-        X_train2, Y_train2 = expand_shared_matrices(X_train, X_train2, Y_train2, Y_train_feats1, Y_train_feats2, incl_conn)
-        
-        X_train = expand_X_symmetric_w_conn(X_train, Y_train)
-        Y_train = expand_Y_symmetric(Y_train)
-
-        Y_test_alt = Y[test_index][:, train_index]
-        X_test = expand_X_symmetric_w_conn(X_test, Y_test_alt, test=True)
-        Y_test = expand_Y_symmetric(Y_test)
-        
-        X_train, Y_train, X_test, Y_test = handle_test_shared(test_shared, X_train, Y_train, X_train2, Y_train2, X_test, Y_test)
-    else: 
-        X_train2, Y_train2 = X[test_index], Y[train_index][:, test_index]
-        X_train2, Y_train2 = expand_shared_matrices(X_train, X_train2, Y_train2)
-        
-        X_train = expand_X_symmetric(X_train)
-        Y_train = expand_Y_symmetric(Y_train)
-
-        X_test = expand_X_symmetric(X_test)
-        Y_test = expand_Y_symmetric(Y_test)
-
-        X_train, Y_train, X_test, Y_test = handle_test_shared(test_shared, X_train, Y_train, X_train2, Y_train2, X_test, Y_test)
-    
-    return X_train, Y_train, X_test, Y_test
-
-
-def handle_all_train_false(X, Y, X_train, X_test, Y_train, Y_test, incl_conn):
-    """Expand data when all_train is False."""
-    if incl_conn: 
-        X_train = expand_X_symmetric_w_conn(X_train, Y_train)
-        Y_train = expand_Y_symmetric(Y_train)
-
-        Y_test_alt = Y[test_index][:, train_index]
-        X_test = expand_X_symmetric_w_conn(X_test, Y_test_alt, test=True)
-        Y_test = expand_Y_symmetric(Y_test)
-    else: 
-        X_train = expand_X_symmetric(X_train)
-        Y_train = expand_Y_symmetric(Y_train)
-
-        X_test = expand_X_symmetric(X_test)
-        Y_test = expand_Y_symmetric(Y_test)
-    
-    return X_train, Y_train, X_test, Y_test
-
-
-def handle_test_shared(test_shared, X_train, Y_train, X_train2, Y_train2, X_test, Y_test):
-    """Handle shared test data based on test_shared flag."""
-    if not test_shared: 
-        X_train = np.concatenate((X_train, X_train2))
-        Y_train = np.concatenate((Y_train, Y_train2))
-    else: 
-        X_test = np.concatenate((X_test, X_train2))
-        Y_test = np.concatenate((Y_test, Y_train2))
-    
-    return X_train, Y_train, X_test, Y_test
-'''
-
-def process_cv_splits(X, Y, cv_obj, all_train=True, incl_conn=False, test_shared=False):
+def process_cv_splits(X, Y, cv_obj, all_train=True, incl_conn=False, test_shared=False, kron=False):
     """
     Function to process cross-validation splits, expand training and test data as needed.
 
@@ -385,12 +343,19 @@ def process_cv_splits(X, Y, cv_obj, all_train=True, incl_conn=False, test_shared
                 Y_test_alt = Y[test_index][:, train_index]
                 X_test = expand_X_symmetric_w_conn(X_test, Y_test_alt, test=True)
                 Y_test = expand_Y_symmetric(Y_test)
-            else: 
-                X_train = expand_X_symmetric(X_train)
-                Y_train = expand_Y_symmetric(Y_train)
-
-                X_test = expand_X_symmetric(X_test)
-                Y_test = expand_Y_symmetric(Y_test)
+            else:
+                if kron: # can implement this elsewhere if necessary
+                    X_train = expand_X_symmetric_kron(X_train)
+                    Y_train = expand_Y_symmetric(Y_train)
+    
+                    X_test = expand_X_symmetric_kron(X_test)
+                    Y_test = expand_Y_symmetric(Y_test)
+                else:
+                    X_train = expand_X_symmetric(X_train)
+                    Y_train = expand_Y_symmetric(Y_train)
+    
+                    X_test = expand_X_symmetric(X_test)
+                    Y_test = expand_Y_symmetric(Y_test)
 
         results.append((X_train, X_test, Y_train, Y_test))
         #print(f"Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")
