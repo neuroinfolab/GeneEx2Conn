@@ -4,7 +4,7 @@
 from imports import * 
 
 # data load
-from data.data_load import load_transcriptome, load_connectome
+from data.data_load import load_transcriptome, load_connectome, load_coords
 import data.data_load
 importlib.reload(data.data_load)
 
@@ -64,7 +64,7 @@ importlib.reload(sim.sim_utils)
 
 
 class Simulation:
-    def __init__(self, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, summary_measure=None, resolution=1.0,random_seed=42,
+    def __init__(self, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, summary_measure=None, euclidean=False, structural=False, resolution=1.0,random_seed=42,
                  use_shared_regions=False, include_conn_feats=False, test_shared_regions=False):        
         """
         Initialization of simulation parameters
@@ -74,6 +74,8 @@ class Simulation:
         self.gpu_acceleration = gpu_acceleration
         self.predict_connectome_from_connectome = predict_connectome_from_connectome
         self.summary_measure = summary_measure
+        self.euclidean = euclidean
+        self.structural = structural
         self.resolution = resolution
         self.random_seed=random_seed
         self.use_shared_regions = use_shared_regions
@@ -91,7 +93,6 @@ class Simulation:
         omit_subcortical=False
         self.X = load_transcriptome()
         self.Y = load_connectome(measure='FC')
-
         self.X_pca = load_transcriptome(run_PCA=True)
         self.Y_sc = load_connectome(measure='SC')
         self.coords = load_coords()
@@ -113,7 +114,25 @@ class Simulation:
         Expand data based on feature type and prediction type
         """
         if self.predict_connectome_from_connectome:
-            self.fold_splits = process_cv_splits_conn_only_model(self.Y, self.Y, self.cv_obj, self.use_shared_regions, self.test_shared_regions)
+            self.fold_splits = process_cv_splits_conn_only_model(self.Y, self.Y,
+                                                                 self.cv_obj,
+                                                                 self.use_shared_regions,
+                                                                 self.test_shared_regions)
+        elif self.euclidean:
+            self.fold_splits = process_cv_splits(self.coords, self.Y, self.cv_obj, 
+                                                 self.use_shared_regions, 
+                                                 self.include_conn_feats, 
+                                                 self.test_shared_regions)
+        elif self.structural:
+            self.fold_splits = process_cv_splits(self.Y_sc, self.Y, self.cv_obj,
+                                                 self.use_shared_regions, 
+                                                 self.include_conn_feats, 
+                                                 self.test_shared_regions)
+        elif self.summary_measure == 'PCA':
+            self.fold_splits = process_cv_splits(self.X_pca, self.Y, self.cv_obj, 
+                                                 self.use_shared_regions, 
+                                                 self.include_conn_feats, 
+                                                 self.test_shared_regions)
         else:
             self.fold_splits = process_cv_splits(self.X, self.Y, self.cv_obj, 
                                                  self.use_shared_regions, 

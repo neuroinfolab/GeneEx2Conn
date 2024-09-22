@@ -199,8 +199,8 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
 
 def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method='random'):
     """
-    Function to run a simulations for single feature type: connectome only, transcriptome only, connectome+transcriptome
-    summary_measure: None, degree, network_degree, distance
+    Function to run a simulations for single feature type: euclidean, connectome only, transcriptome only, connectome+transcriptome
+    summary_measure: None, PCA, PCA+kronecker, degree, network_degree, distance
     """
     
     # List to store each model types results
@@ -221,7 +221,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=N
     elif feature_type == "trans only":
         # Transcriptome only 
         trans_sim = Simulation(
-                        cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
+                        cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu, summary_measure=summary_measure,
                         predict_connectome_from_connectome=False, resolution=resolution, 
                         random_seed=random_seed, use_shared_regions=use_shared_regions,
                         include_conn_feats=False, test_shared_regions=test_shared_regions
@@ -240,6 +240,31 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=N
         trans_conn_sim.run_sim(search_method)
         single_model_results.append(trans_conn_sim.results)
 
+    elif feature_type == "euclidean":
+        # Spatial coordinate 
+        spatial_sim = Simulation(
+                        cv_type=cv_type, model_type=model_type, summary_measure=summary_measure, gpu_acceleration=use_gpu, euclidean=True,
+                        predict_connectome_from_connectome=False, resolution=resolution,
+                        random_seed=random_seed,
+                        use_shared_regions=use_shared_regions, include_conn_feats=False,
+                        test_shared_regions=test_shared_regions
+            )
+        spatial_sim.run_sim(search_method)
+        single_model_results.append(spatial_sim.results)
+
+    elif feature_type == "structural":
+        # Structural
+        struct_sim = Simulation(
+                        cv_type=cv_type, model_type=model_type, summary_measure=summary_measure, gpu_acceleration=use_gpu, euclidean=False, structural=True,
+                        predict_connectome_from_connectome=False, resolution=resolution,
+                        random_seed=random_seed,
+                        use_shared_regions=use_shared_regions, include_conn_feats=False,
+                        test_shared_regions=test_shared_regions
+            )
+        struct_sim.run_sim(search_method)
+        single_model_results.append(struct_sim.results)
+    
+    
     # Save sim data
     if save_sim: 
         save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution, random_seed)

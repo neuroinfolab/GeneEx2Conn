@@ -30,7 +30,7 @@ class RidgeModel(BaseModel):
         super().__init__()
         self.model = Ridge()
         self.param_grid = {
-            'alpha': [0.01, 0.1, 0.5, 1.0, 10, 100],
+            'alpha': [0, 0.01, 0.1, 0.5, 1.0, 10, 100],
             'solver': ['auto'] #, 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga']
         }
 
@@ -55,7 +55,7 @@ class XGBModel(BaseModel):
     def __init__(self):
         super().__init__()
         self.model = XGBRegressor()
-            
+        '''
         self.param_grid = {
             'n_estimators': [50, 150, 250, 250],  # Num trees
             'max_depth': [2, 3, 5, 7],                 # Maximum depth of each tree
@@ -72,7 +72,7 @@ class XGBModel(BaseModel):
             'n_gpus':[-1],
             'verbosity': [0]
         }
-
+        '''
         self.param_dist = {
             'learning_rate': Categorical([1e-3, 1e-2, 1e-1, 0.3]), #1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]), #Real(1e-6, 1e-1, prior='log-uniform'),
             'n_estimators': Categorical([50, 150, 250, 350]), # Categorical([10, 100, 300]), #Categorical([50, 100, 150, 200, 250, 300, 350, 400]), # Integer(50, 400)
@@ -89,16 +89,15 @@ class XGBModel(BaseModel):
         }
         
         # syntax to specify params for a fine tuned run
-        '''
         best_params = {
             'n_estimators': [250],
             'max_depth': [3],           # Maximum depth of each tree - makes a big diff
             'learning_rate': [0.01],     # Learning rate (shrinkage)
-            'subsample': [0.6],              # Subsample ratio of the training data
-            'colsample_bytree': [0.8],  # Subsample ratio of columns when constructing each tree
+            'subsample': [1],              # Subsample ratio of the training data
+            'colsample_bytree': [1],  # Subsample ratio of columns when constructing each tree
             'gamma': [0],             # Minimum loss reduction required to make a split
-            'reg_lambda': [.01],              # L2 regularization term (Ridge penalty)
-            'reg_alpha': [0.01],             # L1 regularization term (Lasso penalty)
+            'reg_lambda': [0],              # L2 regularization term (Ridge penalty)
+            'reg_alpha': [0],             # L1 regularization term (Lasso penalty)
             'random_state': [42],        # Seed for reproducibility
             'min_child_weight': [1], 
             'tree_method':['hist'],  # Use the GPU
@@ -107,7 +106,7 @@ class XGBModel(BaseModel):
         }
         self.param_grid = best_params
         
-        
+        '''
         self.param_dist = {
             'n_estimators': [50, 100, 150, 200, 250, 300],  # Number of trees in the forest
             'max_depth': randint(3, 10),  # Maximum depth of each tree

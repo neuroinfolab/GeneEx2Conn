@@ -2,9 +2,9 @@
 
 from imports import *
 
-def load_transcriptome(parcellation='schaefer_100', stability = '0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False):
+def load_transcriptome(parcellation='schaefer_100', stability = '-1', dataset='AHBA', run_PCA=False, omit_subcortical=False):
     '''
-    stability can be 0.2 or 1
+    stability can be 0.2 or -1
     '''
     if dataset == 'AHBA':
         genes = fetch_ahba()
@@ -22,16 +22,14 @@ def load_transcriptome(parcellation='schaefer_100', stability = '0.2', dataset='
             schaefer114_genes = schaefer114_genes[:100, :]
         
         if run_PCA: 
-            # Initialize PCA and set the number of components to 100
             pca = PCA(n_components=100)
             
-            # Fit the PCA model to the data and transform it
             schaefer114_genes_pca = pca.fit_transform(schaefer114_genes)
             
             # Calculate cumulative variance
             cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
             
-            # Find the number of components that explain at least 80% of the variance
+            # Find the number of components that explain at least 95% of the variance
             num_components_95_variance = np.argmax(cumulative_variance >= 0.95) + 1  # +1 because np.argmax returns the index
             print(f"Number of components explaining 95% of the variance: {num_components_95_variance}")
             
