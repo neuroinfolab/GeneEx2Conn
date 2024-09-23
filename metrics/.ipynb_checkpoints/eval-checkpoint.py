@@ -144,6 +144,15 @@ def pearson_cupy(y_true, y_pred):
     # minimize moving to cupy (try to keep it on GPU once on) 
     y_pred = cp.asarray(y_pred)
 
+    # Check shapes before correlation computation
+    print("y_true shape:", y_true.shape)
+    print("y_pred shape:", y_pred.shape)
+
+    if y_true.shape != y_pred.shape:
+        print(f"Shape mismatch: y_true shape {y_true.shape}, y_pred shape {y_pred.shape}")
+        y_true = cp.asarray(y_true).ravel()  # Ensures it's a 1D vector
+        y_pred = cp.asarray(y_pred).ravel()  # Ensures it's a 1D vector
+
     # Compute the correlation matrix
     corr_matrix = cp.corrcoef(y_true, y_pred)
     

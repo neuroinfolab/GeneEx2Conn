@@ -101,7 +101,6 @@ def drop_test_network(cv_type, network_dict, value, idx):
 
         return new_dict
 
-
 def grid_search_init(gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices):
     """
     Helper function to initialize gridsearch object based on if GPU acceleration is being used
@@ -127,7 +126,7 @@ def grid_search_init(gpu_acceleration, model, X_combined, Y_combined, param_grid
                                    scoring='neg_mean_squared_error', 
                                    verbose=2, 
                                    refit=False, 
-                                   n_jobs=-1, 
+                                   #n_jobs=-1, 
                                    #random_state=42
                                    )
         
@@ -184,6 +183,7 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
             n_points=10,
             cv=train_test_indices,
             scoring=cupy_scorer,
+            # scoring='neg_mean_squared_error',
             verbose=3,
             random_state=42,
             refit=False, 
@@ -230,30 +230,4 @@ def find_best_params(grid_search_cv_results):
     print('BEST INNNER PARAMS', best_params)
     
     return best_params
-
-
-''' # THIS IS REALLY HARD TO DO MANUALLY DUE TO DIFFERING FEATURE SIZES OF CONN-CONN MODEL
-def find_best_params_bayes(grid_search_cv_results):
-    """
-    Helper function to score custom gridsearch
-    """
     
-    print(len(grid_search_cv_results))
-    
-    parameter_combos = grid_search_cv_results[0]['params']
-    print('PARAMETER COMBOS', parameter_combos)
-    
-    gridsearch_rank = []
-    for idx, result in enumerate(grid_search_cv_results):
-        rank = result['rank_test_score']
-        gridsearch_rank.append(rank)
-
-    print('GRIDSEARCH RANK', gridsearch_rank)
-    
-    rank_sum = np.sum(gridsearch_rank, 0)
-    best_params = parameter_combos[np.argmin(rank_sum)]
-
-    print('BEST INNNER PARAMS', best_params)
-    
-    return best_params
-''' 

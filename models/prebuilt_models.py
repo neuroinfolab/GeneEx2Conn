@@ -2,6 +2,7 @@
 
 from imports import *
 from skopt.space import Real, Categorical, Integer
+global input_dim
 
 class BaseModel:
     """Base class for all models."""
@@ -30,10 +31,15 @@ class RidgeModel(BaseModel):
         super().__init__()
         self.model = Ridge()
         self.param_grid = {
-            'alpha': [0, 0.01, 0.1, 0.5, 1.0, 10, 100],
+            'alpha': [0, 0.001, 0.01, 0.1, 1.0, 10, 100],
+            # 'alpha': np.logspace(-6, 2, 9)  # Explore 10^-6 to 10^2
             'solver': ['auto'] #, 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga']
         }
-
+        self.param_dist = {
+            'alpha': Real(1e-6, 1e2, prior='log-uniform')  # Log-uniform to explore a wide range of alphas
+            #'solver': Categorical(['auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga'])  # Different solvers to try
+        }
+        
 
 class PLSModel(BaseModel):
     """Partial Least Squares Regression model with parameter grid."""
@@ -46,6 +52,12 @@ class PLSModel(BaseModel):
             'max_iter': [1000],
             'tol': [1e-07], 
             'scale': [True, False] #, False]
+        }
+        self.param_dist = {
+            'n_components': Integer(1, 15),  # Integer range for number of components
+            #'max_iter': Integer(500, 2000),  # Range for max iterations
+            'tol': Real(1e-7, 1e-4, prior='log-uniform'),  # Log-uniform for tolerance
+            'scale': Categorical([True, False])  # Whether to scale the data
         }
 
 
@@ -90,8 +102,8 @@ class XGBModel(BaseModel):
         
         # syntax to specify params for a fine tuned run
         best_params = {
-            'n_estimators': [300],
-            'max_depth': [8],           # Maximum depth of each tree - makes a big diff
+            'n_estimators': [200],
+            'max_depth': [5],           # Maximum depth of each tree - makes a big diff
             'learning_rate': [0.01],     # Learning rate (shrinkage)
             'subsample': [1],              # Subsample ratio of the training data
             'colsample_bytree': [1],  # Subsample ratio of columns when constructing each tree
@@ -154,17 +166,125 @@ class RandomForestModel(BaseModel):
         }
 
 
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from sklearn.base import BaseEstimator, RegressorMixin
+
+class MLPModel(BaseEstimator, RegressorMixin):
+    """Basic MLP model using PyTorch with support for L2 regularization and dropout."""
+    
+    def __init__(self, input_dim=input_dim, output_dim=1, hidden_dims=[64, 64], dropout=0.5, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32):
+        super().__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.hidden_dims = hidden_dims
+        self.dropout = dropout
+        self.l2_reg = l2_reg
+        self.lr = lr
+        self.epochs = epochs
+        self.batch_size = batch_size
+
+        # Define the architecture
+        layers = []
+        prev_dim = input_dim
+
+        for hidden_dim in hidden_dims:
+            layers.append(nn.Linear(prev_dim, hidden_dim))
+            layers.append(nn.ReLU())
+            if dropout > 0:
+                layers.append(nn.Dropout(dropout))
+            prev_dim = hidden_dim
+        
+        layers.append(nn.Linear(prev_dim, output_dim))
+        self.model = nn.Sequential(*layers)
+
+        # Loss function
+        self.criterion = nn.MSELoss()
+        '''
+        self.param_dist = {
+        #'hidden_dims': Categorical([(64, 64)]), # , (128, 64), (128, 128, 64)]),  # Use tuples instead of lists
+        'dropout': Real(0.0, 0.2, 0.5),
+        'l2_reg': Real(1e-4, 1e-2),
+        'lr': Real(1e-4, 1e-2),
+        'epochs': Integer(50, 1000),
+        'batch_size': Integer(50, 1000)
+        }
+        '''
+
+    def fit(self, X, y):
+        """Train the model with PyTorch."""
+        self.model.train()
+        X_tensor = torch.tensor(X, dtype=torch.float32)
+        y_tensor = torch.tensor(y, dtype=torch.float32)
+
+        if torch.cuda.is_available():
+            self.model = self.model.to('cuda')
+            X_tensor = X_tensor.to('cuda')
+            y_tensor = y_tensor.to('cuda')
+
+        optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=self.l2_reg)
+
+        # Training loop
+        for epoch in range(self.epochs):
+            optimizer.zero_grad()
+            outputs = self.model(X_tensor)
+            loss = self.criterion(outputs, y_tensor)
+            loss.backward()
+            optimizer.step()
+
+    def predict(self, X):
+        """Make predictions with the trained model."""
+        self.model.eval()
+        X_tensor = torch.tensor(X, dtype=torch.float32)
+        if torch.cuda.is_available():
+            X_tensor = X_tensor.to('cuda')
+
+        with torch.no_grad():
+            predictions = self.model(X_tensor).cpu().numpy()
+        return predictions
+    
+    def get_param_grid(self):
+        """Return a parameter grid for hyperparameter tuning."""
+        return {
+            'hidden_dims': [[64, 64], [128, 64], [128, 128, 64]],
+            'dropout': [0.2, 0.5],
+            'l2_reg': [1e-4, 1e-3, 1e-2],
+            'lr': [0.001, 0.01],
+            'epochs': [50, 100],
+            'batch_size': [32, 64]
+        }
+    
+    def get_param_dist(self):
+        """Return a parameter distribution for random search or Bayesian optimization."""
+        return {
+            #'hidden_dims': Categorical([(64, 64)]), # , (128, 64), (128, 128, 64)]),  # Use tuples instead of lists
+            # 'dropout': Real(0.2, 0.5),
+            #'l2_reg': Real(1e-4, 1e-2),
+            'lr': Real(1e-4, 1e-2),
+            'epochs': Integer(50, 1000),
+            'batch_size': Integer(4, 64)
+        }
+
+    def get_model(self):
+        """Return the PyTorch model instance."""
+        return self
+
 class ModelBuild:
     """Factory class to create models based on the given model type."""
-
+        
     @staticmethod
-    def init_model(model_type):
+
+    def init_model(model_type, input_size):
         model_mapping = {
             'xgboost': XGBModel,
             'random_forest': RandomForestModel,
             'ridge': RidgeModel,
-            'pls': PLSModel
+            'pls': PLSModel, 
+            'mlp': MLPModel  # Add the MLP model here
         }
+
+        input_dim = input_size
         
         if model_type in model_mapping:
             return model_mapping[model_type]()

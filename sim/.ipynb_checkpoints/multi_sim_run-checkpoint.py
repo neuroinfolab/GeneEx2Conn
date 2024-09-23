@@ -200,12 +200,34 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
 def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method='random'):
     """
     Function to run a simulations for single feature type: euclidean, connectome only, transcriptome only, connectome+transcriptome
-    summary_measure: None, PCA, PCA+kronecker, degree, network_degree, distance
+    feature_type options: [transcriptome, transcriptomePCA, functional, structural, euclidean]
+    summary_measure: kronecker
     """
-    
+
     # List to store each model types results
     single_model_results = []
 
+    # Structural
+    sim = Simulation(
+                    feature_type=feature_type,
+                    cv_type=cv_type,
+                    model_type=model_type, 
+                    summary_measure=summary_measure, 
+                    gpu_acceleration=use_gpu, 
+                    euclidean=False, 
+                    structural=True,
+                    predict_connectome_from_connectome=False, 
+                    resolution=resolution,
+                    random_seed=random_seed,
+                    use_shared_regions=use_shared_regions, 
+                    include_conn_feats=False,
+                    test_shared_regions=test_shared_regions
+                )
+    
+    sim.run_sim(search_method)
+    single_model_results.append(sim.results)
+    
+    '''
     if feature_type == "conn only":
         # Connectome only 
         conn_sim = Simulation(
@@ -263,7 +285,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=N
             )
         struct_sim.run_sim(search_method)
         single_model_results.append(struct_sim.results)
-    
+    '''
     
     # Save sim data
     if save_sim: 

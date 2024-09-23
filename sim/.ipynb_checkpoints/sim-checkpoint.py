@@ -64,7 +64,7 @@ importlib.reload(sim.sim_utils)
 
 
 class Simulation:
-    def __init__(self, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, summary_measure=None, euclidean=False, structural=False, resolution=1.0,random_seed=42,
+    def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, summary_measure=None, euclidean=False, structural=False, resolution=1.0,random_seed=42,
                  use_shared_regions=False, include_conn_feats=False, test_shared_regions=False):        
         """
         Initialization of simulation parameters
@@ -72,6 +72,7 @@ class Simulation:
         self.cv_type = cv_type
         self.model_type = model_type
         self.gpu_acceleration = gpu_acceleration
+        self.feature_type = feature_type
         self.predict_connectome_from_connectome = predict_connectome_from_connectome
         self.summary_measure = summary_measure
         self.euclidean = euclidean
@@ -113,6 +114,35 @@ class Simulation:
         """
         Expand data based on feature type and prediction type
         """
+        # create a dict to map inputted feature types to data array
+        feature_dict = {'transcriptome': self.X, 
+                        'transcriptomePCA': self.X_pca,
+                        'functional':self.Y, 
+                        'structural':self.Y_sc, 
+                        'euclidean':self.coords}
+
+        X = []
+        
+        for feature in self.feature_type:
+            feature_X = feature_dict[feature]
+            X.append(feature_X)
+        
+        X = np.hstack(X)
+
+        self.X = X
+
+        print('self X shape', self.X.shape)
+        
+        if self.summary_measure == 'kronecker':
+            kron = True
+         
+        self.fold_splits = process_cv_splits(X, self.Y, self.cv_obj, 
+                          self.use_shared_regions, 
+                          self.include_conn_feats, 
+                          self.test_shared_regions, 
+                          kron=(True if self.summary_measure == 'kronecker' else False))
+        
+        '''
         if self.predict_connectome_from_connectome:
             self.fold_splits = process_cv_splits_conn_only_model(self.Y, self.Y,
                                                                  self.cv_obj,
@@ -137,13 +167,14 @@ class Simulation:
             self.fold_splits = process_cv_splits(self.X_pca, self.Y, self.cv_obj, 
                                                  self.use_shared_regions, 
                                                  self.include_conn_feats, 
-                                                 self.test_shared_regions
+                                                 self.test_shared_regions,
                                                  kron=True)
         else:
             self.fold_splits = process_cv_splits(self.X, self.Y, self.cv_obj, 
                                                  self.use_shared_regions, 
                                                  self.include_conn_feats, 
                                                  self.test_shared_regions)
+        '''
             
     
     def run_innercv(self, train_indices, test_indices, train_network_dict, search_method='grid', n_iter=100):
@@ -209,7 +240,7 @@ class Simulation:
             X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
 
             # Initialize model
-            model = ModelBuild.init_model(self.model_type)
+            model = ModelBuild.init_model(self.model_type, X_combined.shape[1])
             param_grid = model.get_param_grid()
             param_dist = model.get_param_dist()
 
@@ -279,11 +310,15 @@ class Simulation:
 
             print('BEST MODEL PARAMS', best_model.get_params())
 
-            # Implement function to grab feature importances here
+            # Implement function to grab feature importances here - can do for ridge too
             if self.model_type == 'pls': 
                 feature_importances_ = best_model.x_weights_[:, 0]  # Weights for the first component
             elif self.model_type == 'xgboost': 
                 feature_importances_ = best_model.feature_importances_
+            elif self.model_type == 'ridge': 
+                feature_importances_ = best_model.coef_
+            else: 
+                feature_importances_ = None
             
             self.results.append({
                 'model_parameters': best_model.get_params(),
@@ -291,7 +326,6 @@ class Simulation:
                 'test_metrics': test_metrics,
                 'y_true': Y_test.get() if self.gpu_acceleration else Y_test,
                 'y_pred': best_model.predict(X_test) if self.gpu_acceleration else best_model.predict(X_test), 
-                # this parameter only works for xgb or others with .feature_importances_
                 'feature_importances': feature_importances_
             })
             
