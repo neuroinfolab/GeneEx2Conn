@@ -148,27 +148,6 @@ class Simulation:
                                                                  self.cv_obj,
                                                                  self.use_shared_regions,
                                                                  self.test_shared_regions)
-        elif self.euclidean:
-            self.fold_splits = process_cv_splits(self.coords, self.Y, self.cv_obj, 
-                                                 self.use_shared_regions, 
-                                                 self.include_conn_feats, 
-                                                 self.test_shared_regions)
-        elif self.structural:
-            self.fold_splits = process_cv_splits(self.Y_sc, self.Y, self.cv_obj,
-                                                 self.use_shared_regions, 
-                                                 self.include_conn_feats, 
-                                                 self.test_shared_regions)
-        elif self.summary_measure == 'PCA':
-            self.fold_splits = process_cv_splits(self.X_pca, self.Y, self.cv_obj, 
-                                                 self.use_shared_regions, 
-                                                 self.include_conn_feats, 
-                                                 self.test_shared_regions)
-        elif self.summary_measure == 'PCA+kron':
-            self.fold_splits = process_cv_splits(self.X_pca, self.Y, self.cv_obj, 
-                                                 self.use_shared_regions, 
-                                                 self.include_conn_feats, 
-                                                 self.test_shared_regions,
-                                                 kron=True)
         else:
             self.fold_splits = process_cv_splits(self.X, self.Y, self.cv_obj, 
                                                  self.use_shared_regions, 

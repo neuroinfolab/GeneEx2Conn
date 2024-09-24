@@ -199,9 +199,67 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
 
 def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method='random'):
     """
-    Function to run a simulations for single feature type: euclidean, connectome only, transcriptome only, connectome+transcriptome
-    feature_type options: [transcriptome, transcriptomePCA, functional, structural, euclidean]
-    summary_measure: kronecker
+    Runs a single simulation for a given feature type and model configuration.
+
+    This function initializes and runs a simulation for various types of features (e.g., transcriptome, functional, 
+    structural data) and model configurations (e.g., ridge regression, XGBoost, neural networks). It handles different 
+    scenarios based on input parameters such as cross-validation type, GPU acceleration, feature types, and shared region 
+    handling for connectome prediction tasks. 
+
+    Parameters:
+    ----------
+    feature_type : str
+        The type of feature used in the simulation. Options include: 
+        'transcriptome', 'transcriptomePCA', 'functional', 'structural', 'euclidean'.
+    
+    cv_type : str
+        The type of cross-validation method used (e.g., 'random', 'community').
+    
+    model_type : str
+        The machine learning model type used in the simulation. Options include: 
+        'ridge', 'random_forest', 'xgboost', 'mlp', etc.
+    
+    use_gpu : bool
+        If True, the simulation will use GPU acceleration for models and computations where applicable.
+    
+    summary_measure : str, optional
+        Summary measure used in the simulation. For example, 'kronecker' for Kronecker product measure.
+    
+    use_shared_regions : bool, optional
+        Whether to include shared brain regions in the analysis. 
+    
+    test_shared_regions : bool, optional
+        Whether to test on shared regions. 
+    
+    resolution : float, optional
+        Resolution parameter for the community splits. 
+    
+    random_seed : int, optional
+        Seed for community splits. 
+    
+    save_sim : bool, optional
+        If True, the simulation results will be saved to disk. 
+    
+    search_method : str, optional
+        The hyperparameter search method to use. Options include: 'random', 'grid', 'bayes'. 
+
+    Returns:
+    -------
+    single_model_results : list
+        A list containing the results of the simulation for the specified model type.
+
+    Example:
+    -------
+    single_sim_run(
+        feature_type=['transcriptomePCA'], 
+        cv_type='random', 
+        model_type='mlp', 
+        use_gpu=True, 
+        summary_measure='kronecker', 
+        resolution=1.0, 
+        random_seed=42, 
+        search_method='bayes'
+    )
     """
 
     # List to store each model types results
@@ -213,13 +271,11 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=N
                     cv_type=cv_type,
                     model_type=model_type, 
                     summary_measure=summary_measure, 
-                    gpu_acceleration=use_gpu, 
-                    euclidean=False, 
-                    structural=True,
-                    predict_connectome_from_connectome=False, 
+                    gpu_acceleration=use_gpu,
                     resolution=resolution,
                     random_seed=random_seed,
                     use_shared_regions=use_shared_regions, 
+                    predict_connectome_from_connectome=False, 
                     include_conn_feats=False,
                     test_shared_regions=test_shared_regions
                 )
@@ -227,65 +283,6 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=N
     sim.run_sim(search_method)
     single_model_results.append(sim.results)
     
-    '''
-    if feature_type == "conn only":
-        # Connectome only 
-        conn_sim = Simulation(
-                        cv_type=cv_type, model_type=model_type, summary_measure=summary_measure, gpu_acceleration=use_gpu,
-                        predict_connectome_from_connectome=True, resolution=resolution,
-                        random_seed=random_seed,
-                        use_shared_regions=use_shared_regions, include_conn_feats=False,
-                        test_shared_regions=test_shared_regions
-            )
-        conn_sim.run_sim(search_method)
-        single_model_results.append(conn_sim.results)
-
-    elif feature_type == "trans only":
-        # Transcriptome only 
-        trans_sim = Simulation(
-                        cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu, summary_measure=summary_measure,
-                        predict_connectome_from_connectome=False, resolution=resolution, 
-                        random_seed=random_seed, use_shared_regions=use_shared_regions,
-                        include_conn_feats=False, test_shared_regions=test_shared_regions
-            )
-        trans_sim.run_sim(search_method)
-        single_model_results.append(trans_sim.results)
-        
-    elif feature_type == "trans plus conn":
-        # Connectome and transcriptome
-        trans_conn_sim = Simulation(
-                    cv_type=cv_type, model_type=model_type, gpu_acceleration=use_gpu,
-                    predict_connectome_from_connectome=False, resolution=resolution,
-                    random_seed=random_seed, use_shared_regions=use_shared_regions,
-                    include_conn_feats=True, test_shared_regions=test_shared_regions
-        )
-        trans_conn_sim.run_sim(search_method)
-        single_model_results.append(trans_conn_sim.results)
-
-    elif feature_type == "euclidean":
-        # Spatial coordinate 
-        spatial_sim = Simulation(
-                        cv_type=cv_type, model_type=model_type, summary_measure=summary_measure, gpu_acceleration=use_gpu, euclidean=True,
-                        predict_connectome_from_connectome=False, resolution=resolution,
-                        random_seed=random_seed,
-                        use_shared_regions=use_shared_regions, include_conn_feats=False,
-                        test_shared_regions=test_shared_regions
-            )
-        spatial_sim.run_sim(search_method)
-        single_model_results.append(spatial_sim.results)
-
-    elif feature_type == "structural":
-        # Structural
-        struct_sim = Simulation(
-                        cv_type=cv_type, model_type=model_type, summary_measure=summary_measure, gpu_acceleration=use_gpu, euclidean=False, structural=True,
-                        predict_connectome_from_connectome=False, resolution=resolution,
-                        random_seed=random_seed,
-                        use_shared_regions=use_shared_regions, include_conn_feats=False,
-                        test_shared_regions=test_shared_regions
-            )
-        struct_sim.run_sim(search_method)
-        single_model_results.append(struct_sim.results)
-    '''
     
     # Save sim data
     if save_sim: 

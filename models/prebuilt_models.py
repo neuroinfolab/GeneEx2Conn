@@ -2,11 +2,10 @@
 
 from imports import *
 from skopt.space import Real, Categorical, Integer
-global input_dim
+input_dim = None
 
 class BaseModel:
     """Base class for all models."""
-
     def __init__(self):
         self.model = None
         self.param_grid = {}
@@ -174,7 +173,7 @@ from sklearn.base import BaseEstimator, RegressorMixin
 class MLPModel(BaseEstimator, RegressorMixin):
     """Basic MLP model using PyTorch with support for L2 regularization and dropout."""
     
-    def __init__(self, input_dim=input_dim, output_dim=1, hidden_dims=[64, 64], dropout=0.5, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32):
+    def __init__(self, input_dim, output_dim=1, hidden_dims=[64, 64], dropout=0.5, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
@@ -259,22 +258,22 @@ class MLPModel(BaseEstimator, RegressorMixin):
         """Return a parameter distribution for random search or Bayesian optimization."""
         return {
             #'hidden_dims': Categorical([(64, 64)]), # , (128, 64), (128, 128, 64)]),  # Use tuples instead of lists
-            # 'dropout': Real(0.2, 0.5),
-            #'l2_reg': Real(1e-4, 1e-2),
-            'lr': Real(1e-4, 1e-2),
-            'epochs': Integer(50, 1000),
-            'batch_size': Integer(4, 64)
+            'dropout': Real(0.2, 0.5), 
+            'l2_reg': Real(1e-5, 1e-3, prior='log-uniform'),  
+            'lr': Real(1e-4, 1e-2, prior='log-uniform'), 
+            'epochs': Integer(100, 500),  
+            'batch_size': Integer(16, 128)  
         }
 
     def get_model(self):
         """Return the PyTorch model instance."""
         return self
 
+
 class ModelBuild:
     """Factory class to create models based on the given model type."""
         
     @staticmethod
-
     def init_model(model_type, input_size):
         model_mapping = {
             'xgboost': XGBModel,
@@ -283,11 +282,13 @@ class ModelBuild:
             'pls': PLSModel, 
             'mlp': MLPModel  # Add the MLP model here
         }
-
-        input_dim = input_size
-        
+    
         if model_type in model_mapping:
-            return model_mapping[model_type]()
+            if model_type == 'mlp':
+                print('MLP input size', input_size)
+                return model_mapping[model_type](input_dim=input_size)
+            else:
+                return model_mapping[model_type]()
         else:
             raise ValueError(f"Model type '{model_type}' is not recognized.")
 
