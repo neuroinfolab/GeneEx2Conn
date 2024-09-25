@@ -57,7 +57,7 @@ from sklearn.model_selection import BaseCrossValidator
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.decomposition import PCA
-from skopt import BayesSearchCV
+#from skopt import BayesSearchCV
 import xgboost
 from xgboost import XGBRFRegressor
 from xgboost import XGBRegressor
@@ -69,16 +69,16 @@ from tensorflow.keras.layers import Dense, Dropout
 #from tensorflow.keras.wrappers.scikit_learn import KerasRegressor
 
 # cuda and GPU
-import cupy as cp
+#import cupy as cp
 import torch
-import GPUtil
+#import GPUtil
 
 # gene expression
 import scib
 import scanpy as sc
 from anndata import AnnData
-import inmoose
-from inmoose.pycombat import pycombat_norm, pycombat_seq
+#import inmoose
+#from inmoose.pycombat import pycombat_norm, pycombat_seq
 
 # network analysis
 import networkx as nx
