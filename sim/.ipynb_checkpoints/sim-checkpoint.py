@@ -122,25 +122,30 @@ class Simulation:
                         'euclidean':self.coords}
 
         X = []
-        
         for feature in self.feature_type:
             feature_X = feature_dict[feature]
             X.append(feature_X)
-        
+
         X = np.hstack(X)
-
         self.X = X
-
         print('self X shape', self.X.shape)
+        
+        if 'transcriptomePCA' in self.feature_type:
+            feature_X = feature_dict['transcriptomePCA']
+            self.PC_dim = int(feature_X.shape[1])
+        else:
+            self.PC_dim = None # save dimensionality for kronecker for region-wise expansion
         
         if self.summary_measure == 'kronecker':
             kron = True
+            print('PC dim', self.PC_dim )
          
         self.fold_splits = process_cv_splits(X, self.Y, self.cv_obj, 
                           self.use_shared_regions, 
                           self.include_conn_feats, 
-                          self.test_shared_regions, 
-                          kron=(True if self.summary_measure == 'kronecker' else False))
+                          self.test_shared_regions,
+                          kron=(True if self.summary_measure == 'kronecker' else False),
+                          kron_input_dim = self.PC_dim)
         
         '''
         if self.predict_connectome_from_connectome:
@@ -148,27 +153,6 @@ class Simulation:
                                                                  self.cv_obj,
                                                                  self.use_shared_regions,
                                                                  self.test_shared_regions)
-        elif self.euclidean:
-            self.fold_splits = process_cv_splits(self.coords, self.Y, self.cv_obj, 
-                                                 self.use_shared_regions, 
-                                                 self.include_conn_feats, 
-                                                 self.test_shared_regions)
-        elif self.structural:
-            self.fold_splits = process_cv_splits(self.Y_sc, self.Y, self.cv_obj,
-                                                 self.use_shared_regions, 
-                                                 self.include_conn_feats, 
-                                                 self.test_shared_regions)
-        elif self.summary_measure == 'PCA':
-            self.fold_splits = process_cv_splits(self.X_pca, self.Y, self.cv_obj, 
-                                                 self.use_shared_regions, 
-                                                 self.include_conn_feats, 
-                                                 self.test_shared_regions)
-        elif self.summary_measure == 'PCA+kron':
-            self.fold_splits = process_cv_splits(self.X_pca, self.Y, self.cv_obj, 
-                                                 self.use_shared_regions, 
-                                                 self.include_conn_feats, 
-                                                 self.test_shared_regions,
-                                                 kron=True)
         else:
             self.fold_splits = process_cv_splits(self.X, self.Y, self.cv_obj, 
                                                  self.use_shared_regions, 
@@ -193,8 +177,18 @@ class Simulation:
             inner_fold_splits = process_cv_splits(self.X, self.Y, inner_cv_obj, 
                                                   self.use_shared_regions, 
                                                   self.include_conn_feats, 
-                                                  self.test_shared_regions)
+                                                  self.test_shared_regions,
+                                                  kron=(True if self.summary_measure == 'kronecker' else False),
+                                                  kron_input_dim = self.PC_dim
+                                                 )
         
+        print('all splits', len(inner_fold_splits))
+        print('inner splits', len(inner_fold_splits[0]))
+        print('inner splits', inner_fold_splits[0][0].shape)
+
+        #print(inner_fold_splits[1])
+        #print(inner_fold_splits[2])
+        '''
         if self.predict_connectome_from_connectome or self.include_conn_feats:
             grid_search_cv_results, grid_search_best_scores, grid_search_best_params = [], [], []
             
@@ -237,34 +231,36 @@ class Simulation:
             
             return best_estimator
         else:
-            X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
-
-            # Initialize model
-            model = ModelBuild.init_model(self.model_type, X_combined.shape[1])
-            param_grid = model.get_param_grid()
-            param_dist = model.get_param_dist()
-
-            # Initialize grid search and return cupy converted array if necessary
-            if search_method == 'grid':
-                grid_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices)
-            elif search_method == 'random':
-                grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
-            elif search_method == 'bayes':
-                grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
-                        
-            # Fit GridSearchCV on the combined data
-            grid_search.fit(X_combined, Y_combined)
             
-            # Display comprehensive results
-            print("\nGrid Search CV Results:")
-            print("=======================")
-            print("Best Parameters: ", grid_search.best_params_)
-            print("Best Cross-Validation Score: ", grid_search.best_score_)
+        '''
+        X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
 
-            model = model.get_model()
-            best_estimator = model.set_params(**grid_search.best_params_)
-    
-            return best_estimator
+        # Initialize model
+        model = ModelBuild.init_model(self.model_type, X_combined.shape[1])
+        param_grid = model.get_param_grid()
+        param_dist = model.get_param_dist()
+
+        # Initialize grid search and return cupy converted array if necessary
+        if search_method == 'grid':
+            grid_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices)
+        elif search_method == 'random':
+            grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
+        elif search_method == 'bayes':
+            grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
+                    
+        # Fit GridSearchCV on the combined data
+        grid_search.fit(X_combined, Y_combined)
+        
+        # Display comprehensive results
+        print("\nGrid Search CV Results:")
+        print("=======================")
+        print("Best Parameters: ", grid_search.best_params_)
+        print("Best Cross-Validation Score: ", grid_search.best_score_)
+
+        model = model.get_model()
+        best_estimator = model.set_params(**grid_search.best_params_)
+
+        return best_estimator
 
 
     def run_sim(self, search_method='random'):

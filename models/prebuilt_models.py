@@ -90,8 +90,8 @@ class XGBModel(BaseModel):
             'max_depth': Categorical([2, 4, 5, 7]), # Categorical([1, 2, 6]), # Integer(2, 6),  #, 10),
             'subsample': Categorical([0.8, 1]), # Categorical([0.6, 0.6]), #, 0.7, 0.8, 0.9, 1.0]),
             'colsample_bytree': Categorical([0.8, 1]), # Categorical([0.6, 0.6]), # 0.7, 0.8, 0.9, 1.0]),
-            'reg_lambda': Categorical([0, 1e-2, 1e-1, 1]),  # L2 regularization term (Ridge penalty)
-            'reg_alpha': Categorical([0, 1e-2, 1e-1, 1]),             # L1 regularization term (Lasso penalty)
+            'reg_lambda': Categorical([0, 1e-4, 1e-2, 1e-1, 1]),  # L2 regularization term (Ridge penalty)
+            'reg_alpha': Categorical([0, 1e-4, 1e-2, 1e-1, 1]),             # L1 regularization term (Lasso penalty)
             'tree_method': Categorical(['gpu_hist']),
             'device':['cuda'],
             'n_gpus':[-1],
