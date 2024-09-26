@@ -1,8 +1,7 @@
 # Gene2Conn/models/prebuilt_models.py
 
 from imports import *
-from skopt.space import Real, Categorical, Integer
-input_dim = None
+# from skopt.space import Real, Categorical, Integer
 
 class BaseModel:
     """Base class for all models."""
