@@ -179,11 +179,11 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
         bayes_search = BayesSearchCV(
             model.get_model(),
             search_space,
-            n_iter=25, # n_iter=20
+            n_iter=30, # n_iter=20
             n_points=10,
             cv=train_test_indices,
             scoring=cupy_scorer,
-            # scoring='neg_mean_squared_error',
+            #scoring='neg_mean_squared_error',
             verbose=3,
             random_state=42,
             refit=False, 
@@ -191,7 +191,7 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
             error_score=error_score,
             optimizer_kwargs={'base_estimator': 'GP', 'acq_func': 'PI'}  # Use Expected Improvement for more exploitation
         )
-        print(bayes_search.optimizer_kwargs)
+        #print(bayes_search.optimizer_kwargs)
     else:
         bayes_search = BayesSearchCV(
             model.get_model(),

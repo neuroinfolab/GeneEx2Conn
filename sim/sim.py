@@ -140,7 +140,7 @@ class Simulation:
             kron = True
             print('PC dim', self.PC_dim )
          
-        self.fold_splits = process_cv_splits(X, self.Y, self.cv_obj, 
+        self.fold_splits = process_cv_splits(self.X, self.Y, self.cv_obj, 
                           self.use_shared_regions, 
                           self.include_conn_feats, 
                           self.test_shared_regions,
@@ -163,7 +163,7 @@ class Simulation:
     
     def run_innercv(self, train_indices, test_indices, train_network_dict, search_method='grid', n_iter=100):
         """
-        Inner cross-validation with option for Grid Search or Randomized Search
+        Inner cross-validation with option for Grid, Bayesian, or Randomized Search
         """
         
         # Create inner CV object (just indices) for X_train and Y_train
@@ -176,18 +176,10 @@ class Simulation:
         else:
             inner_fold_splits = process_cv_splits(self.X, self.Y, inner_cv_obj, 
                                                   self.use_shared_regions, 
-                                                  self.include_conn_feats, 
                                                   self.test_shared_regions,
                                                   kron=(True if self.summary_measure == 'kronecker' else False),
                                                   kron_input_dim = self.PC_dim
                                                  )
-        
-        print('all splits', len(inner_fold_splits))
-        print('inner splits', len(inner_fold_splits[0]))
-        print('inner splits', inner_fold_splits[0][0].shape)
-
-        #print(inner_fold_splits[1])
-        #print(inner_fold_splits[2])
         '''
         if self.predict_connectome_from_connectome or self.include_conn_feats:
             grid_search_cv_results, grid_search_best_scores, grid_search_best_params = [], [], []
@@ -234,7 +226,7 @@ class Simulation:
             
         '''
         X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
-
+        
         # Initialize model
         model = ModelBuild.init_model(self.model_type, X_combined.shape[1])
         param_grid = model.get_param_grid()
@@ -247,7 +239,8 @@ class Simulation:
             grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
         elif search_method == 'bayes':
             grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
-                    
+
+        
         # Fit GridSearchCV on the combined data
         grid_search.fit(X_combined, Y_combined)
         
@@ -278,10 +271,10 @@ class Simulation:
             
             train_indices = self.cv_obj.folds[i][0]
             test_indices = self.cv_obj.folds[i][1]
-            
+   
             network_dict = self.cv_obj.networks
             train_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, i+1)
-    
+
             # Step 5: Inner CV on training data
             # search_method options: random, grid, bayes
             best_model = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
@@ -303,7 +296,6 @@ class Simulation:
 
             print("\nTrain Metrics:", train_metrics)
             print("Test Metrics:", test_metrics)
-
             print('BEST MODEL PARAMS', best_model.get_params())
 
             # Implement function to grab feature importances here - can do for ridge too

@@ -125,15 +125,18 @@ def expand_X_symmetric_kron(X, kron_input_dim):
     num_combinations = len(region_combinations)
     
     for i, (region1, region2) in enumerate(region_combinations):
-        if int(X.shape[0])== kron_input_dim or kron_input_dim == None: # kronecker was specified but not for transcriptome PCA
+        if int(X.shape[1]) == kron_input_dim or kron_input_dim == None: # kronecker was specified but not for transcriptome PCA
             
             expanded_X = np.zeros((num_combinations * 2, num_genes**2))
-
-            # Kronecker product of the region1 and region2 gene expressions
+            
+            # threshold = 1e-10
+            #expanded_X[i * 2] = np.log(np.maximum(np.kron(X[region1], X[region2]), threshold))
+            #expanded_X[i * 2 + 1] = np.log(np.maximum(np.kron(X[region2], X[region1]), threshold))
+            
+            # Kronecker product of the region1 and region2 gene expressions        
             expanded_X[i * 2] = np.kron(X[region1], X[region2])
-            expanded_X[i * 2 + 1] = np.kron(X[region2], X[region1])
+            expanded_X[i * 2 + 1] = np.kron(X[region2]+1, X[region1]+1)
         else: 
-
             expanded_X = np.zeros((num_combinations * 2, kron_input_dim**2 + (2*(X.shape[1]-kron_input_dim))))
 
             # Kronecker product of the region1 and region2 gene expressions concatenated with other features

@@ -47,13 +47,13 @@ class PLSModel(BaseModel):
         super().__init__()
         self.model = PLSRegression()
         self.param_grid = {
-            'n_components': [1, 3, 5, 7, 9, 15],
+            'n_components': [1, 3, 5, 7, 9], #, 15],
             'max_iter': [1000],
             'tol': [1e-07], 
             'scale': [True, False] #, False]
         }
         self.param_dist = {
-            'n_components': Integer(1, 15),  # Integer range for number of components
+            'n_components': Integer(1, 8),  # Integer range for number of components
             #'max_iter': Integer(500, 2000),  # Range for max iterations
             'tol': Real(1e-7, 1e-4, prior='log-uniform'),  # Log-uniform for tolerance
             'scale': Categorical([True, False])  # Whether to scale the data
@@ -87,9 +87,9 @@ class XGBModel(BaseModel):
         self.param_dist = {
             'learning_rate': Categorical([1e-3, 1e-2, 1e-1, 0.3]), #1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]), #Real(1e-6, 1e-1, prior='log-uniform'),
             'n_estimators': Categorical([50, 150, 250, 350]), # Categorical([10, 100, 300]), #Categorical([50, 100, 150, 200, 250, 300, 350, 400]), # Integer(50, 400)
-            'max_depth': Categorical([2, 4, 5, 7]), # Categorical([1, 2, 6]), # Integer(2, 6),  #, 10),
-            'subsample': Categorical([0.8, 1]), # Categorical([0.6, 0.6]), #, 0.7, 0.8, 0.9, 1.0]),
-            'colsample_bytree': Categorical([0.8, 1]), # Categorical([0.6, 0.6]), # 0.7, 0.8, 0.9, 1.0]),
+            'max_depth': Categorical([2, 3, 4, 5, 6, 7]), # Categorical([1, 2, 6]), # Integer(2, 6),  #, 10),
+            'subsample': Categorical([0.6, 0.8, 1]), # Categorical([0.6, 0.6]), #, 0.7, 0.8, 0.9, 1.0]),
+            'colsample_bytree': Categorical([0.6, 0.8, 1]), # Categorical([0.6, 0.6]), # 0.7, 0.8, 0.9, 1.0]),
             'reg_lambda': Categorical([0, 1e-4, 1e-2, 1e-1, 1]),  # L2 regularization term (Ridge penalty)
             'reg_alpha': Categorical([0, 1e-4, 1e-2, 1e-1, 1]),             # L1 regularization term (Lasso penalty)
             'tree_method': Categorical(['gpu_hist']),
