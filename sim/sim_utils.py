@@ -114,7 +114,7 @@ def grid_search_init(gpu_acceleration, model, X_combined, Y_combined, param_grid
                                    param_grid, 
                                    cv=train_test_indices, 
                                    scoring=cupy_scorer, 
-                                   verbose=2,
+                                   verbose=3,
                                    refit=False,
                                    #n_jobs=1,
                                    #random_state=42
@@ -124,7 +124,7 @@ def grid_search_init(gpu_acceleration, model, X_combined, Y_combined, param_grid
                                    param_grid, 
                                    cv=train_test_indices, 
                                    scoring='neg_mean_squared_error', 
-                                   verbose=2, 
+                                   verbose=3, 
                                    refit=False, 
                                    #n_jobs=-1, 
                                    #random_state=42
@@ -157,7 +157,7 @@ def random_search_init(gpu_acceleration, model, X_combined, Y_combined, param_di
                                            n_iter=n_iter, 
                                            cv=train_test_indices, 
                                            scoring='neg_mean_squared_error', 
-                                           verbose=2, 
+                                           verbose=3, 
                                            refit=False, 
                                            n_jobs=-1,
                                            random_state=42)
@@ -179,7 +179,7 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
         bayes_search = BayesSearchCV(
             model.get_model(),
             search_space,
-            n_iter=30, # n_iter=20
+            n_iter=20, # n_iter=20
             n_points=10,
             cv=train_test_indices,
             scoring=cupy_scorer,
@@ -199,7 +199,7 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
             n_iter=n_iter,
             cv=train_test_indices,
             scoring='neg_mean_squared_error',
-            verbose=2,
+            verbose=3,
             refit=False,
             n_jobs=-1,
             random_state=42
