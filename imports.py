@@ -27,8 +27,8 @@ import matplotlib.colors as mcolors
 import plotly.express as px
 import plotly.graph_objects as go
 from matplotlib.patches import Patch
-# import umap
-# import umap.umap_ as umap
+import umap
+import umap.umap_ as umap
 from mpl_toolkits.mplot3d import Axes3D
 
 # stats 
@@ -65,10 +65,6 @@ from xgboost import XGBRFRegressor
 from xgboost import XGBRegressor
 import lightgbm
 from lightgbm import LGBMRegressor
-# import tensorflow as tf
-# from tensorflow.keras.models import Sequential
-# from tensorflow.keras.layers import Dense, Dropout
-#from tensorflow.keras.wrappers.scikit_learn import KerasRegressor
 
 # cuda and GPU
 import cupy as cp
