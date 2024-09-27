@@ -61,7 +61,7 @@ from sim.sim_utils import bayes_search_init, grid_search_init, random_search_ini
 from sim.sim_utils import bytes2human, print_system_usage
 importlib.reload(sim.sim_utils)
 
-
+from skopt.plots import plot_objective, plot_histogram
 
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, summary_measure=None, euclidean=False, structural=False, resolution=1.0,random_seed=42,
@@ -200,7 +200,7 @@ class Simulation:
                     grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter)
                 elif search_method == 'bayes':
                     grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter)
-
+                    
                 # Fit GridSearchCV on the current fold
                 grid_search.fit(X_combined, Y_combined)
                 
@@ -209,6 +209,9 @@ class Simulation:
                 print("=======================")
                 print("Best Cross-Validation Score: ", grid_search.best_score_)
                 print("Best Parameters: ", grid_search.best_params_)
+
+                _ = plot_objective(grid_search.optimizer_results_[0])
+                plt.show()
                 
                 grid_search_cv_results.append(grid_search.cv_results_)
                 grid_search_best_scores.append(grid_search.best_score_)
@@ -250,10 +253,12 @@ class Simulation:
         print("Best Parameters: ", grid_search.best_params_)
         print("Best Cross-Validation Score: ", grid_search.best_score_)
 
-        model = model.get_model()
-        best_estimator = model.set_params(**grid_search.best_params_)
+        _ = plot_objective(grid_search.optimizer_results_[0], size=5)
+        plt.show()
 
-        return best_estimator
+        best_model = model.get_model()
+        best_model.set_params(**grid_search.best_params_)
+        return best_model
 
 
     def run_sim(self, search_method='random'):
