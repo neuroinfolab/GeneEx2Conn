@@ -103,7 +103,7 @@ class Simulation:
         Select cross-validation strategy
         """
         if self.cv_type == 'random':
-            self.cv_obj = RandomCVSplit(self.X, self.Y, num_splits=4, shuffled=True, use_random_state=True)
+            self.cv_obj = RandomCVSplit(self.X, self.Y, num_splits=4, shuffled=True, use_random_state=True, random_seed=self.random_seed)
         elif self.cv_type == 'schaefer':
             self.cv_obj = SchaeferCVSplit()
         elif self.cv_type == 'community':

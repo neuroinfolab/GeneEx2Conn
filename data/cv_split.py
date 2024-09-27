@@ -10,10 +10,11 @@ class RandomCVSplit:
     labels (list): List of region labels with network information.
     """
     
-    def __init__(self, X, Y, num_splits, shuffled, use_random_state=True):
+    def __init__(self, X, Y, num_splits, shuffled=True, use_random_state=True,random_seed=42):
         self.X = X
         self.Y = Y
         self.num_splits = num_splits
+        self.random_seed = random_seed
         
         self.shuffled = shuffled
         self.use_random_state = use_random_state
@@ -24,7 +25,7 @@ class RandomCVSplit:
     def define_splits(self):
         if self.shuffled:
             if self.use_random_state:
-                kf = KFold(n_splits=self.num_splits, shuffle=True, random_state=42)
+                kf = KFold(n_splits=self.num_splits, shuffle=True, random_state=self.random_seed)
             else:
                 kf = KFold(n_splits=self.num_splits, shuffle=True)
         else:

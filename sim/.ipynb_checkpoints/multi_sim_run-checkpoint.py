@@ -111,12 +111,14 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
 
     sim_results_file_path = os.getcwd() + '/sim/sim_results/'
     
-    results_file_str = str(feature_type) + "_" + model_type + "_" + cv_type + "_" +  search_method + 'search'
+    results_file_str = str(feature_type) + "_" + model_type + "_" + cv_type
     
     if cv_type == "community":
         results_file_str += str(resolution)
-        results_file_str += '_' + str(random_seed)
-        
+    
+    results_file_str += '_' + str(random_seed)
+    results_file_str += "_" +  search_method + 'search'
+
     if use_shared_regions: 
         results_file_str += "_useshared"
         if test_shared_regions: 
