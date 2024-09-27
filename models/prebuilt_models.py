@@ -4,6 +4,8 @@ from imports import *
 from skopt.space import Real, Categorical, Integer
 input_dim = None
 
+from metrics.eval import mse_cupy
+
 class BaseModel:
     """Base class for all models."""
     def __init__(self):
@@ -268,6 +270,9 @@ class MLPModel(BaseEstimator, RegressorMixin):
     def get_model(self):
         """Return the PyTorch model instance."""
         return self
+
+    def score(self, X, y):
+        return mse_cupy(X, y)
 
 
 class ModelBuild:
