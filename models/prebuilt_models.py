@@ -33,7 +33,7 @@ class RidgeModel(BaseModel):
         super().__init__()
         self.model = Ridge()
         self.param_grid = {
-            'alpha': [0, 0.001, 0.01, 0.1, 1.0, 10, 100],
+            'alpha': [0, 0.001, 0.01, 0.1, 1.0, 10, 100, 1000],
             # 'alpha': np.logspace(-6, 2, 9)  # Explore 10^-6 to 10^2
             'solver': ['auto'] #, 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga']
         }
@@ -86,6 +86,11 @@ class RidgeModelTorch(BaseEstimator, RegressorMixin):
             loss.backward()  # Backpropagation
             optimizer.step()  # Update weights
 
+    def score(self, X, y):
+        """Score the model using a custom scorer."""
+        y_pred = self.predict(X)
+        return mse_cupy(y, y_pred)  # or another custom metric
+    
     def predict(self, X):
         """Make predictions using the trained Ridge regression model."""
         self.model.eval()  # Set model to evaluation mode
@@ -102,7 +107,7 @@ class RidgeModelTorch(BaseEstimator, RegressorMixin):
     def get_param_grid(self):
         """Return a parameter grid for hyperparameter tuning."""
         return {
-            'alpha': [0.001, 0.01, 0.1, 1.0, 10.0],
+            'alpha': [0.001, 0.01, 0.1, 1.0, 10.0, 100],
             'lr': [0.001, 0.01],
             'epochs': [100, 200, 300],
             'batch_size': [32, 64]
@@ -128,9 +133,9 @@ class PLSModel(BaseModel):
         super().__init__()
         self.model = PLSRegression()
         self.param_grid = {
-            'n_components': [1, 2, 3, 5], #, 7, 9], #, 15],
+            'n_components': [1, 2, 3, 5], # 7, 9, 15],
             'max_iter': [1000],
-            'tol': [1e-07], 
+            'tol': [1e-07],
             'scale': [True, False] #, False]
         }
         self.param_dist = {
@@ -250,11 +255,11 @@ class RandomForestModel(BaseModel):
 class MLPModel(BaseEstimator, RegressorMixin):
     """Basic MLP model using PyTorch with support for L2 regularization and dropout."""
     
-    def __init__(self, input_dim, output_dim=1, hidden_dims=[64, 64], dropout=0.5, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32):
+    def __init__(self, input_dim, output_dim=1, hidden_dims=None, dropout=0.5, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.hidden_dims = hidden_dims
+        self.hidden_dims = hidden_dims if hidden_dims is not None else self._default_hidden_dims(input_dim)
         self.dropout = dropout
         self.l2_reg = l2_reg
         self.lr = lr
@@ -265,11 +270,11 @@ class MLPModel(BaseEstimator, RegressorMixin):
         layers = []
         prev_dim = input_dim
 
-        for hidden_dim in hidden_dims:
+        for hidden_dim in self.hidden_dims:
             layers.append(nn.Linear(prev_dim, hidden_dim))
             layers.append(nn.ReLU())
-            if dropout > 0:
-                layers.append(nn.Dropout(dropout))
+            if self.dropout > 0:
+                layers.append(nn.Dropout(self.dropout))
             prev_dim = hidden_dim
         
         layers.append(nn.Linear(prev_dim, output_dim))
@@ -277,16 +282,15 @@ class MLPModel(BaseEstimator, RegressorMixin):
 
         # Loss function
         self.criterion = nn.MSELoss()
-        '''
-        self.param_dist = {
-        #'hidden_dims': Categorical([(64, 64)]), # , (128, 64), (128, 128, 64)]),  # Use tuples instead of lists
-        'dropout': Real(0.0, 0.2, 0.5),
-        'l2_reg': Real(1e-4, 1e-2),
-        'lr': Real(1e-4, 1e-2),
-        'epochs': Integer(50, 1000),
-        'batch_size': Integer(50, 1000)
-        }
-        '''
+
+    def _default_hidden_dims(self, input_dim):
+        """Private method to define default hidden dimensions based on input size."""
+        if input_dim <= 100:
+            return [64, 32]
+        elif 100 < input_dim <= 300:
+            return [128, 64, 32]
+        else:
+            return [1024, 256, 64, 32]
 
     def fit(self, X, y):
         """Train the model with PyTorch."""
@@ -323,16 +327,16 @@ class MLPModel(BaseEstimator, RegressorMixin):
     def score(self, X, y):
         """Score the model using a custom scorer."""
         y_pred = self.predict(X)
-        return pearson_cupy(y, y_pred)  # or another custom metric
+        return mse_cupy(y, y_pred)  # or another custom metric
         
     def get_param_grid(self):
         """Return a parameter grid for hyperparameter tuning."""
         return {
-            'hidden_dims': [[64, 64], [128, 64], [128, 128, 64]],
+            #'hidden_dims': [[64, 64], [128, 64], [128, 128, 64]],
             'dropout': [0.2, 0.5],
-            'l2_reg': [1e-4, 1e-3, 1e-2],
+            'l2_reg': [1e-4, 1e-2, 0],
             'lr': [0.001, 0.01],
-            'epochs': [50, 100],
+            'epochs': [100, 300], #[50, 100, 300],
             'batch_size': [32, 64]
         }
     

@@ -109,7 +109,7 @@ def grid_search_init(gpu_acceleration, model, X_combined, Y_combined, param_grid
     if gpu_acceleration:
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True) 
+        cupy_scorer = make_scorer(mse_cupy, greater_is_better=False) 
         grid_search = GridSearchCV(model.get_model(), 
                                    param_grid, 
                                    cv=train_test_indices, 
