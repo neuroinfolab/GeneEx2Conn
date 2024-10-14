@@ -109,13 +109,13 @@ def expand_Y_symmetric(Y):
     
     return expanded_Y
 
-def expand_X_symmetric_kron(X):
+def expand_X_symmetric_kron(X, kron_input_dim):
     """
     Expands the X matrix symmetrically by computing the Kronecker product of 
     gene expressions from pairs of regions.
 
     Parameters:
-    X (numpy.ndarray): Input matrix of gene expressions.
+    X (numpy.ndarray): Input matrix of gene expressions or other feature types. 
 
     Returns:
     numpy.ndarray: Expanded symmetric matrix using Kronecker product.
@@ -123,13 +123,32 @@ def expand_X_symmetric_kron(X):
     num_regions, num_genes = X.shape
     region_combinations = list(combinations(range(num_regions), 2))
     num_combinations = len(region_combinations)
-
-    expanded_X = np.zeros((num_combinations * 2, num_genes**2))
     
     for i, (region1, region2) in enumerate(region_combinations):
-        # Kronecker product of the region1 and region2 gene expressions
-        expanded_X[i * 2] = np.kron(X[region1], X[region2])
-        expanded_X[i * 2 + 1] = np.kron(X[region2], X[region1])
+        if int(X.shape[1]) == kron_input_dim or kron_input_dim == None: # kronecker was specified but not for transcriptome PCA
+            
+            expanded_X = np.zeros((num_combinations * 2, num_genes**2))
+            
+            # threshold = 1e-10
+            #expanded_X[i * 2] = np.log(np.maximum(np.kron(X[region1], X[region2]), threshold))
+            #expanded_X[i * 2 + 1] = np.log(np.maximum(np.kron(X[region2], X[region1]), threshold))
+            
+            # Kronecker product of the region1 and region2 gene expressions        
+            expanded_X[i * 2] = np.kron(X[region1], X[region2])
+            expanded_X[i * 2 + 1] = np.kron(X[region2]+1, X[region1]+1)
+        else: 
+            expanded_X = np.zeros((num_combinations * 2, kron_input_dim**2 + (2*(X.shape[1]-kron_input_dim))))
+
+            # Kronecker product of the region1 and region2 gene expressions concatenated with other features
+            expanded_X[i * 2] = np.hstack((
+                                    np.kron(X[region1][:kron_input_dim], X[region2][:kron_input_dim]), # kronecker product vector
+                                    np.concatenate((X[region1][kron_input_dim:], X[region2][kron_input_dim:])) # additional feature concatenated vector
+                                    ))
+            
+            expanded_X[i * 2 + 1] = np.hstack((
+                                        np.kron(X[region2][:kron_input_dim], X[region1][:kron_input_dim]), 
+                                        np.concatenate((X[region2][kron_input_dim:], X[region1][kron_input_dim:]))
+                                    ))
 
     return expanded_X
 
@@ -275,7 +294,7 @@ def expand_X_symmetric_w_conn(X, Y, test=False):
 
     return expanded_X
 
-def process_cv_splits(X, Y, cv_obj, all_train=True, incl_conn=False, test_shared=False, kron=False):
+def process_cv_splits(X, Y, cv_obj, all_train=True, incl_conn=False, test_shared=False, kron=False, kron_input_dim=None):
     """
     Function to process cross-validation splits, expand training and test data as needed.
 
@@ -345,10 +364,10 @@ def process_cv_splits(X, Y, cv_obj, all_train=True, incl_conn=False, test_shared
                 Y_test = expand_Y_symmetric(Y_test)
             else:
                 if kron: # can implement this elsewhere if necessary
-                    X_train = expand_X_symmetric_kron(X_train)
+                    X_train = expand_X_symmetric_kron(X_train, kron_input_dim)
                     Y_train = expand_Y_symmetric(Y_train)
     
-                    X_test = expand_X_symmetric_kron(X_test)
+                    X_test = expand_X_symmetric_kron(X_test, kron_input_dim)
                     Y_test = expand_Y_symmetric(Y_test)
                 else:
                     X_train = expand_X_symmetric(X_train)

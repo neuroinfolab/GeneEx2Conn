@@ -64,11 +64,12 @@ import sim.sim
 from sim.sim import Simulation
 
 
-def open_pickled_results(file):# Specify the path to your pickle file
+def open_pickled_results(file, added_dir=''):# Specify the path to your pickle file
     """
     Function to open any pickle file from sim_results directory
+    If in subdirectory of sim_results pass to added dir as 'subdir/'
     """
-    pickle_file_path = "./sim/sim_results/" + file
+    pickle_file_path = "./sim/sim_results/" + added_dir + file
     
     # Open the pickle file in read mode
     with open(pickle_file_path, "rb") as file:
@@ -103,29 +104,21 @@ def combine_results(conn_file, trans_file, transconn_file, output_file):
     print(f"Combined results saved to {output_pickle_path}")
     
 
-def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution, random_seed): 
+def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed): 
     """
     Function to save all sim results to a pickle file
     """
 
     sim_results_file_path = os.getcwd() + '/sim/sim_results/'
-    if feature_type == "all":
-        results_file_str = "multi_sim_" + cv_type + "_" + model_type
-    elif feature_type == "conn only":
-        results_file_str = "single_sim_conn_" + cv_type + "_" + model_type
-    elif feature_type == "trans only":
-        results_file_str = "single_sim_trans_" + cv_type + "_" + model_type
-    elif feature_type == "trans plus conn":
-        results_file_str = "single_sim_transplusconn_" + cv_type + "_" + model_type
-
     
-    if cv_type == "community": 
+    results_file_str = str(feature_type) + "_" + model_type + "_" + cv_type
+    
+    if cv_type == "community":
         results_file_str += str(resolution)
-        results_file_str += '_' + str(random_seed)
-        # take in or out manually 
-        # results_file_str += '_PCA' 
+    
+    results_file_str += '_' + str(random_seed)
+    results_file_str += "_" +  search_method + 'search'
 
-        
     if use_shared_regions: 
         results_file_str += "_useshared"
         if test_shared_regions: 
@@ -133,14 +126,16 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
         else: 
             results_file_str += "_trainshared"        
 
-    results_file_path = os.path.join(sim_results_file_path, results_file_str)
+    results_file_str = re.sub(r'[^\w\s_]', '', str(results_file_str))
+
+    results_file_path = os.path.join(str(sim_results_file_path), results_file_str)
     results_file_path_pickle = results_file_path + '.pickle'
     
     # Save the list to a file using pickle
     with open(results_file_path_pickle, 'wb') as f:
         pickle.dump(multi_model_results, f)
     
-    print("Multi simulation results have been saved.")
+    print("Simulation results have been saved.")
     return
 
 
@@ -283,10 +278,9 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=N
     sim.run_sim(search_method)
     single_model_results.append(sim.results)
     
-    
     # Save sim data
     if save_sim: 
-        save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, resolution, random_seed)
+        save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed)
     
     return single_model_results
 
