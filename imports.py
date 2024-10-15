@@ -30,6 +30,11 @@ from matplotlib.patches import Patch
 import umap
 import umap.umap_ as umap
 from mpl_toolkits.mplot3d import Axes3D
+import nichord
+from nichord.chord import plot_chord
+from nichord.glassbrain import plot_glassbrain
+from nichord.combine import combine_imgs, plot_and_combine
+from nichord.coord_labeler import get_idx_to_label
 
 # stats 
 from scipy import stats

@@ -4,3 +4,7 @@
 **/*.ipynb_checkpoints/
 .pickle
 **/*.pickle
+.png
+.jpg
+**/*.png
+**/*.jpg
