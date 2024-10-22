@@ -109,12 +109,12 @@ def grid_search_init(gpu_acceleration, model, X_combined, Y_combined, param_grid
     if gpu_acceleration:
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True)
+        cupy_scorer = make_scorer(mse_cupy, greater_is_better=False) 
         grid_search = GridSearchCV(model.get_model(), 
                                    param_grid, 
                                    cv=train_test_indices, 
                                    scoring=cupy_scorer, 
-                                   verbose=2,
+                                   verbose=3,
                                    refit=False,
                                    #n_jobs=1,
                                    #random_state=42
@@ -124,7 +124,7 @@ def grid_search_init(gpu_acceleration, model, X_combined, Y_combined, param_grid
                                    param_grid, 
                                    cv=train_test_indices, 
                                    scoring='neg_mean_squared_error', 
-                                   verbose=2, 
+                                   verbose=3, 
                                    refit=False, 
                                    #n_jobs=-1, 
                                    #random_state=42
@@ -157,7 +157,7 @@ def random_search_init(gpu_acceleration, model, X_combined, Y_combined, param_di
                                            n_iter=n_iter, 
                                            cv=train_test_indices, 
                                            scoring='neg_mean_squared_error', 
-                                           verbose=2, 
+                                           verbose=3, 
                                            refit=False, 
                                            n_jobs=-1,
                                            random_state=42)
@@ -174,7 +174,7 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
         print('ACCELERATING')
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True) # mse directionality needs to be debugged
+        cupy_scorer = make_scorer(mse_cupy, greater_is_better=False) # mse directionality should be False
         error_score = 0.0
         bayes_search = BayesSearchCV(
             model.get_model(),
@@ -199,7 +199,7 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
             n_iter=n_iter,
             cv=train_test_indices,
             scoring='neg_mean_squared_error',
-            verbose=2,
+            verbose=3,
             refit=False,
             n_jobs=-1,
             random_state=42

@@ -64,11 +64,12 @@ import sim.sim
 from sim.sim import Simulation
 
 
-def open_pickled_results(file):# Specify the path to your pickle file
+def open_pickled_results(file, added_dir=''):# Specify the path to your pickle file
     """
     Function to open any pickle file from sim_results directory
+    If in subdirectory of sim_results pass to added dir as 'subdir/'
     """
-    pickle_file_path = "./sim/sim_results/" + file
+    pickle_file_path = "./sim/sim_results/" + added_dir + file
     
     # Open the pickle file in read mode
     with open(pickle_file_path, "rb") as file:
@@ -110,12 +111,14 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
 
     sim_results_file_path = os.getcwd() + '/sim/sim_results/'
     
-    results_file_str = str(feature_type) + "_" + model_type + "_" + cv_type + "_" +  search_method + 'search'
+    results_file_str = str(feature_type) + "_" + model_type + "_" + cv_type
     
     if cv_type == "community":
         results_file_str += str(resolution)
-        results_file_str += '_' + str(random_seed)
-        
+    
+    results_file_str += '_' + str(random_seed)
+    results_file_str += "_" +  search_method + 'search'
+
     if use_shared_regions: 
         results_file_str += "_useshared"
         if test_shared_regions: 
