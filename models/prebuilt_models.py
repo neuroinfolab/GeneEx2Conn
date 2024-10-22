@@ -7,6 +7,8 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.base import BaseEstimator, RegressorMixin
 
+from metrics.eval import mse_cupy
+
 class BaseModel:
     """Base class for all models."""
     def __init__(self):
@@ -354,6 +356,9 @@ class MLPModel(BaseEstimator, RegressorMixin):
     def get_model(self):
         """Return the PyTorch model instance."""
         return self
+
+    def score(self, X, y):
+        return mse_cupy(X, y)
 
 
 class ModelBuild:
