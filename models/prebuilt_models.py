@@ -346,7 +346,7 @@ class MLPModel(BaseEstimator, RegressorMixin):
         """Return a parameter distribution for random search or Bayesian optimization."""
         return {
             #'hidden_dims': Categorical([(64, 64)]), # , (128, 64), (128, 128, 64)]),  # Use tuples instead of lists
-            'dropout': Real(0.2, 0.5), 
+            'dropout': Real(0.1, 0.5), 
             'l2_reg': Real(1e-5, 1e-3, prior='log-uniform'),  
             'lr': Real(1e-4, 1e-2, prior='log-uniform'), 
             'epochs': Integer(100, 500),  
