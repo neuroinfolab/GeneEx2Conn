@@ -8,6 +8,8 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.base import BaseEstimator, RegressorMixin
 
+from metrics.eval import mse_cupy
+
 
 class BaseModel:
     """Base class for all models."""
@@ -288,11 +290,11 @@ class MLPModel(BaseEstimator, RegressorMixin):
     def _default_hidden_dims(self, input_dim):
         """Private method to define default hidden dimensions based on input size."""
         if input_dim <= 100:
-            return [64, 32]
+            return [128, 64]
         elif 100 < input_dim <= 300:
-            return [128, 64, 32]
+            return [512, 256, 128]
         else:
-            return [1024, 256, 64, 32]
+            return [1024, 512, 256, 128]
 
     def fit(self, X, y):
         """Train the model with PyTorch."""
@@ -329,13 +331,13 @@ class MLPModel(BaseEstimator, RegressorMixin):
     def score(self, X, y):
         """Score the model using a custom scorer."""
         y_pred = self.predict(X)
-        return mse_cupy(y, y_pred)  # or another custom metric
+        return pearson_cupy(y, y_pred)  # or another custom metric
         
     def get_param_grid(self):
         """Return a parameter grid for hyperparameter tuning."""
         return {
             #'hidden_dims': [[64, 64], [128, 64], [128, 128, 64]],
-            'dropout': [0.2, 0.5],
+            'dropout': [0.1, 0.3],
             'l2_reg': [1e-4, 1e-2, 0],
             'lr': [0.001, 0.01],
             'epochs': [100, 300], #[50, 100, 300],
@@ -356,6 +358,9 @@ class MLPModel(BaseEstimator, RegressorMixin):
     def get_model(self):
         """Return the PyTorch model instance."""
         return self
+
+    def score(self, X, y):
+        return mse_cupy(X, y)
 
 
 class ModelBuild:

@@ -7,6 +7,8 @@ def load_transcriptome(parcellation='schaefer_100', stability = '0.2', dataset='
     stability can be 0.2 or -1
     '''
     if dataset == 'AHBA':
+        ssl._create_default_https_context = ssl._create_unverified_context # Disable SSL certificate verification (use with caution)
+
         genes = fetch_ahba()
     
         # labels
