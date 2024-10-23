@@ -2,10 +2,11 @@
 
 from imports import *
 from skopt.space import Real, Categorical, Integer
+from sklearn.base import BaseEstimator, RegressorMixin
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.base import BaseEstimator, RegressorMixin
+from torch.utils.data import TensorDataset, DataLoader
 
 from metrics.eval import mse_cupy
 
@@ -255,10 +256,12 @@ class RandomForestModel(BaseModel):
         
 
 class MLPModel(BaseEstimator, RegressorMixin):
-    """Basic MLP model using PyTorch with support for L2 regularization and dropout."""
+    """Basic MLP model using PyTorch with support for bayesian hyperparameter tuning."""
     
-    def __init__(self, input_dim, output_dim=1, hidden_dims=None, dropout=0.5, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32):
+    def __init__(self, input_dim, output_dim=1, hidden_dims=None, dropout=0.2, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32):
         super().__init__()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.hidden_dims = hidden_dims if hidden_dims is not None else self._default_hidden_dims(input_dim)
@@ -274,16 +277,19 @@ class MLPModel(BaseEstimator, RegressorMixin):
 
         for hidden_dim in self.hidden_dims:
             layers.append(nn.Linear(prev_dim, hidden_dim))
+            layers.append(nn.BatchNorm1d(hidden_dim))
             layers.append(nn.ReLU())
             if self.dropout > 0:
-                layers.append(nn.Dropout(self.dropout))
+               layers.append(nn.Dropout(self.dropout))
             prev_dim = hidden_dim
         
         layers.append(nn.Linear(prev_dim, output_dim))
         self.model = nn.Sequential(*layers)
-
+        self.model = self.model.to(self.device)
+        
         # Loss function
         self.criterion = nn.MSELoss()
+
 
     def _default_hidden_dims(self, input_dim):
         """Private method to define default hidden dimensions based on input size."""
@@ -294,36 +300,49 @@ class MLPModel(BaseEstimator, RegressorMixin):
         else:
             return [1024, 512, 256, 128]
 
+
+    def forward(self, x):
+        return self.model(x)
+
+
     def fit(self, X, y):
         """Train the model with PyTorch."""
         self.model.train()
-        X_tensor = torch.tensor(X, dtype=torch.float32)
-        y_tensor = torch.tensor(y, dtype=torch.float32)
-
-        if torch.cuda.is_available():
-            self.model = self.model.to('cuda')
-            X_tensor = X_tensor.to('cuda')
-            y_tensor = y_tensor.to('cuda')
+        #print('model', self.model)
+        #print('self params',self.dropout, self.l2_reg, self.lr, self.epochs, self.batch_size)
 
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=self.l2_reg)
-
-        # Training loop
+        
+        X_tensor = torch.FloatTensor(X)
+        y_tensor = torch.FloatTensor(y).unsqueeze(1)
+        X_tensor = X_tensor.to(self.device)
+        y_tensor = y_tensor.to(self.device)
+        
+        dataset = TensorDataset(X_tensor, y_tensor)
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+        
         for epoch in range(self.epochs):
-            optimizer.zero_grad()
-            outputs = self.model(X_tensor)
-            loss = self.criterion(outputs, y_tensor)
-            loss.backward()
-            optimizer.step()
+            for batch_X, batch_y in dataloader:
+                optimizer.zero_grad()
+                outputs = self.forward(batch_X)
+                loss = self.criterion(outputs, batch_y)
+                loss.backward()
+                optimizer.step()
+
+            if (epoch + 1) % 10 == 0:
+                print(f'Epoch [{epoch+1}/{self.epochs}], Loss: {loss.item():.4f}')
 
     def predict(self, X):
         """Make predictions with the trained model."""
         self.model.eval()
+
         X_tensor = torch.tensor(X, dtype=torch.float32)
         if torch.cuda.is_available():
             X_tensor = X_tensor.to('cuda')
 
         with torch.no_grad():
             predictions = self.model(X_tensor).cpu().numpy()
+        
         return predictions
 
     def score(self, X, y):
@@ -335,27 +354,33 @@ class MLPModel(BaseEstimator, RegressorMixin):
         """Return a parameter grid for hyperparameter tuning."""
         return {
             #'hidden_dims': [[64, 64], [128, 64], [128, 128, 64]],
-            'dropout': [0.1, 0.3],
-            'l2_reg': [1e-4, 1e-2, 0],
-            'lr': [0.001, 0.01],
-            'epochs': [100, 300], #[50, 100, 300],
-            'batch_size': [8, 64]
+            #'dropout': [0.1, 0.3],
+            # 'l2_reg': [1e-4, 1e-2, 0],
+            # 'lr': [0.001, 0.01, 0.03],
+            # 'epochs': [300, 500, 1000], #[50, 100, 300],
+            # 'batch_size': [8, 64]
+
+            # single run params for debugging
+            'l2_reg': [0],
+            'lr': [0.02],
+            'epochs': [50], #[50, 100, 300],
+            'batch_size': [64]
         }
     
     def get_param_dist(self):
         """Return a parameter distribution for random search or Bayesian optimization."""
         return {
             #'hidden_dims': Categorical([(64, 64)]), # , (128, 64), (128, 128, 64)]),  # Use tuples instead of lists 
-            'dropout': Real(0.0, 0.5),
-            'l2_reg': Real(0, 1e-1), #, prior='log-uniform'),
-            'lr': Real(1e-4, 1e-1), # , prior='log-uniform'),
-            'epochs': Integer(50, 500),
-            'batch_size': Integer(16, 96)
+            #'dropout': Real(0.0, 0.5),
+            'l2_reg': Real(0, 1e-0), #, prior='log-uniform'),
+            'lr': Real(1e-3, 1e-1), # , prior='log-uniform'),
+            'epochs': Integer(100, 300),
+            'batch_size': Integer(8, 96)
             
             # 'dropout': Categorical([0.0, 0.2, 0.3, 0.4, 0.5]),
             # 'l2_reg': Categorical([0.0, 1e-4, 1e-3, 1e-2]),
-            # 'lr': Categorical([1e-4, 1e-3, 1e-2, 1e-1]),
-            # 'epochs': Categorical([100, 300, 500]),
+            # 'lr': Categorical([1e-4, 1e-3, 1e-2, 3e-2]),
+            # 'epochs': Categorical([100, 300]),
             # 'batch_size': Categorical([16, 32, 64])
         }
 

@@ -199,8 +199,8 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
         bayes_search = BayesSearchCV(
             model.get_model(),
             search_space,
-            n_iter=50,
-            n_points=25,
+            n_iter=10,
+            n_points=10,
             cv=train_test_indices,
             scoring=scorer,
             verbose=3,
