@@ -101,52 +101,73 @@ def drop_test_network(cv_type, network_dict, value, idx):
 
         return new_dict
 
-def grid_search_init(gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices):
+def get_scorer(metric, gpu_acceleration):
+    """
+    Helper function to return the appropriate scorer based on the metric and GPU acceleration.
+    
+    Args:
+    metric (str): The metric to use for scoring. Options: 'mse', 'pearson', 'r2'
+    gpu_acceleration (bool): Whether GPU acceleration is being used
+    
+    Returns:
+    scorer: A sklearn-compatible scorer object
+    """
+    if gpu_acceleration:
+        if metric == 'mse':
+            return make_scorer(mse_cupy, greater_is_better=False)
+        elif metric == 'pearson':
+            return make_scorer(pearson_cupy, greater_is_better=True)
+        elif metric == 'r2':
+            return make_scorer(r2_cupy, greater_is_better=True)
+    else:
+        if metric == 'mse':
+            return 'neg_mean_squared_error'
+        elif metric == 'pearson':
+            return make_scorer(pearson_numpy, greater_is_better=True)
+        elif metric == 'r2':
+            return 'r2'
+    
+    raise ValueError(f"Unsupported metric: {metric}")
+
+def grid_search_init(gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, metric='mse'):
     """
     Helper function to initialize gridsearch object based on if GPU acceleration is being used
     """
+    scorer = get_scorer(metric, gpu_acceleration)
 
     if gpu_acceleration:
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True) 
         grid_search = GridSearchCV(model.get_model(), 
                                    param_grid, 
                                    cv=train_test_indices, 
-                                   scoring=cupy_scorer, 
+                                   scoring=scorer, 
                                    verbose=3,
-                                   refit=False,
-                                   #n_jobs=1,
-                                   #random_state=42
-                                   )
+                                   refit=False)
     else:
         grid_search = GridSearchCV(model.get_model(), 
                                    param_grid, 
                                    cv=train_test_indices, 
-                                   scoring='neg_mean_squared_error', 
+                                   scoring=scorer, 
                                    verbose=3, 
-                                   refit=False, 
-                                   #n_jobs=-1, 
-                                   #random_state=42
-                                   )
+                                   refit=False)
         
     return grid_search, X_combined, Y_combined
 
-
-
-def random_search_init(gpu_acceleration, model, X_combined, Y_combined, param_distributions, train_test_indices, n_iter=100):
+def random_search_init(gpu_acceleration, model, X_combined, Y_combined, param_distributions, train_test_indices, n_iter=100, metric='mse'):
     """
     Helper function to initialize RandomizedSearchCV object based on if GPU acceleration is being used.
     """
+    scorer = get_scorer(metric, gpu_acceleration)
+
     if gpu_acceleration:
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True)
         random_search = RandomizedSearchCV(model.get_model(), 
                                            param_distributions, 
                                            n_iter=n_iter, 
                                            cv=train_test_indices, 
-                                           scoring=cupy_scorer, 
+                                           scoring=scorer, 
                                            verbose=3, 
                                            refit=False,
                                            n_jobs=1,
@@ -156,7 +177,7 @@ def random_search_init(gpu_acceleration, model, X_combined, Y_combined, param_di
                                            param_distributions, 
                                            n_iter=n_iter, 
                                            cv=train_test_indices, 
-                                           scoring='neg_mean_squared_error', 
+                                           scoring=scorer, 
                                            verbose=3, 
                                            refit=False, 
                                            n_jobs=-1,
@@ -164,26 +185,24 @@ def random_search_init(gpu_acceleration, model, X_combined, Y_combined, param_di
         
     return random_search, X_combined, Y_combined
 
-
-def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_space, train_test_indices, n_iter=10):
+def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_space, train_test_indices, n_iter=10, metric='mse'):
     """
     Helper function to initialize BayesSearchCV object based on if GPU acceleration is being used
     """
+    scorer = get_scorer(metric, gpu_acceleration)
 
     if gpu_acceleration:
         print('ACCELERATING')
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        cupy_scorer = make_scorer(pearson_cupy, greater_is_better=True) # mse directionality should be False
         error_score = 0.0
         bayes_search = BayesSearchCV(
             model.get_model(),
             search_space,
-            n_iter=30, # n_iter=20
-            n_points=10,
+            n_iter=50,
+            n_points=25,
             cv=train_test_indices,
-            scoring=cupy_scorer,
-            #scoring='neg_mean_squared_error',
+            scoring=scorer,
             verbose=3,
             random_state=42,
             refit=False, 
@@ -198,7 +217,7 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
             search_space,
             n_iter=n_iter,
             cv=train_test_indices,
-            scoring='neg_mean_squared_error',
+            scoring=scorer,
             verbose=3,
             refit=False,
             n_jobs=-1,
@@ -206,7 +225,6 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
         )
         
     return bayes_search, X_combined, Y_combined
-
 
 def find_best_params(grid_search_cv_results):
     """
@@ -230,4 +248,3 @@ def find_best_params(grid_search_cv_results):
     print('BEST INNNER PARAMS', best_params)
     
     return best_params
-    

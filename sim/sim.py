@@ -148,7 +148,7 @@ class Simulation:
                           kron_input_dim = self.PC_dim)
                                   
     
-    def run_innercv(self, train_indices, test_indices, train_network_dict, search_method='grid', n_iter=100):
+    def run_innercv(self, train_indices, test_indices, train_network_dict, search_method=('random', 'mse'), n_iter=100):
         """
         Inner cross-validation with option for Grid, Bayesian, or Randomized Search
         """
@@ -175,13 +175,16 @@ class Simulation:
         param_grid = model.get_param_grid()
         param_dist = model.get_param_dist()
 
+        # Unpack search method and metric
+        search_type, metric = search_method
+
         # Initialize grid search and return cupy converted array if necessary
-        if search_method == 'grid':
-            grid_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices)
-        elif search_method == 'random':
-            grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
-        elif search_method == 'bayes':
-            grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
+        if search_type == 'grid':
+            grid_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, metric=metric)
+        elif search_type == 'random':
+            grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
+        elif search_type == 'bayes':
+            grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
 
         
         # Fit GridSearchCV on the combined data
@@ -192,16 +195,17 @@ class Simulation:
         print("=======================")
         print("Best Parameters: ", grid_search.best_params_)
         print("Best Cross-Validation Score: ", grid_search.best_score_)
-
-        _ = plot_objective(grid_search.optimizer_results_[0], size=5)
-        plt.show()
+        
+        if search_type == 'bayes':
+            _ = plot_objective(grid_search.optimizer_results_[0], size=5)
+            plt.show()
 
         best_model = model.get_model()
         best_model.set_params(**grid_search.best_params_)
         return best_model
 
 
-    def run_sim(self, search_method='random'):
+    def run_sim(self, search_method=('random', 'mse')):
         """
         Main simulation method
         """
@@ -267,6 +271,3 @@ class Simulation:
             
             # Display GPU utilization
             GPUtil.showUtilization()
-            
-
-        

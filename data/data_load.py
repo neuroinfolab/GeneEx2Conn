@@ -41,25 +41,25 @@ def load_transcriptome(parcellation='schaefer_100', stability = '0.2', dataset='
         
     elif dataset == 'GTEx':
         relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)    
-        gtex_in_ahba = relative_data_path + '/data/region_map_pickles/RxG_data_gtex_mean_gtex_ahba_space.pkl'
+        gtex_in_ahba = relative_data_path + '/GeneEx2Conn_data/region_map_pickles/RxG_data_gtex_mean_gtex_ahba_space.pkl'
         with open(gtex_in_ahba, 'rb') as f:
             gtex_in_ahba = pickle.load(f)
         return np.array(gtex_in_ahba)
     elif dataset == 'AHBA in GTEx':
         relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)    
-        ahba_in_gtex = relative_data_path + '/data/region_map_pickles/RxG_data_ahba_mean_gtex_ahba_space.pkl'
+        ahba_in_gtex = relative_data_path + '/GeneEx2Conn_data/region_map_pickles/RxG_data_ahba_mean_gtex_ahba_space.pkl'
         with open(ahba_in_gtex, 'rb') as f:
             ahba_in_gtex = pickle.load(f)
         return np.array(ahba_in_gtex)
     elif dataset == 'UTSW':
         relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)        
-        ut_in_ahba = relative_data_path + '/data/region_map_pickles/RxG_data_utsmc_mean_ahba_utsmc_space.pkl'
+        ut_in_ahba = relative_data_path + '/GeneEx2Conn_data/region_map_pickles/RxG_data_utsmc_mean_ahba_utsmc_space.pkl'
         with open(ut_in_ahba, 'rb') as f:
             ut_in_ahba = pickle.load(f)
         return np.array(np.log1p(ut_in_ahba))
     elif dataset == 'AHBA in UTSW':
         relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)
-        ahba_in_utsw = relative_data_path + '/data/region_map_pickles/RxG_data_ahba_mean_ahba_utsmc_space.pkl'
+        ahba_in_utsw = relative_data_path + '/GeneEx2Conn_data/region_map_pickles/RxG_data_ahba_mean_ahba_utsmc_space.pkl'
         with open(ahba_in_utsw, 'rb') as f:
             ahba_in_utsw = pickle.load(f)
         return np.array(ahba_in_utsw)
@@ -81,12 +81,12 @@ def load_connectome(parcellation='schaefer_100', dataset='AHBA', omit_subcortica
             return sc_combined_mat_schaef_100
             
     elif dataset == 'GTEx': 
-        gtex_connectome_path = relative_data_path + '/data/region_map_pickles/HCP_Connectome_GTEX_Regions.pkl'
+        gtex_connectome_path = relative_data_path + '/GeneEx2Conn_data/region_map_pickles/HCP_Connectome_GTEX_Regions.pkl'
         with open(gtex_connectome_path, 'rb') as f:
             gtex_connectome = pickle.load(f)
         return np.array(gtex_connectome)
     elif dataset == 'UTSW':
-        ut_connectome_path = relative_data_path + '/data/region_map_pickles/HCP_Connectome_UTSMC_Regions.pkl'
+        ut_connectome_path = relative_data_path + '/GeneEx2Conn_data/region_map_pickles/HCP_Connectome_UTSMC_Regions.pkl'
         with open(ut_connectome_path, 'rb') as f:
             ut_connectome = pickle.load(f)
         
@@ -95,7 +95,7 @@ def load_connectome(parcellation='schaefer_100', dataset='AHBA', omit_subcortica
 def load_coords():
     relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)        
 
-    hcp_schaef = pd.read_csv(relative_data_path + '/data/atlas_info/schaef114.csv')
+    hcp_schaef = pd.read_csv(relative_data_path + '/GeneEx2Conn_data/atlas_info/schaef114.csv')
     
     # Extract the coordinates from the DataFrame
     coordinates = hcp_schaef[['mni_x', 'mni_y', 'mni_z']].values

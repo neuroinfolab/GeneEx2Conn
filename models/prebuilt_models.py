@@ -339,18 +339,24 @@ class MLPModel(BaseEstimator, RegressorMixin):
             'l2_reg': [1e-4, 1e-2, 0],
             'lr': [0.001, 0.01],
             'epochs': [100, 300], #[50, 100, 300],
-            'batch_size': [32, 64]
+            'batch_size': [8, 64]
         }
     
     def get_param_dist(self):
         """Return a parameter distribution for random search or Bayesian optimization."""
         return {
-            #'hidden_dims': Categorical([(64, 64)]), # , (128, 64), (128, 128, 64)]),  # Use tuples instead of lists
-            'dropout': Real(0.1, 0.5), 
-            'l2_reg': Real(1e-5, 1e-3, prior='log-uniform'),  
-            'lr': Real(1e-4, 1e-2, prior='log-uniform'), 
-            'epochs': Integer(100, 500),  
-            'batch_size': Integer(16, 128)  
+            #'hidden_dims': Categorical([(64, 64)]), # , (128, 64), (128, 128, 64)]),  # Use tuples instead of lists 
+            'dropout': Real(0.0, 0.5),
+            'l2_reg': Real(0, 1e-1), #, prior='log-uniform'),
+            'lr': Real(1e-4, 1e-1), # , prior='log-uniform'),
+            'epochs': Integer(50, 500),
+            'batch_size': Integer(16, 96)
+            
+            # 'dropout': Categorical([0.0, 0.2, 0.3, 0.4, 0.5]),
+            # 'l2_reg': Categorical([0.0, 1e-4, 1e-3, 1e-2]),
+            # 'lr': Categorical([1e-4, 1e-3, 1e-2, 1e-1]),
+            # 'epochs': Categorical([100, 300, 500]),
+            # 'batch_size': Categorical([16, 32, 64])
         }
 
     def get_model(self):
