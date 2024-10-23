@@ -61,7 +61,7 @@ from sim.sim_utils import bayes_search_init, grid_search_init, random_search_ini
 from sim.sim_utils import bytes2human, print_system_usage
 importlib.reload(sim.sim_utils)
 
-
+from skopt.plots import plot_objective, plot_histogram
 
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, summary_measure=None, euclidean=False, structural=False, resolution=1.0,random_seed=42,
@@ -146,22 +146,9 @@ class Simulation:
                           self.test_shared_regions,
                           kron=(True if self.summary_measure == 'kronecker' else False),
                           kron_input_dim = self.PC_dim)
-        
-        '''
-        if self.predict_connectome_from_connectome:
-            self.fold_splits = process_cv_splits_conn_only_model(self.Y, self.Y,
-                                                                 self.cv_obj,
-                                                                 self.use_shared_regions,
-                                                                 self.test_shared_regions)
-        else:
-            self.fold_splits = process_cv_splits(self.X, self.Y, self.cv_obj, 
-                                                 self.use_shared_regions, 
-                                                 self.include_conn_feats, 
-                                                 self.test_shared_regions)
-        '''
-            
+                                  
     
-    def run_innercv(self, train_indices, test_indices, train_network_dict, search_method='grid', n_iter=100):
+    def run_innercv(self, train_indices, test_indices, train_network_dict, search_method=('random', 'mse'), n_iter=100):
         """
         Inner cross-validation with option for Grid, Bayesian, or Randomized Search
         """
@@ -180,51 +167,7 @@ class Simulation:
                                                   kron=(True if self.summary_measure == 'kronecker' else False),
                                                   kron_input_dim = self.PC_dim
                                                  )
-        '''
-        if self.predict_connectome_from_connectome or self.include_conn_feats:
-            grid_search_cv_results, grid_search_best_scores, grid_search_best_params = [], [], []
-            
-            for X_train, X_test, Y_train, Y_test in inner_fold_splits:
-                # Create single fold object for inner CV  
-                X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices_connectome(X_train, X_test, Y_train, Y_test)
-            
-                # Initialize model
-                model = ModelBuild.init_model(self.model_type)
-                param_grid = model.get_param_grid()
-                param_dist = model.get_param_dist()
 
-                # Initialize grid search and return cupy converted array if necessary
-                if search_method == 'grid':
-                    grid_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices)
-                elif search_method == 'random':
-                    grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter)
-                elif search_method == 'bayes':
-                    grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter)
-
-                # Fit GridSearchCV on the current fold
-                grid_search.fit(X_combined, Y_combined)
-                
-                # Display comprehensive results
-                print("\nGrid Search CV Results:")
-                print("=======================")
-                print("Best Cross-Validation Score: ", grid_search.best_score_)
-                print("Best Parameters: ", grid_search.best_params_)
-                
-                grid_search_cv_results.append(grid_search.cv_results_)
-                grid_search_best_scores.append(grid_search.best_score_)
-                grid_search_best_params.append(grid_search.best_params_)
-
-            # this is done automatically in true gridsearch
-            best_params = find_best_params(grid_search_cv_results) 
-            
-            model = ModelBuild.init_model(self.model_type)
-            model = model.get_model()
-            best_estimator = model.set_params(**best_params)
-            
-            return best_estimator
-        else:
-            
-        '''
         X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
         
         # Initialize model
@@ -232,15 +175,17 @@ class Simulation:
         param_grid = model.get_param_grid()
         param_dist = model.get_param_dist()
 
-        # Initialize grid search and return cupy converted array if necessary
-        if search_method == 'grid':
-            grid_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices)
-        elif search_method == 'random':
-            grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
-        elif search_method == 'bayes':
-            grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter)
+        # Unpack search method and metric
+        search_type, metric = search_method
 
-        
+        # Initialize grid search and return cupy converted array if necessary
+        if search_type == 'grid':
+            grid_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, metric=metric)
+        elif search_type == 'random':
+            grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
+        elif search_type == 'bayes':
+            grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
+
         # Fit GridSearchCV on the combined data
         grid_search.fit(X_combined, Y_combined)
         
@@ -249,14 +194,17 @@ class Simulation:
         print("=======================")
         print("Best Parameters: ", grid_search.best_params_)
         print("Best Cross-Validation Score: ", grid_search.best_score_)
+        
+        if search_type == 'bayes':
+            _ = plot_objective(grid_search.optimizer_results_[0], size=5)
+            plt.show()
 
-        model = model.get_model()
-        best_estimator = model.set_params(**grid_search.best_params_)
+        best_model = model.get_model()
+        best_model.set_params(**grid_search.best_params_)
+        return best_model
 
-        return best_estimator
 
-
-    def run_sim(self, search_method='random'):
+    def run_sim(self, search_method=('random', 'mse')):
         """
         Main simulation method
         """
@@ -322,6 +270,3 @@ class Simulation:
             
             # Display GPU utilization
             GPUtil.showUtilization()
-            
-
-        

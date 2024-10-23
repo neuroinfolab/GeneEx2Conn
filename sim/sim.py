@@ -186,7 +186,6 @@ class Simulation:
         elif search_type == 'bayes':
             grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
 
-        
         # Fit GridSearchCV on the combined data
         grid_search.fit(X_combined, Y_combined)
         

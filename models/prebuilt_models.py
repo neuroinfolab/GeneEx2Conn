@@ -187,48 +187,9 @@ class XGBModel(BaseModel):
             'random_state': [42],
             'verbosity': [0]
         }
-
-        '''
-        # syntax to specify params for a fine tuned run
-        best_params = {
-            'n_estimators': [200],
-            'max_depth': [5],           # Maximum depth of each tree - makes a big diff
-            'learning_rate': [0.01],     # Learning rate (shrinkage)
-            'subsample': [1],              # Subsample ratio of the training data
-            'colsample_bytree': [1],  # Subsample ratio of columns when constructing each tree
-            'gamma': [0],             # Minimum loss reduction required to make a split
-            'reg_lambda': [0],              # L2 regularization term (Ridge penalty)
-            'reg_alpha': [0],             # L1 regularization term (Lasso penalty)
-            'random_state': [42],        # Seed for reproducibility
-            'min_child_weight': [1], 
-            'tree_method':['hist'],  # Use the GPU
-            'device':['cuda'],  # Use GPU predictor
-            'verbosity': [2]
-        }
-        self.param_grid = best_params
-        '''
-        '''
-        self.param_dist = {
-            'n_estimators': [50, 100, 150, 200, 250, 300],  # Number of trees in the forest
-            'max_depth': randint(3, 10),  # Maximum depth of each tree
-            'learning_rate': uniform(0.01, 0.3),  # Learning rate (shrinkage)
-            'subsample': uniform(0.6, 0.4),  # Subsample ratio of the training data
-            'colsample_bytree': uniform(0.5, 0.5),  # Subsample ratio of columns when constructing each tree
-            'gamma': uniform(0, 0.3),  # Minimum loss reduction required to make a split
-            'reg_lambda': uniform(0.01, 1),  # L2 regularization term (Ridge penalty)
-            'reg_alpha': uniform(0.01, 1),  # L1 regularization term (Lasso penalty)
-            'random_state': [42],  # Seed for reproducibility
-            'min_child_weight': randint(1, 6),  # Minimum sum of instance weight needed in a child
-            'tree_method': ['gpu_hist'],  # Use the GPU
-            'device': ['cuda'],  # Use GPU predictor
-            'n_gpus':[-1],
-            'verbosity': [2]  # Verbosity level
-        }
-        
         # consider adding this hyperparam
         # Sampling method. Used only by the GPU version of hist tree method. uniform: select random training instances uniformly. gradient_based select random training instances with higher probability when the gradient and hessian are larger. (cf. CatBoost)
         #
-        '''
 
 
 class RandomForestModel(BaseModel):
@@ -255,10 +216,11 @@ class RandomForestModel(BaseModel):
         }
         
 
+
 class MLPModel(BaseEstimator, RegressorMixin):
     """Basic MLP model using PyTorch with support for bayesian hyperparameter tuning."""
     
-    def __init__(self, input_dim, output_dim=1, hidden_dims=None, dropout=0.2, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32):
+    def __init__(self, input_dim, output_dim=1, hidden_dims=None, dropout=0.5, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
@@ -279,8 +241,8 @@ class MLPModel(BaseEstimator, RegressorMixin):
             layers.append(nn.Linear(prev_dim, hidden_dim))
             layers.append(nn.BatchNorm1d(hidden_dim))
             layers.append(nn.ReLU())
-            if self.dropout > 0:
-               layers.append(nn.Dropout(self.dropout))
+            # if self.dropout > 0:
+            #    layers.append(nn.Dropout(self.dropout))
             prev_dim = hidden_dim
         
         layers.append(nn.Linear(prev_dim, output_dim))
@@ -300,7 +262,7 @@ class MLPModel(BaseEstimator, RegressorMixin):
         else:
             return [1024, 512, 256, 128]
 
-
+    
     def forward(self, x):
         return self.model(x)
 
@@ -308,8 +270,8 @@ class MLPModel(BaseEstimator, RegressorMixin):
     def fit(self, X, y):
         """Train the model with PyTorch."""
         self.model.train()
-        #print('model', self.model)
-        #print('self params',self.dropout, self.l2_reg, self.lr, self.epochs, self.batch_size)
+        print('model', self.model)
+        print('self params',self.dropout, self.l2_reg, self.lr, self.epochs, self.batch_size)
 
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=self.l2_reg)
         
@@ -319,13 +281,19 @@ class MLPModel(BaseEstimator, RegressorMixin):
         y_tensor = y_tensor.to(self.device)
         
         dataset = TensorDataset(X_tensor, y_tensor)
-        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True) # keep unshuffled so bidirectional pairs are passed in simultaneously during training
         
         for epoch in range(self.epochs):
             for batch_X, batch_y in dataloader:
                 optimizer.zero_grad()
                 outputs = self.forward(batch_X)
+
+                 # Compute loss
                 loss = self.criterion(outputs, batch_y)
+                assert loss.requires_grad, "Loss should require gradients"
+                
+                loss = self.criterion(outputs, batch_y)
+                print(loss)
                 loss.backward()
                 optimizer.step()
 
@@ -344,11 +312,6 @@ class MLPModel(BaseEstimator, RegressorMixin):
             predictions = self.model(X_tensor).cpu().numpy()
         
         return predictions
-
-    def score(self, X, y):
-        """Score the model using a custom scorer."""
-        y_pred = self.predict(X)
-        return pearson_cupy(y, y_pred)  # or another custom metric
         
     def get_param_grid(self):
         """Return a parameter grid for hyperparameter tuning."""
@@ -361,10 +324,10 @@ class MLPModel(BaseEstimator, RegressorMixin):
             # 'batch_size': [8, 64]
 
             # single run params for debugging
-            'l2_reg': [0],
-            'lr': [0.02],
-            'epochs': [50], #[50, 100, 300],
-            'batch_size': [64]
+            'l2_reg': [0], # [1e-3, 1e-2],
+            'lr': [0.01], #, 0.01, 0.03],
+            'epochs': [100], #[50, 100, 300],
+            'batch_size': [16]
         }
     
     def get_param_dist(self):
@@ -387,10 +350,11 @@ class MLPModel(BaseEstimator, RegressorMixin):
     def get_model(self):
         """Return the PyTorch model instance."""
         return self
-
-    def score(self, X, y):
-        return mse_cupy(X, y)
-
+    
+    # def score(self, X, y):
+    #     """Score the model using a custom scorer."""
+    #     y_pred = self.predict(X)
+    #     return mse_cupy(y, y_pred)  # or another custom metric
 
 class ModelBuild:
     """Factory class to create models based on the given model type."""
@@ -403,7 +367,7 @@ class ModelBuild:
             'ridge_torch': RidgeModelTorch,
             'ridge': RidgeModel,
             'pls': PLSModel, 
-            'mlp': MLPModel  # Add the MLP model here
+            'mlp': MLPModel 
         }
     
         if model_type in model_mapping:

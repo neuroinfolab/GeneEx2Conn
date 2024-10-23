@@ -2,10 +2,13 @@
 
 from imports import *
 from skopt.space import Real, Categorical, Integer
+from sklearn.base import BaseEstimator, RegressorMixin
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.base import BaseEstimator, RegressorMixin
+from torch.utils.data import TensorDataset, DataLoader
+
+from metrics.eval import mse_cupy
 
 class BaseModel:
     """Base class for all models."""
@@ -184,48 +187,9 @@ class XGBModel(BaseModel):
             'random_state': [42],
             'verbosity': [0]
         }
-
-        '''
-        # syntax to specify params for a fine tuned run
-        best_params = {
-            'n_estimators': [200],
-            'max_depth': [5],           # Maximum depth of each tree - makes a big diff
-            'learning_rate': [0.01],     # Learning rate (shrinkage)
-            'subsample': [1],              # Subsample ratio of the training data
-            'colsample_bytree': [1],  # Subsample ratio of columns when constructing each tree
-            'gamma': [0],             # Minimum loss reduction required to make a split
-            'reg_lambda': [0],              # L2 regularization term (Ridge penalty)
-            'reg_alpha': [0],             # L1 regularization term (Lasso penalty)
-            'random_state': [42],        # Seed for reproducibility
-            'min_child_weight': [1], 
-            'tree_method':['hist'],  # Use the GPU
-            'device':['cuda'],  # Use GPU predictor
-            'verbosity': [2]
-        }
-        self.param_grid = best_params
-        '''
-        '''
-        self.param_dist = {
-            'n_estimators': [50, 100, 150, 200, 250, 300],  # Number of trees in the forest
-            'max_depth': randint(3, 10),  # Maximum depth of each tree
-            'learning_rate': uniform(0.01, 0.3),  # Learning rate (shrinkage)
-            'subsample': uniform(0.6, 0.4),  # Subsample ratio of the training data
-            'colsample_bytree': uniform(0.5, 0.5),  # Subsample ratio of columns when constructing each tree
-            'gamma': uniform(0, 0.3),  # Minimum loss reduction required to make a split
-            'reg_lambda': uniform(0.01, 1),  # L2 regularization term (Ridge penalty)
-            'reg_alpha': uniform(0.01, 1),  # L1 regularization term (Lasso penalty)
-            'random_state': [42],  # Seed for reproducibility
-            'min_child_weight': randint(1, 6),  # Minimum sum of instance weight needed in a child
-            'tree_method': ['gpu_hist'],  # Use the GPU
-            'device': ['cuda'],  # Use GPU predictor
-            'n_gpus':[-1],
-            'verbosity': [2]  # Verbosity level
-        }
-        
         # consider adding this hyperparam
         # Sampling method. Used only by the GPU version of hist tree method. uniform: select random training instances uniformly. gradient_based select random training instances with higher probability when the gradient and hessian are larger. (cf. CatBoost)
         #
-        '''
 
 
 class RandomForestModel(BaseModel):
@@ -252,11 +216,14 @@ class RandomForestModel(BaseModel):
         }
         
 
+
 class MLPModel(BaseEstimator, RegressorMixin):
-    """Basic MLP model using PyTorch with support for L2 regularization and dropout."""
+    """Basic MLP model using PyTorch with support for bayesian hyperparameter tuning."""
     
     def __init__(self, input_dim, output_dim=1, hidden_dims=None, dropout=0.5, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32):
         super().__init__()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.hidden_dims = hidden_dims if hidden_dims is not None else self._default_hidden_dims(input_dim)
@@ -272,89 +239,122 @@ class MLPModel(BaseEstimator, RegressorMixin):
 
         for hidden_dim in self.hidden_dims:
             layers.append(nn.Linear(prev_dim, hidden_dim))
+            layers.append(nn.BatchNorm1d(hidden_dim))
             layers.append(nn.ReLU())
-            if self.dropout > 0:
-                layers.append(nn.Dropout(self.dropout))
+            # if self.dropout > 0:
+            #    layers.append(nn.Dropout(self.dropout))
             prev_dim = hidden_dim
         
         layers.append(nn.Linear(prev_dim, output_dim))
         self.model = nn.Sequential(*layers)
-
+        self.model = self.model.to(self.device)
+        
         # Loss function
         self.criterion = nn.MSELoss()
+
 
     def _default_hidden_dims(self, input_dim):
         """Private method to define default hidden dimensions based on input size."""
         if input_dim <= 100:
-            return [64, 32]
+            return [128, 64]
         elif 100 < input_dim <= 300:
-            return [128, 64, 32]
+            return [512, 256, 128]
         else:
-            return [1024, 256, 64, 32]
+            return [1024, 512, 256, 128]
+
+    
+    def forward(self, x):
+        return self.model(x)
+
 
     def fit(self, X, y):
         """Train the model with PyTorch."""
         self.model.train()
-        X_tensor = torch.tensor(X, dtype=torch.float32)
-        y_tensor = torch.tensor(y, dtype=torch.float32)
-
-        if torch.cuda.is_available():
-            self.model = self.model.to('cuda')
-            X_tensor = X_tensor.to('cuda')
-            y_tensor = y_tensor.to('cuda')
+        print('model', self.model)
+        print('self params',self.dropout, self.l2_reg, self.lr, self.epochs, self.batch_size)
 
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=self.l2_reg)
-
-        # Training loop
+        
+        X_tensor = torch.FloatTensor(X)
+        y_tensor = torch.FloatTensor(y).unsqueeze(1)
+        X_tensor = X_tensor.to(self.device)
+        y_tensor = y_tensor.to(self.device)
+        
+        dataset = TensorDataset(X_tensor, y_tensor)
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True) # keep unshuffled so bidirectional pairs are passed in simultaneously during training
+        
         for epoch in range(self.epochs):
-            optimizer.zero_grad()
-            outputs = self.model(X_tensor)
-            loss = self.criterion(outputs, y_tensor)
-            loss.backward()
-            optimizer.step()
+            for batch_X, batch_y in dataloader:
+                optimizer.zero_grad()
+                outputs = self.forward(batch_X)
+
+                 # Compute loss
+                loss = self.criterion(outputs, batch_y)
+                assert loss.requires_grad, "Loss should require gradients"
+                
+                loss = self.criterion(outputs, batch_y)
+                print(loss)
+                loss.backward()
+                optimizer.step()
+
+            if (epoch + 1) % 10 == 0:
+                print(f'Epoch [{epoch+1}/{self.epochs}], Loss: {loss.item():.4f}')
 
     def predict(self, X):
         """Make predictions with the trained model."""
         self.model.eval()
+
         X_tensor = torch.tensor(X, dtype=torch.float32)
         if torch.cuda.is_available():
             X_tensor = X_tensor.to('cuda')
 
         with torch.no_grad():
             predictions = self.model(X_tensor).cpu().numpy()
+        
         return predictions
-
-    def score(self, X, y):
-        """Score the model using a custom scorer."""
-        y_pred = self.predict(X)
-        return mse_cupy(y, y_pred)  # or another custom metric
         
     def get_param_grid(self):
         """Return a parameter grid for hyperparameter tuning."""
         return {
             #'hidden_dims': [[64, 64], [128, 64], [128, 128, 64]],
-            'dropout': [0.2, 0.5],
-            'l2_reg': [1e-4, 1e-2, 0],
-            'lr': [0.001, 0.01],
-            'epochs': [100, 300], #[50, 100, 300],
-            'batch_size': [32, 64]
+            #'dropout': [0.1, 0.3],
+            # 'l2_reg': [1e-4, 1e-2, 0],
+            # 'lr': [0.001, 0.01, 0.03],
+            # 'epochs': [300, 500, 1000], #[50, 100, 300],
+            # 'batch_size': [8, 64]
+
+            # single run params for debugging
+            'l2_reg': [0], # [1e-3, 1e-2],
+            'lr': [0.01], #, 0.01, 0.03],
+            'epochs': [100], #[50, 100, 300],
+            'batch_size': [16]
         }
     
     def get_param_dist(self):
         """Return a parameter distribution for random search or Bayesian optimization."""
         return {
-            #'hidden_dims': Categorical([(64, 64)]), # , (128, 64), (128, 128, 64)]),  # Use tuples instead of lists
-            'dropout': Real(0.2, 0.5), 
-            'l2_reg': Real(1e-5, 1e-3, prior='log-uniform'),  
-            'lr': Real(1e-4, 1e-2, prior='log-uniform'), 
-            'epochs': Integer(100, 500),  
-            'batch_size': Integer(16, 128)  
+            #'hidden_dims': Categorical([(64, 64)]), # , (128, 64), (128, 128, 64)]),  # Use tuples instead of lists 
+            #'dropout': Real(0.0, 0.5),
+            'l2_reg': Real(0, 1e-0), #, prior='log-uniform'),
+            'lr': Real(1e-3, 1e-1), # , prior='log-uniform'),
+            'epochs': Integer(100, 300),
+            'batch_size': Integer(8, 96)
+            
+            # 'dropout': Categorical([0.0, 0.2, 0.3, 0.4, 0.5]),
+            # 'l2_reg': Categorical([0.0, 1e-4, 1e-3, 1e-2]),
+            # 'lr': Categorical([1e-4, 1e-3, 1e-2, 3e-2]),
+            # 'epochs': Categorical([100, 300]),
+            # 'batch_size': Categorical([16, 32, 64])
         }
 
     def get_model(self):
         """Return the PyTorch model instance."""
         return self
-
+    
+    # def score(self, X, y):
+    #     """Score the model using a custom scorer."""
+    #     y_pred = self.predict(X)
+    #     return mse_cupy(y, y_pred)  # or another custom metric
 
 class ModelBuild:
     """Factory class to create models based on the given model type."""
@@ -367,7 +367,7 @@ class ModelBuild:
             'ridge_torch': RidgeModelTorch,
             'ridge': RidgeModel,
             'pls': PLSModel, 
-            'mlp': MLPModel  # Add the MLP model here
+            'mlp': MLPModel 
         }
     
         if model_type in model_mapping:

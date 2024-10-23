@@ -159,7 +159,7 @@ def pearson_cupy(y_true, y_pred):
 
     return corr
 
-def mse_cupy(y_true, y_pred): # try treating as np? 
+def mse_cupy(y_true, y_pred): # try treating as np?
     y_pred = cp.asarray(y_pred)
     
     mse = cp.sum((y_pred-y_true)**2)/y_pred.shape[0]
