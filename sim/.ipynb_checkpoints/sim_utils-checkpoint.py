@@ -38,9 +38,9 @@ import data.cv_split
 importlib.reload(data.cv_split)
 
 # prebuilt model classes
-from models.prebuilt_models import ModelBuild
-import models.prebuilt_models
-importlib.reload(models.prebuilt_models)
+from models.base_models import ModelBuild
+import models.base_models
+importlib.reload(models.base_models)
 
 # metric classes
 from metrics.eval import (
@@ -143,6 +143,7 @@ def grid_search_init(gpu_acceleration, model, X_combined, Y_combined, param_grid
                                    cv=train_test_indices, 
                                    scoring=scorer, 
                                    verbose=3,
+                                   return_train_score=True,
                                    error_score='raise',
                                    refit=False)
     else:

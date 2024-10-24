@@ -4,7 +4,7 @@ from imports import *
 
 # useful global paths
 par_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
-data_dir = par_dir + '/data'
+data_dir = par_dir + '/GeneEx2Conn_data'
 samples_dir = data_dir + '/samples_files'
 
 class Harmonizer:
@@ -15,16 +15,11 @@ class Harmonizer:
         """
         self.original_df = combined_df.copy()  # Store the original dataset
         self.metadata_columns, self.gene_columns = self.get_gene_columns()
+        unique_datasets = self.original_df['dataset'].unique()
+        preprocessing_steps = {dataset: ['min_max'] for dataset in unique_datasets}
         
-        self.minmax_df = self.statistical_process_gene_data(preprocessing_steps = {
-                                                            'AHBA': ['min_max'], 
-                                                            'Chinese Brain Bank': ['min_max'],
-                                                            'UTSW Medical Center': ['min_max'],
-                                                            'GTEx': ['min_max'],
-                                                            'Yale HBT': ['min_max'],
-                                                            'HBT Brainspan': ['min_max']
-                                                            })
-        self.processed_df = None # combined_df.copy()  # Create a processed version of the dataset
+        self.minmax_df = self.statistical_process_gene_data(preprocessing_steps=preprocessing_steps)
+        self.processed_df = None  # Create a processed version of the dataset
         
         
     def get_gene_columns(self):
@@ -49,41 +44,44 @@ class Harmonizer:
         
         # Loop over each unique dataset and apply respective preprocessing
         for dataset in processed_df['dataset'].unique():
-            scaler = MinMaxScaler()
             dataset_df = processed_df[processed_df['dataset'] == dataset].copy()  # Copy to avoid warnings
-            
             steps = preprocessing_steps.get(dataset, [])
             
-            if 'scaled_robust_sigmoid' in steps:
-                # Apply scaled robust sigmoid logic for AHBA dataset
-                if dataset == 'AHBA': # Load AHBA_srs_samples.csv
-                    srs_df = pd.read_csv(samples_dir + '/AHBA_srs_samples.csv')
-                    srs_gene_df = srs_df[self.gene_columns]
-                    # drop null rows
-                    threshold = int(srs_gene_df.shape[1] * 0.5)  
-                    srs_gene_df = srs_gene_df.dropna(thresh=threshold)                
-                    srs_gene_values = np.array(srs_gene_df)                    
-                    processed_df.loc[dataset_df.index, self.gene_columns] = srs_gene_values
-                else: 
-                    # Apply scaled robust sigmoid (using RobustScaler followed by sigmoid)
-                    robust_scaler = RobustScaler()
-                    robust_scaled_values = robust_scaler.fit_transform(processed_df.loc[dataset_df.index, self.gene_columns])
-                    sigmoid_scaled_values = 1 / (1 + np.exp(-robust_scaled_values))
-                    processed_df.loc[dataset_df.index, self.gene_columns] = sigmoid_scaled_values
-            if 'log_transform' in steps:
-                # Apply log(1+x) transformation
-                processed_df.loc[dataset_df.index, self.gene_columns] = np.log1p(processed_df.loc[dataset_df.index, self.gene_columns])
+            for step in steps:
+                scaler = MinMaxScaler()
+                if step == 'scaled_robust_sigmoid':
+                    # Apply scaled robust sigmoid logic for AHBA dataset
+                    if dataset == 'AHBA': # Load AHBA_srs_samples.csv
+                        srs_df = pd.read_csv(samples_dir + '/AHBA_srs_samples.csv')
+                        srs_gene_df = srs_df[self.gene_columns]
 
-            if 'min_max' in steps:
-                # Apply Min-Max scaling
-                scaled_values = scaler.fit_transform(processed_df.loc[dataset_df.index, self.gene_columns])
-                processed_df.loc[dataset_df.index, self.gene_columns] = scaled_values
+                        # drop null rows
+                        threshold = int(srs_gene_df.shape[1] * 0.5)  
+                        srs_gene_df = srs_gene_df.dropna(thresh=threshold)                
+                        
+                        # Merge srs_gene_df with processed_df on matching indices 
+                        processed_df.update(srs_gene_df) # THIS MERGES AND LEAVES THE REST AS MINMAX... 
+                    else: 
+                        # Apply scaled robust sigmoid (using RobustScaler followed by sigmoid)
+                        robust_scaler = RobustScaler()
+                        robust_scaled_values = robust_scaler.fit_transform(processed_df.loc[dataset_df.index, self.gene_columns])
+                        sigmoid_scaled_values = 1 / (1 + np.exp(-robust_scaled_values))
+                        processed_df.loc[dataset_df.index, self.gene_columns] = sigmoid_scaled_values
 
-            if 'z_score' in preprocessing_steps[dataset]:
-                # Apply Z-scoring (Standardization)
-                zscaler = StandardScaler()
-                zscored_values = zscaler.fit_transform(processed_df.loc[dataset_df.index, self.gene_columns])
-                processed_df.loc[dataset_df.index, self.gene_columns] = zscored_values
+                elif step == 'log_transform':
+                    # Apply log(1+x) transformation
+                    processed_df.loc[dataset_df.index, self.gene_columns] = np.log1p(processed_df.loc[dataset_df.index, self.gene_columns])
+
+                elif step == 'min_max':
+                    # Apply Min-Max scaling
+                    scaled_values = scaler.fit_transform(processed_df.loc[dataset_df.index, self.gene_columns])
+                    processed_df.loc[dataset_df.index, self.gene_columns] = scaled_values
+
+                elif step == 'z_score':
+                    # Apply Z-scoring (Standardization)
+                    zscaler = StandardScaler()
+                    zscored_values = zscaler.fit_transform(processed_df.loc[dataset_df.index, self.gene_columns])
+                    processed_df.loc[dataset_df.index, self.gene_columns] = zscored_values
                 
         self.processed_df = processed_df  # Store processed version
         return processed_df

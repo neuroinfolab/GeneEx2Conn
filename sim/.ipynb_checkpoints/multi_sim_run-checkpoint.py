@@ -38,9 +38,9 @@ import data.cv_split
 importlib.reload(data.cv_split)
 
 # prebuilt model classes
-from models.prebuilt_models import ModelBuild
-import models.prebuilt_models
-importlib.reload(models.prebuilt_models)
+from models.base_models import ModelBuild
+import models.base_models
+importlib.reload(models.base_models)
 
 # metric classes
 from metrics.eval import (
@@ -138,8 +138,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     print("Simulation results have been saved.")
     return
 
-
-def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method='random'):
+def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse')):
     """
     Function to run simulations for all possible feature types: connectome only, transcriptome only, connectome+transcriptome
     """
@@ -192,7 +191,7 @@ def multi_sim_run(cv_type, model_type, use_gpu, use_shared_regions=False, test_s
     return multi_model_results
 
 
-def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method='random'):
+def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse')):
     """
     Runs a single simulation for a given feature type and model configuration.
 
