@@ -220,7 +220,7 @@ class RandomForestModel(BaseModel):
 class MLPModel(BaseEstimator, RegressorMixin):
     """Basic MLP model using PyTorch with support for bayesian hyperparameter tuning."""
     
-    def __init__(self, input_dim, output_dim=1, hidden_dims=None, dropout=0.5, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32):
+    def __init__(self, input_dim, output_dim=1, hidden_dims=None, dropout=0.2, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32,  max_grad_norm=1.0):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
@@ -232,8 +232,10 @@ class MLPModel(BaseEstimator, RegressorMixin):
         self.lr = lr
         self.epochs = epochs
         self.batch_size = batch_size
+        self.max_grad_norm = max_grad_norm
+        self.criterion = nn.MSELoss()
 
-        # Define the architecture
+        # Define the architecture dynamically based on input size
         layers = []
         prev_dim = input_dim
 
@@ -241,16 +243,17 @@ class MLPModel(BaseEstimator, RegressorMixin):
             layers.append(nn.Linear(prev_dim, hidden_dim))
             layers.append(nn.BatchNorm1d(hidden_dim))
             layers.append(nn.ReLU())
-            # if self.dropout > 0:
-            #    layers.append(nn.Dropout(self.dropout))
+            if self.dropout > 0:
+                layers.append(nn.Dropout(self.dropout))
             prev_dim = hidden_dim
         
         layers.append(nn.Linear(prev_dim, output_dim))
         self.model = nn.Sequential(*layers)
+
+        if torch.cuda.device_count() > 1:
+            print(f"Using {torch.cuda.device_count()} GPUs")
+            self.model = nn.DataParallel(self.model)
         self.model = self.model.to(self.device)
-        
-        # Loss function
-        self.criterion = nn.MSELoss()
 
 
     def _default_hidden_dims(self, input_dim):
@@ -270,8 +273,8 @@ class MLPModel(BaseEstimator, RegressorMixin):
     def fit(self, X, y):
         """Train the model with PyTorch."""
         self.model.train()
-        print('model', self.model)
-        print('self params',self.dropout, self.l2_reg, self.lr, self.epochs, self.batch_size)
+        #print('model', self.model)
+        #print('self params',self.dropout, self.l2_reg, self.lr, self.epochs, self.batch_size, self.criterion)
 
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=self.l2_reg)
         
@@ -281,24 +284,22 @@ class MLPModel(BaseEstimator, RegressorMixin):
         y_tensor = y_tensor.to(self.device)
         
         dataset = TensorDataset(X_tensor, y_tensor)
-        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True) # keep unshuffled so bidirectional pairs are passed in simultaneously during training
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False) # keep unshuffled so bidirectional pairs are passed in simultaneously during training
         
         for epoch in range(self.epochs):
+            epoch_loss = 0.0
             for batch_X, batch_y in dataloader:
                 optimizer.zero_grad()
                 outputs = self.forward(batch_X)
-
-                 # Compute loss
                 loss = self.criterion(outputs, batch_y)
-                assert loss.requires_grad, "Loss should require gradients"
-                
-                loss = self.criterion(outputs, batch_y)
-                print(loss)
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_grad_norm)
                 optimizer.step()
-
+                epoch_loss += loss.item()
+            
+            avg_epoch_loss = epoch_loss / len(dataloader)
             if (epoch + 1) % 10 == 0:
-                print(f'Epoch [{epoch+1}/{self.epochs}], Loss: {loss.item():.4f}')
+                print(f'Epoch [{epoch+1}/{self.epochs}], Loss: {avg_epoch_loss:.4f}')
 
     def predict(self, X):
         """Make predictions with the trained model."""
@@ -324,10 +325,10 @@ class MLPModel(BaseEstimator, RegressorMixin):
             # 'batch_size': [8, 64]
 
             # single run params for debugging
-            'l2_reg': [0], # [1e-3, 1e-2],
-            'lr': [0.01], #, 0.01, 0.03],
-            'epochs': [100], #[50, 100, 300],
-            'batch_size': [16]
+            'l2_reg': [1e-3, 0], # 1e-3], # [1e-3, 1e-2],
+            'lr': [1e-3], #, 0.01, 0.03],
+            'epochs': [200], #[50, 100, 300],
+            'batch_size': [32, 64] # has to be an even number, 32 works well with 1e_3 learning rate, no reg, dropout 0.2
         }
     
     def get_param_dist(self):
@@ -335,16 +336,16 @@ class MLPModel(BaseEstimator, RegressorMixin):
         return {
             #'hidden_dims': Categorical([(64, 64)]), # , (128, 64), (128, 128, 64)]),  # Use tuples instead of lists 
             #'dropout': Real(0.0, 0.5),
-            'l2_reg': Real(0, 1e-0), #, prior='log-uniform'),
-            'lr': Real(1e-3, 1e-1), # , prior='log-uniform'),
-            'epochs': Integer(100, 300),
-            'batch_size': Integer(8, 96)
+            # 'l2_reg': Real(0, 1e-0), #, prior='log-uniform'),
+            # 'lr': Real(1e-3, 1e-1), # , prior='log-uniform'),
+            # 'epochs': Integer(100, 300),
+            # 'batch_size': Integer(8, 96)
             
-            # 'dropout': Categorical([0.0, 0.2, 0.3, 0.4, 0.5]),
-            # 'l2_reg': Categorical([0.0, 1e-4, 1e-3, 1e-2]),
-            # 'lr': Categorical([1e-4, 1e-3, 1e-2, 3e-2]),
-            # 'epochs': Categorical([100, 300]),
-            # 'batch_size': Categorical([16, 32, 64])
+            'dropout': Categorical([0.0, 0.2, 0.3, 0.4, 0.5]),
+            'l2_reg': Categorical([0.0, 1e-4, 1e-3, 1e-2]),
+            'lr': Categorical([1e-4, 1e-3, 1e-2, 3e-2]),
+            'epochs': Categorical([100, 300]),
+            'batch_size': Categorical([16, 32, 64])
         }
 
     def get_model(self):

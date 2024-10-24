@@ -201,6 +201,7 @@ class Simulation:
 
         best_model = model.get_model()
         best_model.set_params(**grid_search.best_params_)
+
         return best_model
 
 
@@ -236,7 +237,7 @@ class Simulation:
             
             # Step 6: Retrain the best parameter model on training data and test on testing data
             best_model.fit(X_train, Y_train)
- 
+
             evaluator = ModelEvaluator(best_model, X_train, Y_train, X_test, Y_test, [self.use_shared_regions, self.include_conn_feats, self.test_shared_regions])
             
             train_metrics = evaluator.get_train_metrics()
@@ -245,7 +246,7 @@ class Simulation:
             print("\nTrain Metrics:", train_metrics)
             print("Test Metrics:", test_metrics)
             print('BEST MODEL PARAMS', best_model.get_params())
-
+            
             # Implement function to grab feature importances here - can do for ridge too
             if self.model_type == 'pls': 
                 feature_importances_ = best_model.x_weights_[:, 0]  # Weights for the first component

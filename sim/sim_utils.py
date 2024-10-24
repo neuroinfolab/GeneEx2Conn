@@ -143,6 +143,7 @@ def grid_search_init(gpu_acceleration, model, X_combined, Y_combined, param_grid
                                    cv=train_test_indices, 
                                    scoring=scorer, 
                                    verbose=3,
+                                   return_train_score=True,
                                    error_score='raise',
                                    refit=False)
     else:
