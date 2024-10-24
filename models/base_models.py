@@ -1,4 +1,4 @@
-# Gene2Conn/models/prebuilt_models.py
+# Gene2Conn/models/base_models.py
 
 from imports import *
 from skopt.space import Real, Categorical, Integer
