@@ -20,7 +20,7 @@ import time
 import re
 import ssl
 
-# plotting 
+# plotting and imaging
 import seaborn as sns
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
@@ -36,6 +36,7 @@ from nichord.chord import plot_chord
 from nichord.glassbrain import plot_glassbrain
 from nichord.combine import combine_imgs, plot_and_combine
 from nichord.coord_labeler import get_idx_to_label
+import nibabel as nib
 
 # stats 
 from scipy import stats

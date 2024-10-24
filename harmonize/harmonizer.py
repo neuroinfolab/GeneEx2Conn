@@ -1,7 +1,6 @@
 # GeneEx2Conn/harmonize/harmonizer.py
 
 from imports import *
-import scanpy as sc
 
 # useful global paths
 par_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
