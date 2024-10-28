@@ -15,6 +15,8 @@ class Harmonizer:
         """
         self.original_df = combined_df.copy()  # Store the original dataset
         self.metadata_columns, self.gene_columns = self.get_gene_columns()
+        self.gene_columns = self.gene_columns.tolist()
+
         unique_datasets = self.original_df['dataset'].unique()
         preprocessing_steps = {dataset: ['min_max'] for dataset in unique_datasets}
         
@@ -41,7 +43,7 @@ class Harmonizer:
         """
         # Create a copy of the original_df to ensure original remains unchanged
         processed_df = self.original_df.copy()
-        
+
         # Loop over each unique dataset and apply respective preprocessing
         for dataset in processed_df['dataset'].unique():
             dataset_df = processed_df[processed_df['dataset'] == dataset].copy()  # Copy to avoid warnings
@@ -53,14 +55,23 @@ class Harmonizer:
                     # Apply scaled robust sigmoid logic for AHBA dataset
                     if dataset == 'AHBA': # Load AHBA_srs_samples.csv
                         srs_df = pd.read_csv(samples_dir + '/AHBA_srs_samples.csv')
-                        srs_gene_df = srs_df[self.gene_columns]
+                        gene_df_cols = ['ID', 'tissue sample local name', 'dataset'] + self.gene_columns
+                        srs_gene_df = srs_df[gene_df_cols]
 
                         # drop null rows
                         threshold = int(srs_gene_df.shape[1] * 0.5)  
-                        srs_gene_df = srs_gene_df.dropna(thresh=threshold)                
-                        
-                        # Merge srs_gene_df with processed_df on matching indices 
-                        processed_df.update(srs_gene_df) # THIS MERGES AND LEAVES THE REST AS MINMAX... 
+                        srs_gene_df = srs_gene_df.dropna(thresh=threshold)           
+
+                        # Assuming 'ID', 'tissue sample local name', and 'dataset' are the matching keys
+                        processed_df.set_index(['ID', 'tissue sample local name', 'dataset'], inplace=True)
+                        srs_gene_df.set_index(['ID', 'tissue sample local name', 'dataset'], inplace=True)
+
+                        # Update processed_df with values from srs_gene_df where they match on the index
+                        processed_df.update(srs_gene_df)
+
+                        # Reset index if needed to return to the original structure
+                        processed_df.reset_index(inplace=True)
+                        print('updated with AHBA srs')
                     else: 
                         # Apply scaled robust sigmoid (using RobustScaler followed by sigmoid)
                         robust_scaler = RobustScaler()
