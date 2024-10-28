@@ -326,9 +326,9 @@ class MLPModel(BaseEstimator, RegressorMixin):
 
             # single run params for debugging
             'l2_reg': [1e-3, 0], # 1e-3], # [1e-3, 1e-2],
-            'lr': [1e-3], #, 0.01, 0.03],
-            'epochs': [200], #[50, 100, 300],
-            'batch_size': [32, 64] # has to be an even number, 32 works well with 1e_3 learning rate, no reg, dropout 0.2
+            'lr': [1e-3], # 0.01, 0.03],
+            'epochs': [100], #[50, 100, 300],
+            'batch_size': [32, 64] # , 64] # has to be an even number, 32 works well with 1e_3 learning rate, no reg, dropout 0.2
         }
     
     def get_param_dist(self):

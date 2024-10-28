@@ -117,7 +117,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
         results_file_str += str(resolution)
     
     results_file_str += '_' + str(random_seed)
-    results_file_str += "_" +  search_method + 'search'
+    results_file_str += "_" +  str(search_method) + 'search'
 
     if use_shared_regions: 
         results_file_str += "_useshared"
