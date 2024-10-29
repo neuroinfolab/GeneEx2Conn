@@ -84,6 +84,7 @@ import scanpy as sc
 from anndata import AnnData
 import inmoose
 from inmoose.pycombat import pycombat_norm, pycombat_seq
+from harmony import harmonize
 
 # network analysis
 import networkx as nx

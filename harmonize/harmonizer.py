@@ -66,12 +66,8 @@ class Harmonizer:
                         processed_df.set_index(['ID', 'tissue sample local name', 'dataset'], inplace=True)
                         srs_gene_df.set_index(['ID', 'tissue sample local name', 'dataset'], inplace=True)
 
-                        # Update processed_df with values from srs_gene_df where they match on the index
-                        processed_df.update(srs_gene_df)
-
-                        # Reset index if needed to return to the original structure
-                        processed_df.reset_index(inplace=True)
-                        print('updated with AHBA srs')
+                        processed_df.update(srs_gene_df) # Update processed_df with values from srs_gene_df where they match on the index
+                        processed_df.reset_index(inplace=True) # Reset index if needed to return to the original structure
                     else: 
                         # Apply scaled robust sigmoid (using RobustScaler followed by sigmoid)
                         robust_scaler = RobustScaler()
@@ -236,7 +232,102 @@ class Harmonizer:
 
         return metrics_result
     
-    
+    def apply_scib_combat(self, df, batch_key='dataset', label_key='macro region', 
+                     covariates=["age decade", "sex", "macro region"],
+                     n_top_genes=None, perform_hvg=False):
+        """
+        Apply scib's implementation of ComBat batch correction.
+        
+        Parameters:
+        - df: DataFrame to harmonize
+        - batch_key: Column name identifying batch (default: 'dataset')
+        - label_key: Column name identifying cell type equivalent (default: 'macro region')
+        - covariates: List of biological covariates to preserve (not beinf used at the moment)
+        - n_top_genes: Number of highly variable genes to select (if None, use all genes)
+        - perform_hvg: Whether to perform highly variable gene selection
+        
+        Returns:
+        - DataFrame with harmonized gene expression values
+        """
+        # Make a copy of input data
+        combat_df = df.copy()
+        
+        # Convert to AnnData format
+        adata = self.df_to_anndata(combat_df, perform_pca=True, compute_neighbors=True)
+        
+        # Optionally perform highly variable gene selection
+        if perform_hvg and n_top_genes is not None:
+            sc.pp.highly_variable_genes(
+                adata,
+                n_top_genes=n_top_genes,
+                batch_key=batch_key,
+                flavor='seurat_v3'
+            )
+            adata = adata[:, adata.var.highly_variable]
+        
+        # Apply Combat batch correction
+        corrected_adata = scib.integration.combat(
+            adata=adata,
+            batch=batch_key
+        )
+
+        # Extract corrected expression matrix
+        combat_df[self.gene_columns] = corrected_adata.X
+        
+        return combat_df
+
+    def apply_integration(self, df, method='combat', integration_params=None):
+        """
+        Dynamic wrapper function to apply different integration methods from scib.
+        
+        Parameters:
+        - df: DataFrame to integrate
+        - method: Integration method to use ('combat', 'harmony', etc.)
+        - integration_params: Dictionary of parameters specific to the integration method
+            Example for combat: {
+                'batch_key': 'dataset',
+                'label_key': 'macro region',
+                'perform_hvg': True,
+                'n_top_genes': 2000
+            }
+            Example for harmony: {
+                'batch_key': 'dataset',
+                'hvg': ['gene1', 'gene2'],
+                'theta': 2.0
+            }
+        
+        Returns:
+        - Integrated DataFrame
+        """
+        # Define available integration methods
+        integration_methods = {
+            'combat': lambda df, **kwargs: self.apply_scib_combat(df, **kwargs),
+            # 'harmony': lambda df, **kwargs: self.apply_harmony(df, **kwargs),
+            # Add more methods as they're implemented:
+            # 'mnn': self.apply_mnn,
+            # 'scanorama': self.apply_scanorama,
+        }
+        
+        # Validate method
+        if method not in integration_methods:
+            raise ValueError(f"Integration method '{method}' not supported. "
+                           f"Available methods: {list(integration_methods.keys())}")
+        
+        # Set default parameters if none provided
+        if integration_params is None:
+            integration_params = {}
+        
+        # Get the integration function
+        integration_func = integration_methods[method]
+        
+        # Apply the integration method with provided parameters
+        try:
+            return integration_func(df, **integration_params)
+        except Exception as e:
+            raise ValueError(f"Error applying {method} integration: {str(e)}\n"
+                            f"Please check the parameters provided: {integration_params}")
+
+
     ### VISUALIZATION
     def run_umap(self, dataframe, n_components=2, n_neighbors=15, min_dist=0.1, metric='euclidean', n_jobs=-1):
         """
