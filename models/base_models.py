@@ -255,16 +255,14 @@ class MLPModel(BaseEstimator, RegressorMixin):
             self.model = nn.DataParallel(self.model)
         self.model = self.model.to(self.device)
 
-
     def _default_hidden_dims(self, input_dim):
         """Private method to define default hidden dimensions based on input size."""
         if input_dim <= 100:
             return [128, 64]
         elif 100 < input_dim <= 300:
-            return [512, 256, 128]
+            return [256, 128] # [512,256, 128]
         else:
-            return [1024, 512, 256, 128]
-
+            return [512, 256, 128] # [1024, 512, 256, 128]
     
     def forward(self, x):
         return self.model(x)
@@ -327,8 +325,8 @@ class MLPModel(BaseEstimator, RegressorMixin):
             # single run params for debugging
             'l2_reg': [0], # [1e-3, 0]
             'lr': [1e-3], #, 0.01, 0.03],
-            'epochs': [100], #[50, 100, 300],
-            'batch_size': [64] # [32, 64]. has to be an even number, 32 works well with 1e_3 learning rate, no reg, dropout 0.2
+            'epochs': [200], #[50, 100, 300],
+            'batch_size': [32] # [32, 64]. has to be an even number, 32 works well with 1e_3 learning rate, no reg, dropout 0.2
         }
     
     def get_param_dist(self):

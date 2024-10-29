@@ -125,7 +125,8 @@ class Simulation:
         for feature in self.feature_type:
             feature_X = feature_dict[feature]
             X.append(feature_X)
-
+        print('self.Y_sc', self.Y_sc)
+        
         X = np.hstack(X)
         self.X = X
         print('self X shape', self.X.shape)
@@ -136,14 +137,17 @@ class Simulation:
         else:
             self.PC_dim = None # save dimensionality for kronecker for region-wise expansion
         
+        print('summary measure', self.summary_measure)
+
         if self.summary_measure == 'kronecker':
             kron = True
             print('PC dim', self.PC_dim )
-         
+
         self.fold_splits = process_cv_splits(self.X, self.Y, self.cv_obj, 
                           self.use_shared_regions, 
                           self.include_conn_feats, 
                           self.test_shared_regions,
+                          struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
                           kron=(True if self.summary_measure == 'kronecker' else False),
                           kron_input_dim = self.PC_dim)
                                   
@@ -164,6 +168,7 @@ class Simulation:
             inner_fold_splits = process_cv_splits(self.X, self.Y, inner_cv_obj, 
                                                   self.use_shared_regions, 
                                                   self.test_shared_regions,
+                                                  struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
                                                   kron=(True if self.summary_measure == 'kronecker' else False),
                                                   kron_input_dim = self.PC_dim
                                                  )
