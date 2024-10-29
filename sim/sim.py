@@ -38,9 +38,9 @@ import data.cv_split
 importlib.reload(data.cv_split)
 
 # prebuilt model classes
-from models.prebuilt_models import ModelBuild
-import models.prebuilt_models
-importlib.reload(models.prebuilt_models)
+from models.base_models import ModelBuild
+import models.base_models
+importlib.reload(models.base_models)
 
 # metric classes
 from metrics.eval import (
