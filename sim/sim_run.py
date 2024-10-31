@@ -207,7 +207,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
     
     # Save sim data
     if save_sim: 
-        save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed)
+        save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed, connectome_target)
     
     return single_model_results
 
