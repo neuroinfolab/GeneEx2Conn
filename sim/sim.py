@@ -65,7 +65,7 @@ from skopt.plots import plot_objective, plot_histogram
 
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, summary_measure=None, euclidean=False, structural=False, resolution=1.0,random_seed=42,
-                 use_shared_regions=False, include_conn_feats=False, test_shared_regions=False):        
+                 use_shared_regions=False, include_conn_feats=False, test_shared_regions=False, connectome_target='FC'):        
         """
         Initialization of simulation parameters
         """
@@ -82,6 +82,7 @@ class Simulation:
         self.use_shared_regions = use_shared_regions
         self.include_conn_feats = include_conn_feats
         self.test_shared_regions = test_shared_regions
+        self.connectome_target = connectome_target.upper()
         self.results = []
 
     
@@ -93,9 +94,10 @@ class Simulation:
         # reformatted needs to go in this way first
         omit_subcortical=False
         self.X = load_transcriptome()
-        self.Y = load_connectome(measure='FC')
-        self.X_pca = load_transcriptome(run_PCA=True)
+        self.Y_fc = load_connectome(measure='FC')
         self.Y_sc = load_connectome(measure='SC')
+        self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
+        self.X_pca = load_transcriptome(run_PCA=True)
         self.coords = load_coords()
     
     def select_cv(self):
@@ -106,8 +108,8 @@ class Simulation:
             self.cv_obj = RandomCVSplit(self.X, self.Y, num_splits=4, shuffled=True, use_random_state=True, random_seed=self.random_seed)
         elif self.cv_type == 'schaefer':
             self.cv_obj = SchaeferCVSplit()
-        elif self.cv_type == 'community':
-            self.cv_obj = CommunityCVSplit(self.X, self.Y, resolution=self.resolution, random_seed=self.random_seed)
+        elif self.cv_type == 'community': # for comparability to SC as target the splits should be based on the functional connectome
+            self.cv_obj = CommunityCVSplit(self.X, self.Y_fc, resolution=self.resolution, random_seed=self.random_seed) 
 
     
     def expand_data(self):
@@ -125,11 +127,11 @@ class Simulation:
         for feature in self.feature_type:
             feature_X = feature_dict[feature]
             X.append(feature_X)
-        print('self.Y_sc', self.Y_sc)
+        # print('self.Y_sc', self.Y_sc)
         
         X = np.hstack(X)
         self.X = X
-        print('self X shape', self.X.shape)
+        # print('self X shape', self.X.shape)
         
         if 'transcriptomePCA' in self.feature_type:
             feature_X = feature_dict['transcriptomePCA']
@@ -137,11 +139,11 @@ class Simulation:
         else:
             self.PC_dim = None # save dimensionality for kronecker for region-wise expansion
         
-        print('summary measure', self.summary_measure)
+        # print('summary measure', self.summary_measure)
 
         if self.summary_measure == 'kronecker':
             kron = True
-            print('PC dim', self.PC_dim )
+            # print('PC dim', self.PC_dim )
 
         self.fold_splits = process_cv_splits(self.X, self.Y, self.cv_obj, 
                           self.use_shared_regions, 
@@ -270,7 +272,7 @@ class Simulation:
                 'y_pred': best_model.predict(X_test) if self.gpu_acceleration else best_model.predict(X_test), 
                 'feature_importances': feature_importances_
             })
-            
+
             # Display CPU and RAM utilization 
             print_system_usage()
             

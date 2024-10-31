@@ -77,47 +77,23 @@ def open_pickled_results(file, added_dir=''):# Specify the path to your pickle f
         pickle_results = pickle.load(file)
     
     return pickle_results
-
-
-def combine_results(conn_file, trans_file, transconn_file, output_file):
-    """
-    Function to combine single sim results
-    """
-    # Load individual pickle files
-    conn_results = open_pickled_results(conn_file)
-    trans_results = open_pickled_results(trans_file)
-    transconn_results = open_pickled_results(transconn_file)
-
-    # Remove the unnecessary outer list
-    conn_results = conn_results[0] if len(conn_results) == 1 else conn_results
-    trans_results = trans_results[0] if len(trans_results) == 1 else trans_results
-    transconn_results = transconn_results[0] if len(transconn_results) == 1 else transconn_results
-
-    # Combine the results
-    combined_results = [conn_results, trans_results, transconn_results]
-
-    # Save the combined results to a new pickle file
-    output_pickle_path = "./sim/sim_results/" + output_file
-    with open(output_pickle_path, "wb") as file:
-        pickle.dump(combined_results, file)
-
-    print(f"Combined results saved to {output_pickle_path}")
     
 
-def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed): 
+def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed, connectome_target='FC'): 
     """
     Function to save all sim results to a pickle file
     """
 
     sim_results_file_path = os.getcwd() + '/sim/sim_results/'
     
-    results_file_str = str(feature_type) + "_" + model_type + "_" + cv_type
+    # Build filename components
+    results_file_str = f"{str(feature_type)}_{connectome_target}_{model_type}_{cv_type}"    
     
     if cv_type == "community":
         results_file_str += str(resolution)
     
     results_file_str += '_' + str(random_seed)
-    results_file_str += "_" +  str(search_method) + 'search'
+    results_file_str += "_" + search_method[0] + "_" + search_method[1] + "_search"
 
     if use_shared_regions: 
         results_file_str += "_useshared"
@@ -139,7 +115,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     return
 
 
-def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse')):
+def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target='FC', summary_measure=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse')):
     """
     Runs a single simulation for a given feature type and model configuration.
 
@@ -164,8 +140,11 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=N
     use_gpu : bool
         If True, the simulation will use GPU acceleration for models and computations where applicable.
     
+    connectome_target : str, optional
+        Target connectome type to predict. Options are 'FC' (functional) or 'SC' (structural).
+    
     summary_measure : str, optional
-        Summary measure used in the simulation. For example, 'kronecker' for Kronecker product measure.
+        Summary measure used in the simulation. For example, 'kronecker' for Kronecker product measure or 'strength_and_corr' for structural summary measures.
     
     use_shared_regions : bool, optional
         Whether to include shared brain regions in the analysis. 
@@ -219,7 +198,8 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, summary_measure=N
                     use_shared_regions=use_shared_regions,
                     predict_connectome_from_connectome=False,
                     include_conn_feats=False,
-                    test_shared_regions=test_shared_regions
+                    test_shared_regions=test_shared_regions,
+                    connectome_target=connectome_target
                 )
     
     sim.run_sim(search_method)
