@@ -96,14 +96,14 @@ def plot_single_model_predictions_with_metrics(single_model_results):
         
         plt.figure(figsize=(12, 6))
         plt.subplot(1, 2, 1)
-        plt.imshow(y_true_fold, vmin=0, vmax=1, cmap='viridis')
+        plt.imshow(y_true_fold, cmap='viridis') # vmin=0, vmax=1,
         plt.title(f'Fold {fold_idx + 1} Ground Truth')
         plt.colorbar()
         
         # Predicted results
         y_pred_fold = reconstruct_connectome(fold_results['y_pred'])
         plt.subplot(1, 2, 2)
-        plt.imshow(y_pred_fold, vmin=0, vmax=1, cmap='viridis')
+        plt.imshow(y_pred_fold, cmap='viridis', vmax=np.max(y_true_fold)) # vmin=0, vmax=1,
         plt.title(f'Fold {fold_idx + 1} Prediction')
         plt.colorbar()
         

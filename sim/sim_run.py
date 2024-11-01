@@ -64,13 +64,17 @@ import sim.sim
 from sim.sim import Simulation
 
 
-def open_pickled_results(file, added_dir=''):# Specify the path to your pickle file
+def open_pickled_results(file, added_dir='', backup=False):# Specify the path to your pickle file
     """
     Function to open any pickle file from sim_results directory
     If in subdirectory of sim_results pass to added dir as 'subdir/'
     """
-    pickle_file_path = "./sim/sim_results/" + added_dir + file
     
+    if backup:
+        pickle_file_path = "/scratch/asr655/neuroinformatics/GeneEx2Conn_backup/sim/sim_results/" + added_dir + file
+    else:
+        pickle_file_path = os.getcwd() + '/sim/sim_results/' + added_dir + file
+
     # Open the pickle file in read mode
     with open(pickle_file_path, "rb") as file:
         # Load the data from the pickle file
