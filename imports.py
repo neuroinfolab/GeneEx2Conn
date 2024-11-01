@@ -71,6 +71,7 @@ from xgboost import XGBRFRegressor
 from xgboost import XGBRegressor
 import lightgbm
 from lightgbm import LGBMRegressor
+import wandb
 
 # cuda and GPU
 import cupy as cp

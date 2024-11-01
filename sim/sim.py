@@ -153,15 +153,98 @@ class Simulation:
                           kron=(True if self.summary_measure == 'kronecker' else False),
                           kron_input_dim = self.PC_dim)
                                   
-    
+    def run_innercv_wandb(self, train_indices, test_indices, train_network_dict, search_method=('wandb', 'mse'), n_iter=100):
+        """Inner cross-validation with W&B support for neural networks"""
+        # Create inner CV object for X_train and Y_train
+        inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
+        
+        # Get all inner fold splits
+        if self.predict_connectome_from_connectome:
+            inner_fold_splits = process_cv_splits_conn_only_model(
+                self.Y, self.Y, 
+                inner_cv_obj,
+                self.use_shared_regions,
+                self.test_shared_regions
+            )
+        else:
+            inner_fold_splits = process_cv_splits(
+                self.X, self.Y, 
+                inner_cv_obj,
+                self.use_shared_regions,
+                self.test_shared_regions,
+                struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
+                kron=(True if self.summary_measure == 'kronecker' else False),
+                kron_input_dim=self.PC_dim
+            )
+
+        # Initialize neural network model
+        X_combined, Y_combined, _ = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
+        model = NeuralNetworkModel()
+        model.input_dim = X_combined.shape[1]  # Set input dimension
+        
+        # Initialize W&B sweep
+        sweep_id = wandb.sweep(
+            model.sweep_config,
+            project=f"gx2conn_{self.model_type}"
+        )
+        
+        def train_sweep():
+            """Training function that handles all inner CV splits"""
+            with wandb.init() as run:
+                config = wandb.config
+                fold_scores = []
+                
+                # Loop through all inner CV splits
+                for fold_idx, (X_train, y_train, X_val, y_val) in enumerate(inner_fold_splits):
+                    # Convert to tensors and move to device
+                    X_train = torch.FloatTensor(X_train).to(self.model.device)
+                    y_train = torch.FloatTensor(y_train).to(self.model.device)
+                    X_val = torch.FloatTensor(X_val).to(self.model.device)
+                    y_val = torch.FloatTensor(y_val).to(self.model.device)
+                    
+                    # Initialize model with current config
+                    fold_model = self.model.init_model(config)
+                    
+                    # Train model on this fold
+                    fold_model, fold_score = self.model.train_fold(
+                        fold_model, 
+                        X_train, y_train, 
+                        X_val, y_val, 
+                        config,
+                        fold_idx
+                    )
+                    
+                    fold_scores.append(fold_score)
+                
+                # Calculate mean score across all folds
+                mean_score = np.mean(fold_scores)
+                wandb.log({
+                    "mean_val_loss": mean_score,
+                    "fold_scores": fold_scores
+                })
+                
+                return mean_score
+        
+        # Run sweep
+        wandb.agent(sweep_id, train_sweep, count=n_iter)
+            
+        # Get best run from sweep
+        api = wandb.Api()
+        sweep = api.sweep(f"asratzan/gx2conn_{self.model_type}/{sweep_id}")
+        best_run = sweep.best_run()
+        
+        # Initialize final model with best config
+        best_model = self.model.init_model(best_run.config)
+        
+        return best_model, best_run.summary.mean_val_loss
+
     def run_innercv(self, train_indices, test_indices, train_network_dict, search_method=('random', 'mse'), n_iter=100):
         """
-        Inner cross-validation with option for Grid, Bayesian, or Randomized Search
+        Inner cross-validation with option for Grid, Bayesian, or Randomized hyperparamter search
         """
-        
-        # Create inner CV object (just indices) for X_train and Y_train
+        # Create inner CV object (just indices) for X_train and Y_train for any strategy 
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
-    
+
         if self.predict_connectome_from_connectome:
             inner_fold_splits = process_cv_splits_conn_only_model(self.Y, self.Y, inner_cv_obj,
                                                                   self.use_shared_regions,
@@ -175,6 +258,7 @@ class Simulation:
                                                   kron_input_dim = self.PC_dim
                                                  )
 
+        # Inner CV data packaged into a large matrix with indices for individual folds
         X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
         
         # Initialize model
@@ -184,32 +268,31 @@ class Simulation:
 
         # Unpack search method and metric
         search_type, metric = search_method
-
         # Initialize grid search and return cupy converted array if necessary
         if search_type == 'grid':
-            grid_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, metric=metric)
+            param_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, metric=metric)
         elif search_type == 'random':
-            grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
+            param_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
         elif search_type == 'bayes':
-            grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
+            param_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
 
         # Fit GridSearchCV on the combined data
-        grid_search.fit(X_combined, Y_combined)
+        param_search.fit(X_combined, Y_combined)
         
         # Display comprehensive results
-        print("\nGrid Search CV Results:")
-        print("=======================")
-        print("Best Parameters: ", grid_search.best_params_)
-        print("Best Cross-Validation Score: ", grid_search.best_score_)
+        print("\nParameter Search CV Results:")
+        print("=============================")
+        print("Best Parameters: ", param_search.best_params_)
+        print("Best Cross-Validation Score: ", param_search.best_score_)
         
         if search_type == 'bayes':
-            _ = plot_objective(grid_search.optimizer_results_[0], size=5)
+            _ = plot_objective(param_search.optimizer_results_[0], size=5)
             plt.show()
 
         best_model = model.get_model()
-        best_model.set_params(**grid_search.best_params_)
+        best_model.set_params(**param_search.best_params_)
 
-        return best_model
+        return best_model, param_search.best_score_
 
 
     def run_sim(self, search_method=('random', 'mse')):
@@ -232,8 +315,10 @@ class Simulation:
             train_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, i+1)
 
             # Step 5: Inner CV on training data
-            # search_method options: random, grid, bayes
-            best_model = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
+            if search_method[0] == 'wandb':
+                best_model, best_val_score = self.run_innercv_wandb(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
+            else: # search_method options: random, grid, bayes
+                best_model, best_val_score = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
 
             # convert to cupy if necessary
             if self.gpu_acceleration:
@@ -252,6 +337,7 @@ class Simulation:
 
             print("\nTrain Metrics:", train_metrics)
             print("Test Metrics:", test_metrics)
+            print('BEST VAL SCORE', best_val_score)
             print('BEST MODEL PARAMS', best_model.get_params())
             
             # Implement function to grab feature importances here - can do for ridge too
@@ -264,9 +350,10 @@ class Simulation:
             else: 
                 feature_importances_ = None
             
-            self.results.append({
+            self.results.append({ # Can we add validation accuracy here? 
                 'model_parameters': best_model.get_params(),
                 'train_metrics': train_metrics,
+                'best_val_score': best_val_score,
                 'test_metrics': test_metrics,
                 'y_true': Y_test.get() if self.gpu_acceleration else Y_test,
                 'y_pred': best_model.predict(X_test) if self.gpu_acceleration else best_model.predict(X_test), 
