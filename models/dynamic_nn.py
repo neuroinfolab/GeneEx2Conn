@@ -14,48 +14,6 @@ class DynamicNN(nn.Module):
     def __init__(self, input_dim, hidden_dims=[64, 32], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0):
         super().__init__()
 
-        '''
-        # Define sweep configuration
-        self.sweep_config = {
-            'method': 'random',
-            'metric': {
-                'name': 'val_loss',
-                'goal': 'minimize'
-            },
-            'parameters_dict': {
-                'hidden_dims': {
-                    'values': [
-                        [64, 32],
-                        [128, 64],
-                        [256, 128, 64]
-                    ]
-                },
-                'learning_rate': {
-                    'distribution': 'log_uniform_values',
-                    'min': 1e-4,
-                    'max': 1e-2
-                },
-                'batch_size': {
-                    'distribution': 'q_log_uniform_values',
-                    'q': 8,
-                    'min': 32,
-                    'max': 256
-                },
-                'dropout_rate': {
-                    'distribution': 'uniform',
-                    'min': 0.1,
-                    'max': 0.5
-                },
-                'weight_decay': {
-                    'distribution': 'log_uniform_values',
-                    'min': 1e-5,
-                    'max': 1e-3
-                },
-                'epochs': {'value': 100}
-            }
-        }
-        '''
-
         self.input_dim = input_dim
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay

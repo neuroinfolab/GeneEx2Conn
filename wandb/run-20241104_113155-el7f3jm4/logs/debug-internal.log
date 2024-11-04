@@ -1,8 +1,0 @@
-{"time":"2024-11-04T11:31:55.478881261-05:00","level":"INFO","msg":"using version","core version":"0.18.5"}
-{"time":"2024-11-04T11:31:55.478945-05:00","level":"INFO","msg":"created symlink","path":"/scratch/asr655/neuroinformatics/GeneEx2Conn/wandb/run-20241104_113155-el7f3jm4/logs/debug-core.log"}
-{"time":"2024-11-04T11:31:56.2830158-05:00","level":"INFO","msg":"created new stream","id":"el7f3jm4"}
-{"time":"2024-11-04T11:31:56.283061221-05:00","level":"INFO","msg":"stream: started","id":"el7f3jm4"}
-{"time":"2024-11-04T11:31:56.283092787-05:00","level":"INFO","msg":"handler: started","stream_id":{"value":"el7f3jm4"}}
-{"time":"2024-11-04T11:31:56.283213897-05:00","level":"INFO","msg":"sender: started","stream_id":"el7f3jm4"}
-{"time":"2024-11-04T11:31:56.283211691-05:00","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"el7f3jm4"}}
-{"time":"2024-11-04T11:31:56.300514431-05:00","level":"ERROR","msg":"sender: upsertRun:","error":"failed to upsert bucket: api: failed sending: POST https://api.wandb.ai/graphql giving up after 1 attempt(s): Post \"https://api.wandb.ai/graphql\": tls: failed to verify certificate: x509: certificate signed by unknown authority"}

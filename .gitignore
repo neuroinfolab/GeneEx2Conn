@@ -9,3 +9,5 @@
 .jpg
 **/*.png
 **/*.jpg
+*wandb
+*slurm

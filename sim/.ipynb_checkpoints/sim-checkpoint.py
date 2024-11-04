@@ -38,9 +38,12 @@ import data.cv_split
 importlib.reload(data.cv_split)
 
 # prebuilt model classes
-from models.prebuilt_models import ModelBuild
-import models.prebuilt_models
-importlib.reload(models.prebuilt_models)
+from models.base_models import ModelBuild
+import models.base_models
+importlib.reload(models.base_models)
+
+# custom models
+from models.dynamic_nn import DynamicNN
 
 # metric classes
 from metrics.eval import (
@@ -63,9 +66,10 @@ importlib.reload(sim.sim_utils)
 
 from skopt.plots import plot_objective, plot_histogram
 
+
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, summary_measure=None, euclidean=False, structural=False, resolution=1.0,random_seed=42,
-                 use_shared_regions=False, include_conn_feats=False, test_shared_regions=False):        
+                 use_shared_regions=False, include_conn_feats=False, test_shared_regions=False, connectome_target='FC'):        
         """
         Initialization of simulation parameters
         """
@@ -82,6 +86,7 @@ class Simulation:
         self.use_shared_regions = use_shared_regions
         self.include_conn_feats = include_conn_feats
         self.test_shared_regions = test_shared_regions
+        self.connectome_target = connectome_target.upper()
         self.results = []
 
     
@@ -93,9 +98,10 @@ class Simulation:
         # reformatted needs to go in this way first
         omit_subcortical=False
         self.X = load_transcriptome()
-        self.Y = load_connectome(measure='FC')
-        self.X_pca = load_transcriptome(run_PCA=True)
+        self.Y_fc = load_connectome(measure='FC')
         self.Y_sc = load_connectome(measure='SC')
+        self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
+        self.X_pca = load_transcriptome(run_PCA=True)
         self.coords = load_coords()
     
     def select_cv(self):
@@ -106,8 +112,8 @@ class Simulation:
             self.cv_obj = RandomCVSplit(self.X, self.Y, num_splits=4, shuffled=True, use_random_state=True, random_seed=self.random_seed)
         elif self.cv_type == 'schaefer':
             self.cv_obj = SchaeferCVSplit()
-        elif self.cv_type == 'community':
-            self.cv_obj = CommunityCVSplit(self.X, self.Y, resolution=self.resolution, random_seed=self.random_seed)
+        elif self.cv_type == 'community': # for comparability to SC as target the splits should be based on the functional connectome
+            self.cv_obj = CommunityCVSplit(self.X, self.Y_fc, resolution=self.resolution, random_seed=self.random_seed) 
 
     
     def expand_data(self):
@@ -125,10 +131,9 @@ class Simulation:
         for feature in self.feature_type:
             feature_X = feature_dict[feature]
             X.append(feature_X)
-
+        
         X = np.hstack(X)
         self.X = X
-        print('self X shape', self.X.shape)
         
         if 'transcriptomePCA' in self.feature_type:
             feature_X = feature_dict['transcriptomePCA']
@@ -138,24 +143,180 @@ class Simulation:
         
         if self.summary_measure == 'kronecker':
             kron = True
-            print('PC dim', self.PC_dim )
-         
+
         self.fold_splits = process_cv_splits(self.X, self.Y, self.cv_obj, 
                           self.use_shared_regions, 
                           self.include_conn_feats, 
                           self.test_shared_regions,
+                          struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
                           kron=(True if self.summary_measure == 'kronecker' else False),
                           kron_input_dim = self.PC_dim)
-                                  
-    
+
+                        
+    def run_innercv_wandb(self, train_indices, test_indices, train_network_dict, search_method=('wandb', 'mse'), n_iter=2):
+        """Inner cross-validation with W&B support for neural networks"""
+        # Create inner CV object for X_train and Y_train
+        inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
+        
+        # Get all inner fold splits
+        if self.predict_connectome_from_connectome:
+            inner_fold_splits = process_cv_splits_conn_only_model(
+                self.Y, self.Y, 
+                inner_cv_obj,
+                self.use_shared_regions,
+                self.test_shared_regions
+            )
+        else:
+            inner_fold_splits = process_cv_splits(
+                self.X, self.Y, 
+                inner_cv_obj,
+                self.use_shared_regions,
+                self.test_shared_regions,
+                struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
+                kron=(True if self.summary_measure == 'kronecker' else False),
+                kron_input_dim=self.PC_dim
+            )
+        
+        print('inner fold splits', len(inner_fold_splits))
+        print('X train shape', inner_fold_splits[0][0].shape)
+        print('X test shape', inner_fold_splits[0][1].shape)
+        print('Y train shape', inner_fold_splits[0][2].shape)
+        print('Y test shape', inner_fold_splits[0][3].shape)    
+        input_dim = inner_fold_splits[0][0].shape[0]
+        
+        #X_combined, Y_combined, _ = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
+        #input_dim = X_combined.shape[1]  # Set input dimension
+        #print('input dim', input_dim)
+
+        #print(os.environ['WANDB_DISABLE_SSL'])
+        #print(os.environ['WANDB_AGENT_DISABLE_FLAPPING'])
+
+
+        #os.environ['WANDB_DISABLE_SSL'] = 'true'
+        #os.environ['WANDB_AGENT_DISABLE_FLAPPING'] = 'true'  # Prevents sweep from stopping on initial failures
+        
+        sweep_config = {
+            'method': 'random',
+            'metric': {
+                'name': 'val_loss',
+                'goal': 'minimize'
+            },
+            'parameters': {
+                'hidden_dims': {
+                    'values': [
+                        [64, 32],
+                        [128, 64],
+                        [256, 128, 64]
+                    ]
+                },
+                'learning_rate': {
+                    'distribution': 'log_uniform_values',
+                    'min': 1e-4,
+                    'max': 1e-2
+                },
+                'batch_size': {
+                    'distribution': 'q_log_uniform_values',
+                    'q': 8,
+                    'min': 32,
+                    'max': 256
+                },
+                'dropout_rate': {
+                    'distribution': 'uniform',
+                    'min': 0.1,
+                    'max': 0.5
+                },
+                'weight_decay': {
+                    'distribution': 'log_uniform_values',
+                    'min': 1e-5,
+                    'max': 1e-3
+                },
+                'input_dim': {'value': input_dim},
+                'epochs': {'value': 10} # 100
+            }
+        }
+        
+        device = torch.device("cuda")
+
+        def train_sweep(config=None):
+            # Loop through all inner CV splits
+            fold_train_losses = []
+            fold_val_losses = []
+
+            # Temporarily test with one fold
+            fold_idx = 0
+            X_train, y_train, X_val, y_val = inner_fold_splits[fold_idx]
+            # for fold_idx, (X_train, y_train, X_val, y_val) in enumerate(inner_fold_splits):
+
+            # Convert to tensors and move to device, temporary data loaders 
+            X_train = torch.FloatTensor(X_train).to(device)
+            y_train = torch.FloatTensor(y_train).to(device)
+            X_val = torch.FloatTensor(X_val).to(device)
+            y_val = torch.FloatTensor(y_val).to(device)
+
+            print('sweep id on inner call:', sweep_id)
+            run = wandb.init(
+                #project="gx2conn_dynamicNN", # should already be set in sweep config
+                name=f"fold_{fold_idx}",
+                group=f"sweep_{sweep_id}",
+                tags=["cross_validation", f"fold_{fold_idx}"],
+                config=config,
+                reinit=True
+                )
+
+            sweep_config = wandb.config
+                    
+            model=DynamicNN(input_dim=sweep_config['input_dim'], hidden_dims=sweep_config['hidden_dims']).to(device) # initialize an instance to get the sweep config
+            
+            # Train full model on this fold
+            fold_results = model.fit(X_train, y_train, X_val, y_val, epochs=100, mode='learn', verbose=True)
+            
+            train_loss = fold_results['final_train_loss']
+            val_loss = fold_results['final_val_loss']
+
+            print('train loss', train_loss)
+            print('val loss', val_loss)
+
+            fold_train_losses.append(train_loss)
+            fold_val_losses.append(val_loss)
+
+            wandb.log({'fold_train_losses': fold_train_losses, 'fold_val_losses': fold_val_losses})
+            mean_train_loss = np.mean(fold_train_losses)
+            mean_val_loss = np.mean(fold_val_losses)
+            wandb.log({'mean_train_losses': mean_train_loss, 'mean_val_losses': mean_val_loss})
+
+            run.finish()
+
+        #wandb.teardown()
+
+        # print('sweep config check outer', sweep_config)
+        sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn_dynamicNN")
+        print('sweep id on outer call:', sweep_id)
+
+        # Run sweep
+        wandb.agent(sweep_id, function=train_sweep, count=n_iter)
+        
+        # Get best run from sweep
+        api = wandb.Api()
+        sweep = api.sweep(f"asratzan/gx2conn_dynamicNN/{sweep_id}")
+        best_run = sweep.best_run()
+        print(np.max(mean_val_loss))
+        print(best_run.summary.mean_val_loss)
+
+        # Initialize final model with best config
+        best_model = DynamicNN(best_run.config).to(device)
+        best_val_loss = best_run.summary.mean_val_loss        
+        
+        wandb.finish()
+        return best_model, best_val_loss
+
+
     def run_innercv(self, train_indices, test_indices, train_network_dict, search_method=('random', 'mse'), n_iter=100):
         """
-        Inner cross-validation with option for Grid, Bayesian, or Randomized Search
+        Inner cross-validation with option for Grid, Bayesian, or Randomized hyperparamter search
         """
-        
-        # Create inner CV object (just indices) for X_train and Y_train
+        # Create inner CV object (just indices) for X_train and Y_train for any strategy 
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
-    
+
         if self.predict_connectome_from_connectome:
             inner_fold_splits = process_cv_splits_conn_only_model(self.Y, self.Y, inner_cv_obj,
                                                                   self.use_shared_regions,
@@ -164,10 +325,12 @@ class Simulation:
             inner_fold_splits = process_cv_splits(self.X, self.Y, inner_cv_obj, 
                                                   self.use_shared_regions, 
                                                   self.test_shared_regions,
+                                                  struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
                                                   kron=(True if self.summary_measure == 'kronecker' else False),
                                                   kron_input_dim = self.PC_dim
                                                  )
 
+        # Inner CV data packaged into a large matrix with indices for individual folds
         X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
         
         # Initialize model
@@ -177,31 +340,31 @@ class Simulation:
 
         # Unpack search method and metric
         search_type, metric = search_method
-
         # Initialize grid search and return cupy converted array if necessary
         if search_type == 'grid':
-            grid_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, metric=metric)
+            param_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, metric=metric)
         elif search_type == 'random':
-            grid_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
+            param_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
         elif search_type == 'bayes':
-            grid_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
+            param_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
 
         # Fit GridSearchCV on the combined data
-        grid_search.fit(X_combined, Y_combined)
+        param_search.fit(X_combined, Y_combined)
         
         # Display comprehensive results
-        print("\nGrid Search CV Results:")
-        print("=======================")
-        print("Best Parameters: ", grid_search.best_params_)
-        print("Best Cross-Validation Score: ", grid_search.best_score_)
+        print("\nParameter Search CV Results:")
+        print("=============================")
+        print("Best Parameters: ", param_search.best_params_)
+        print("Best Cross-Validation Score: ", param_search.best_score_)
         
         if search_type == 'bayes':
-            _ = plot_objective(grid_search.optimizer_results_[0], size=5)
+            _ = plot_objective(param_search.optimizer_results_[0], size=5)
             plt.show()
 
         best_model = model.get_model()
-        best_model.set_params(**grid_search.best_params_)
-        return best_model
+        best_model.set_params(**param_search.best_params_)
+
+        return best_model, param_search.best_score_
 
 
     def run_sim(self, search_method=('random', 'mse')):
@@ -224,8 +387,13 @@ class Simulation:
             train_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, i+1)
 
             # Step 5: Inner CV on training data
-            # search_method options: random, grid, bayes
-            best_model = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
+            print('SEARCH METHOD', search_method)
+            if search_method[0] == 'wandb':
+                print('wandb run')
+                wandb.login()
+                best_model, best_val_score = self.run_innercv_wandb(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
+            else: # search_method options: random, grid, bayes
+                best_model, best_val_score = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
 
             # convert to cupy if necessary
             if self.gpu_acceleration:
@@ -236,7 +404,7 @@ class Simulation:
             
             # Step 6: Retrain the best parameter model on training data and test on testing data
             best_model.fit(X_train, Y_train)
- 
+
             evaluator = ModelEvaluator(best_model, X_train, Y_train, X_test, Y_test, [self.use_shared_regions, self.include_conn_feats, self.test_shared_regions])
             
             train_metrics = evaluator.get_train_metrics()
@@ -244,8 +412,9 @@ class Simulation:
 
             print("\nTrain Metrics:", train_metrics)
             print("Test Metrics:", test_metrics)
+            print('BEST VAL SCORE', best_val_score)
             print('BEST MODEL PARAMS', best_model.get_params())
-
+            
             # Implement function to grab feature importances here - can do for ridge too
             if self.model_type == 'pls': 
                 feature_importances_ = best_model.x_weights_[:, 0]  # Weights for the first component
@@ -256,15 +425,16 @@ class Simulation:
             else: 
                 feature_importances_ = None
             
-            self.results.append({
+            self.results.append({ # Can we add validation accuracy here? 
                 'model_parameters': best_model.get_params(),
                 'train_metrics': train_metrics,
+                'best_val_score': best_val_score,
                 'test_metrics': test_metrics,
                 'y_true': Y_test.get() if self.gpu_acceleration else Y_test,
                 'y_pred': best_model.predict(X_test) if self.gpu_acceleration else best_model.predict(X_test), 
                 'feature_importances': feature_importances_
             })
-            
+
             # Display CPU and RAM utilization 
             print_system_usage()
             
