@@ -14,6 +14,7 @@ class DynamicNN(nn.Module):
     def __init__(self, input_dim, hidden_dims=[64, 32], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0):
         super().__init__()
 
+        '''
         # Define sweep configuration
         self.sweep_config = {
             'method': 'random',
@@ -21,7 +22,7 @@ class DynamicNN(nn.Module):
                 'name': 'val_loss',
                 'goal': 'minimize'
             },
-            'parameters': {
+            'parameters_dict': {
                 'hidden_dims': {
                     'values': [
                         [64, 32],
@@ -53,7 +54,8 @@ class DynamicNN(nn.Module):
                 'epochs': {'value': 100}
             }
         }
-        
+        '''
+
         self.input_dim = input_dim
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
@@ -80,6 +82,7 @@ class DynamicNN(nn.Module):
             lr=learning_rate,
             weight_decay=weight_decay
         )
+        
         self.criterion = nn.MSELoss()
 
     def forward(self, x):

@@ -203,7 +203,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
                     predict_connectome_from_connectome=False,
                     include_conn_feats=False,
                     test_shared_regions=test_shared_regions,
-                    connectome_target=connectome_target
+                    connectome_target=connectome_target, 
                 )
     
     sim.run_sim(search_method)
