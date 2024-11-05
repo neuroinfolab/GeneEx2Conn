@@ -11,13 +11,15 @@ import torch
 import torch.nn as nn
 
 class DynamicNN(nn.Module):
-    def __init__(self, input_dim, hidden_dims=[64, 32], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0):
+    def __init__(self, input_dim, hidden_dims=[64, 32], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0, batch_size=64):
         super().__init__()
 
         self.input_dim = input_dim
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
-        
+        self.batch_size = batch_size
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         # Build network layers dynamically
         layers = []
         prev_dim = input_dim
@@ -46,13 +48,42 @@ class DynamicNN(nn.Module):
     def forward(self, x):
         return self.network(x).squeeze()
 
-    def fit(self, train_loader, val_loader=None, epochs=100, mode='learn', verbose=True):
+    def create_data_loader(self, X, y, batch_size, shuffle=False):
         """
-        Train the model in either learning or retraining mode
+        Create a DataLoader from input features and targets
+        
+        Args:
+            X: Input features (numpy array or tensor)
+            y: Target values (numpy array or tensor)
+            batch_size: Batch size for the DataLoader
+            shuffle: Whether to shuffle the data
+        
+        Returns:
+            DataLoader object with data moved to correct device
+        """
+        # Convert to tensors if needed
+        if not isinstance(X, torch.Tensor):
+            X = torch.FloatTensor(X)
+        if not isinstance(y, torch.Tensor):
+            y = torch.FloatTensor(y)
+        
+        # Move to device
+        X = X.to(self.device)
+        y = y.to(self.device)
+        # Print shapes of input tensors
+        print(f"X shape: {X.shape}")
+        print(f"y shape: {y.shape}")
+        # Create dataset and loader
+        dataset = TensorDataset(X, y)
+        return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+
+    def fit(self, train_loader, val_loader, epochs=100, mode='learn', verbose=True):
+        """
+        Train the model with validation using DataLoaders
         
         Args:
             train_loader: DataLoader for training data
-            val_loader: Optional DataLoader for validation data (used only in 'learn' mode)
+            val_loader: DataLoader for validation data
             epochs: Number of epochs to train
             mode: 'learn' for training with validation, 'retrain' for full dataset training
             verbose: Whether to print training progress
@@ -60,74 +91,59 @@ class DynamicNN(nn.Module):
         Returns:
             Dictionary containing training history
         """
-        device = next(self.parameters()).device
         train_losses = []
         val_losses = []
         
-        # Determine if we're in learning or retraining mode
-        is_learning = mode == 'learn'
-        if not is_learning:
-            val_loader = None  # Ignore validation in retrain mode
-            self.train()  # Ensure all layers are in training mode
-        
-        # Convert data to DataLoader if not already
-        if not isinstance(train_loader, DataLoader):
-            train_dataset = TensorDataset(train_loader[0], train_loader[1])
-            train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-            
-        if val_loader is not None and not isinstance(val_loader, DataLoader):
-            val_dataset = TensorDataset(val_loader[0], val_loader[1])
-            val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
-            
         for epoch in range(epochs):
             # Training phase
-            if is_learning:
-                self.train()
-            epoch_loss = 0
-            for batch in train_loader:
-                x, y = [b.to(device) for b in batch]
+            self.train()
+            epoch_train_loss = 0
+            for batch_X, batch_y in train_loader:
                 self.optimizer.zero_grad()
-                outputs = self(x)
-                loss = self.criterion(outputs, y)
-                loss.backward()
-                self.optimizer.step()
-                epoch_loss += loss.item()
-            
-            avg_train_loss = epoch_loss / len(train_loader)
-            train_losses.append(avg_train_loss)
-            
-            # Validation phase (only in learning mode)
-            if is_learning and val_loader is not None:
-                self.eval()
-                val_loss = 0
-                with torch.no_grad():
-                    for batch in val_loader:
-                        x, y = [b.to(device) for b in batch]
-                        outputs = self(x)
-                        loss = self.criterion(outputs, y)
-                        val_loss += loss.item()
                 
-                avg_val_loss = val_loss / len(val_loader)
-                val_losses.append(avg_val_loss)
+                outputs = self(batch_X)
+                train_loss = self.criterion(outputs, batch_y)
+                
+                train_loss.backward()
+                self.optimizer.step()
+                
+                epoch_train_loss += train_loss.item()           
+            
+            # Average training loss for the epoch
+            epoch_train_loss /= len(train_loader)
+            train_losses.append(epoch_train_loss)
+            
+            # Validation phase
+            if mode == 'learn':
+                self.eval()
+                epoch_val_loss = 0
+                with torch.no_grad():
+                    for batch_X, batch_y in val_loader:
+                        val_outputs = self(batch_X)
+                        val_loss = self.criterion(val_outputs, batch_y)
+                        epoch_val_loss += val_loss.item()
+                    
+                    epoch_val_loss /= len(val_loader)
+                    val_losses.append(epoch_val_loss)
                 
                 if verbose and (epoch + 1) % 10 == 0:
                     print(f'Epoch {epoch+1}/{epochs} - '
-                          f'Train Loss: {avg_train_loss:.6f} - '
-                          f'Val Loss: {avg_val_loss:.6f}')
+                          f'Train Loss: {epoch_train_loss:.6f} - '
+                          f'Val Loss: {epoch_val_loss:.6f}')
             else:
                 if verbose and (epoch + 1) % 10 == 0:
                     print(f'Epoch {epoch+1}/{epochs} - '
-                          f'Train Loss: {avg_train_loss:.6f}')
+                          f'Train Loss: {epoch_train_loss:.6f}')
         
         return {
             'mode': mode,
             'train_losses': train_losses,
-            'val_losses': val_losses if is_learning else None,
+            'val_losses': val_losses if mode == 'learn' else None,
             'epochs_trained': epochs,
             'final_train_loss': train_losses[-1],
             'final_val_loss': val_losses[-1] if val_losses else None
         }
-
+       
     def predict(self, X):
             """
             Make predictions for input tensor X
