@@ -64,7 +64,7 @@ import sim.sim
 from sim.sim import Simulation
 
 
-def open_pickled_results(file, added_dir='', backup=False):# Specify the path to your pickle file
+def open_pickled_results(file, added_dir='', backup=False): # Specify the path to your pickle file
     """
     Function to open any pickle file from sim_results directory
     If in subdirectory of sim_results pass to added dir as 'subdir/'

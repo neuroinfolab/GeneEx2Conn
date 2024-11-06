@@ -11,6 +11,6 @@
 **/*.jpg
 *wandb
 *slurm
+slurm-*
 *alexander-ratzan-new-york-university
 *.netrc
-
