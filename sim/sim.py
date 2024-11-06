@@ -46,7 +46,7 @@ importlib.reload(models.base_models)
 from models.dynamic_nn import DynamicNN
 
 # metric classes
-from metrics.eval import (
+from models.metrics.eval import (
     ModelEvaluator,
     pearson_numpy,
     pearson_cupy,
@@ -55,8 +55,8 @@ from metrics.eval import (
     r2_numpy,
     r2_cupy
 )
-import metrics.eval
-importlib.reload(metrics.eval)
+import models.metrics.eval
+importlib.reload(models.metrics.eval)
 
 # sim utility functions
 import sim.sim_utils

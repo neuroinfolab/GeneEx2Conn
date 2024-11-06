@@ -43,15 +43,15 @@ import models.base_models
 importlib.reload(models.base_models)
 
 # metric classes
-from metrics.eval import (
+from models.metrics.eval import (
     ModelEvaluator,
     pearson_numpy,
     pearson_cupy,
     mse_cupy,
     r2_cupy
 )
-import metrics.eval
-importlib.reload(metrics.eval)
+import models.metrics.eval
+importlib.reload(models.metrics.eval)
 
 
 

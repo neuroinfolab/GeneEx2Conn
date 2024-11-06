@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
 
-from metrics.eval import mse_cupy
+from models.metrics.eval import mse_cupy
 
 class BaseModel:
     """Base class for all models."""

@@ -2,8 +2,8 @@
 
 from imports import *
 from data.data_utils import reconstruct_connectome
-import metrics.distance_FC
-from metrics.distance_FC import *
+import models.metrics.distance_FC
+from models.metrics.distance_FC import *
 
 # connectome evaluation funcs
 def connectome_correlation(Y_pred, Y_ground_truth, include_diag=False, output=False):
