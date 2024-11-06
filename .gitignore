@@ -11,3 +11,6 @@
 **/*.jpg
 *wandb
 *slurm
+*alexander-ratzan-new-york-university
+*.netrc
+
