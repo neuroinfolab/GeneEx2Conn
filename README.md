@@ -21,8 +21,8 @@ The repo contains two primary modalities: transcriptome harmonization and connec
 - /metrics
     - classes and functions for evaluating the accuracy of connectome predictions 
 - /models
-    - base class for all the models
-    - parameter grids and distributions for hyperparameter search
+    - base model class with parameter grids and distributions for hyperparameter search
+    - dynamic MLP class and sweep configs
 - /harmonize
     - classes and functions for loading and harmonizing gene expression datasets
     - transcriptome_harmonization_EDA.ipynb demos harmonizer utilities
