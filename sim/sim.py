@@ -227,54 +227,57 @@ class Simulation:
         device = torch.device("cuda")
 
         def train_sweep(config=None):
+            fold_train_losses = [] # outer would be np.zeros((num inner fold splits, count))
+            fold_val_losses = [] # 
+            print('NEW TRAIN SWEEP')
+            
             # Loop through all inner CV splits
-            # for fold_idx, (X_train, y_train, X_val, y_val) in enumerate(inner_fold_splits):
+            # for innerCV want to run gridsearch over all inner train-val splits and return the config that does the best on average
+            for fold_idx, (X_train, X_val, y_train, y_val) in enumerate(inner_fold_splits):
+                # # Temporarily test with one fold
+                
+                # fold_idx = 0
+                # X_train, X_val, y_train, y_val = inner_fold_splits[fold_idx]
+                print(fold_idx)
+                
+                print('sweep id on inner call:', sweep_id)
+                run = wandb.init(
+                    project="gx2conn_dynamicNN", # should already be set in sweep config
+                    name=f"fold_{fold_idx}",
+                    group=f"sweep_{sweep_id}",
+                    tags=["cross_validation", f"fold_{fold_idx}"],
+                    config=config,
+                    reinit=False
+                    )
+                
+                sweep_config = wandb.config
+                model=DynamicNN(input_dim=sweep_config['input_dim'], hidden_dims=sweep_config['hidden_dims']).to(device)
+                
+                train_loader = model.create_data_loader(X_train, y_train, batch_size=sweep_config['batch_size'], shuffle=False)
+                val_loader = model.create_data_loader(X_val, y_val, batch_size=sweep_config['batch_size'], shuffle=False)
+    
+                # Train full model on this fold
+                fold_results = model.train_fold(train_loader, val_loader, epochs=sweep_config['epochs'], mode='learn', verbose=True)
+                
+                train_loss = fold_results['final_train_loss']
+                val_loss = fold_results['final_val_loss']
+
+                print('train loss', train_loss)
+                print('val loss', val_loss)
+    
+                wandb.log({'train_loss': train_loss, 'val_loss': val_loss})
+
+                fold_train_losses.append(train_loss)
+                fold_val_losses.append(val_loss)
+
+            wandb.log({'fold_train_losses': fold_train_losses, 'fold_val_losses': fold_val_losses})
+            mean_train_loss = np.mean(fold_train_losses)
+            mean_val_loss = np.mean(fold_val_losses)
+            wandb.log({'mean_train_loss': mean_train_loss, 'mean_val_loss': mean_val_loss})
+
+            run.finish() # this should come after all log statements
             
-            #fold_train_losses = []
-            #fold_val_losses = []
-
-            # Temporarily test with one fold
-            fold_idx = 0
-            X_train, X_val, y_train, y_val = inner_fold_splits[fold_idx]
-            
-            print('sweep id on inner call:', sweep_id)
-            run = wandb.init(
-                project="gx2conn_dynamicNN", # should already be set in sweep config
-                name=f"fold_{fold_idx}",
-                group=f"sweep_{sweep_id}",
-                tags=["cross_validation", f"fold_{fold_idx}"],
-                config=config,
-                reinit=False
-                )
-            
-            sweep_config = wandb.config
-
-            model=DynamicNN(input_dim=sweep_config['input_dim'], hidden_dims=sweep_config['hidden_dims']).to(device)
-            
-            train_loader = model.create_data_loader(X_train, y_train, batch_size=sweep_config['batch_size'], shuffle=False)
-            val_loader = model.create_data_loader(X_val, y_val, batch_size=sweep_config['batch_size'], shuffle=False)
-
-            # Train full model on this fold
-            fold_results = model.fit(train_loader, val_loader, epochs=sweep_config['epochs'], mode='learn', verbose=True)
-            
-            train_loss = fold_results['final_train_loss']
-            val_loss = fold_results['final_val_loss']
-
-            print('train loss', train_loss)
-            print('val loss', val_loss)
-
-            wandb.log({'train_loss': train_loss, 'val_loss': val_loss})
-
-            #fold_train_losses.append(train_loss)
-            #fold_val_losses.append(val_loss)
-            # wandb.log({'fold_train_losses': fold_train_losses, 'fold_val_losses': fold_val_losses})
-            # mean_train_loss = np.mean(fold_train_losses)
-            # mean_val_loss = np.mean(fold_val_losses)
-            # wandb.log({'mean_train_losses': mean_train_loss, 'mean_val_losses': mean_val_loss})
-
-            run.finish()
-
-            return val_loss
+            return mean_val_loss
 
         sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn_dynamicNN")
         print('sweep id on outer call:', sweep_id)
@@ -288,15 +291,16 @@ class Simulation:
         api = wandb.Api()
         sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn_dynamicNN/{sweep_id}")
         best_run = sweep.best_run()
-        best_val_loss = best_run.summary.val_loss
+        best_val_loss = best_run.summary.mean_val_loss
         best_config = best_run.config
-        print('best val loss', best_run.summary.val_loss)
+        print('best val loss', best_run.summary.mean_val_loss)
         print('best run config', best_config)
             
         # Initialize final model with best config
         best_model = DynamicNN(input_dim=best_config['input_dim'], 
                                hidden_dims=best_config['hidden_dims'],
                                batch_size=best_config['batch_size'],
+                               epochs=best_config['epochs'],
                                dropout_rate=best_config['dropout_rate'],
                                learning_rate=best_config['learning_rate'],
                                weight_decay=best_config['weight_decay']).to(device)
@@ -355,7 +359,7 @@ class Simulation:
         if search_type == 'bayes':
             _ = plot_objective(param_search.optimizer_results_[0], size=5)
             plt.show()
-
+        
         best_model = model.get_model()
         best_model.set_params(**param_search.best_params_)
 
@@ -397,7 +401,7 @@ class Simulation:
                 Y_test = cp.array(Y_test)
             
             # Step 6: Retrain the best parameter model on training data and test on testing data
-            best_model.fit(X_train, Y_train) # NEED TO CREATE COMPARABLE METHOD FOR EVALUATION 
+            best_model.fit(X_train, Y_train)  
 
             evaluator = ModelEvaluator(best_model, X_train, Y_train, X_test, Y_test, [self.use_shared_regions, self.include_conn_feats, self.test_shared_regions])
             

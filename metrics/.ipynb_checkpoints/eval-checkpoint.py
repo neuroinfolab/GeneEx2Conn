@@ -111,7 +111,6 @@ class ModelEvaluator:
     def get_test_metrics(self):
         return self.test_metrics
 
-
 # Custom scorers for inner-CV 
 def pearson_numpy(y_true, y_pred):
     corr, _ = pearsonr(y_true, y_pred)
