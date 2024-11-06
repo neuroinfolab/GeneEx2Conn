@@ -5,7 +5,7 @@ from imports import *
 # useful global paths
 par_dir = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
 data_dir = par_dir + '/GeneEx2Conn_data'
-samples_dir = data_dir + '/samples_files'
+samples_dir = data_dir + '/human_samples_files'
 
 class Harmonizer:
     def __init__(self, combined_df):
@@ -92,7 +92,7 @@ class Harmonizer:
                 
         self.processed_df = processed_df  # Store processed version
         return processed_df
-        
+    
     ### APPLY COMBAT
     def apply_combat(self, df, covariates=["age decade", "sex", "macro region"]):
         """
@@ -142,6 +142,44 @@ class Harmonizer:
         combat_df[self.gene_columns] = adjusted_data.T  # Transpose back to the original shape
         
         return combat_df
+
+    # APPLY HARMONY
+    def apply_harmony(self, df, batch_key='dataset', covariates=None):
+        """
+        Apply Harmony batch correction on the provided dataframe.
+        
+        Parameters:
+        - df: DataFrame, the dataframe on which to apply Harmony
+        - batch_key: str, column name identifying batch (default: 'dataset')
+        - covariates: list, additional categorical covariates to include in the correction
+        
+        Returns:
+        - harmony_df: DataFrame, the batch-corrected dataframe
+        """
+        # Make a copy of the input dataframe
+        harmony_df = df.copy()
+        
+        # Extract gene expression data
+        gene_data = harmony_df[self.gene_columns].values
+        
+        # Create metadata dataframe with batch information
+        metadata = pd.DataFrame({
+            'batch': harmony_df[batch_key], 
+            'region': harmony_df['macro region']
+        }, index=harmony_df.index)
+        
+        # Add additional covariates if specified
+        if covariates:
+            for covar in covariates:
+                metadata[covar] = harmony_df[covar]
+        
+        # Apply Harmony
+        harmonized_data = harmonize(gene_data, metadata, batch_key='batch') # can consider passing in 2 batches to correct for MH vs RNA-seq
+        
+        # Update gene expression values with harmonized data
+        harmony_df[self.gene_columns] = harmonized_data
+        
+        return harmony_df
 
     ### SCIB
     def df_to_anndata(self, df, perform_pca=True, compute_neighbors=True):
@@ -276,7 +314,7 @@ class Harmonizer:
         
         return combat_df
 
-    def apply_integration(self, df, method='combat', integration_params=None):
+    def apply_integration(self, df, method='combat', integration_params=None): # TODO: make sure functional and add more integration methods
         """
         Dynamic wrapper function to apply different integration methods from scib.
         
@@ -301,7 +339,7 @@ class Harmonizer:
         """
         # Define available integration methods
         integration_methods = {
-            'combat': lambda df, **kwargs: self.apply_scib_combat(df, **kwargs),
+            'combat_scib': lambda df, **kwargs: self.apply_scib_combat(df, **kwargs),
             # 'harmony': lambda df, **kwargs: self.apply_harmony(df, **kwargs),
             # Add more methods as they're implemented:
             # 'mnn': self.apply_mnn,
@@ -333,8 +371,10 @@ class Harmonizer:
         """
         Run UMAP on the specified dataframe and return the UMAP results.
         """
+        random_state = 42 # fix random seed for comparison across different labeling schemes
+        
         gene_array = dataframe[self.gene_columns].to_numpy()
-        umap_model = umap.UMAP(n_components=n_components, n_neighbors=n_neighbors, min_dist=min_dist, metric=metric, n_jobs=n_jobs)
+        umap_model = umap.UMAP(n_components=n_components, n_neighbors=n_neighbors, min_dist=min_dist, metric=metric, n_jobs=n_jobs, random_state=random_state)
         umap_results = umap_model.fit_transform(gene_array)
         return umap_results
 
