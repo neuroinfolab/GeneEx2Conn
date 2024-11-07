@@ -153,7 +153,7 @@ class Simulation:
                           kron_input_dim = self.PC_dim)
 
                         
-    def run_innercv_wandb(self, train_indices, test_indices, train_network_dict, search_method=('wandb', 'mse'), n_iter=100):
+    def run_innercv_wandb(self, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('wandb', 'mse'), n_iter=100):
         """Inner cross-validation with W&B support for neural networks"""
         # Create inner CV object for X_train and Y_train
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
@@ -187,7 +187,7 @@ class Simulation:
         sweep_config = {
             'method': 'random',
             'metric': {
-                'name': 'val_loss',
+                'name': 'mean_val_loss',
                 'goal': 'minimize'
             },
             'parameters': {
@@ -234,23 +234,19 @@ class Simulation:
             # Loop through all inner CV splits
             # for innerCV want to run gridsearch over all inner train-val splits and return the config that does the best on average
             for fold_idx, (X_train, X_val, y_train, y_val) in enumerate(inner_fold_splits):
-                # # Temporarily test with one fold
-                
-                # fold_idx = 0
-                # X_train, X_val, y_train, y_val = inner_fold_splits[fold_idx]
-                print(fold_idx)
-                
+                print('fold_idx', fold_idx)
                 print('sweep id on inner call:', sweep_id)
                 run = wandb.init(
                     project="gx2conn_dynamicNN", # should already be set in sweep config
-                    name=f"fold_{fold_idx}",
+                    name=f"fold_{outer_fold_idx}_{fold_idx}",
                     group=f"sweep_{sweep_id}",
-                    tags=["cross_validation", f"fold_{fold_idx}"],
+                    tags=["cross_validation", f"fold_{outer_fold_idx}_{fold_idx}"],
                     config=config,
-                    reinit=False
+                    reinit=True
                     )
-                
-                sweep_config = wandb.config
+
+                sweep_config = wandb.config # need to check if this will yield same config for each iter of the loop
+
                 model=DynamicNN(input_dim=sweep_config['input_dim'], hidden_dims=sweep_config['hidden_dims']).to(device)
                 
                 train_loader = model.create_data_loader(X_train, y_train, batch_size=sweep_config['batch_size'], shuffle=False)
@@ -270,21 +266,33 @@ class Simulation:
                 fold_train_losses.append(train_loss)
                 fold_val_losses.append(val_loss)
 
-            wandb.log({'fold_train_losses': fold_train_losses, 'fold_val_losses': fold_val_losses})
+                run.finish()
+            
+            # Calculate and log mean losses across all folds of the inner CV (this will be a run for one hyperparameter configuration over all inner folds)
             mean_train_loss = np.mean(fold_train_losses)
             mean_val_loss = np.mean(fold_val_losses)
-            wandb.log({'mean_train_loss': mean_train_loss, 'mean_val_loss': mean_val_loss})
-
-            run.finish() # this should come after all log statements
+            print('Mean Train Loss:', mean_train_loss)
+            print('Mean Val Loss:', mean_val_loss)
             
+            # Initialize a new run to log summary metrics, or log directly in the sweep context if preferred
+            with wandb.init(
+                project="gx2conn_dynamicNN",
+                name=f"summary_metrics_fold_{outer_fold_idx}",
+                group=f"sweep_{sweep_id}",
+                tags=["cross_validation", "summary", f"fold_{outer_fold_idx}"]
+            ) as summary_run:
+                summary_run.log({'mean_train_loss': mean_train_loss, 'mean_val_loss': mean_val_loss})
+            
+            print(f"Configuration {config} - Mean Validation Loss: {mean_val_loss}")
             return mean_val_loss
 
-        sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn_dynamicNN")
+        # Initialize sweep
+        sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn_dynamicNN") # retrieve hyperparameter space
         print('sweep id on outer call:', sweep_id)
 
         # Run sweep
         print('n_iter', n_iter)
-        wandb.agent(sweep_id, function=train_sweep, count=n_iter)
+        wandb.agent(sweep_id, function=train_sweep, count=n_iter) # run train_sweep n_iter times with different hyperparameter configs each time
         print('SWEEP COMPLETE')
         
         # Get best run from sweep
@@ -389,7 +397,7 @@ class Simulation:
             print('SEARCH METHOD', search_method)
             if search_method[0] == 'wandb':
                 wandb.login()
-                best_model, best_val_score = self.run_innercv_wandb(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=2)
+                best_model, best_val_score = self.run_innercv_wandb(train_indices, test_indices, train_network_dict, outer_fold_idx=i, search_method=search_method, n_iter=2)
             else: # search_method options: random, grid, bayes
                 best_model, best_val_score = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
 
