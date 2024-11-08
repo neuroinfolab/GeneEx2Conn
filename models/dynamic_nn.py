@@ -165,7 +165,7 @@ class DynamicNN(nn.Module):
 
     def fit(self, X, y, epochs=None, verbose=True):
         epochs = self.epochs # Use class epochs if not specified
-        print('NUM EPOCHS')
+        print('NUM EPOCHS', epochs)
         
         train_loader = self.create_data_loader(X, y, batch_size=self.batch_size, shuffle=False)
         train_losses = []
