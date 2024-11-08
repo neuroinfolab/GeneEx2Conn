@@ -404,6 +404,7 @@ class Simulation:
                     'final_train_metrics': train_metrics,
                     'final_test_metrics': test_metrics,
                     'final_train_loss': test_results['final_train_loss'],
+                    'final_train_losses': test_results['train_losses'],
                     'best_val_loss': best_val_score
                 })
 
