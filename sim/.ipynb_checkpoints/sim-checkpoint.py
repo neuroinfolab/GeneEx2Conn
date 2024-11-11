@@ -69,7 +69,7 @@ from skopt.plots import plot_objective, plot_histogram
 
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, summary_measure=None, euclidean=False, structural=False, resolution=1.0,random_seed=42,
-                 use_shared_regions=False, include_conn_feats=False, test_shared_regions=False, connectome_target='FC'):        
+                 use_shared_regions=False, include_conn_feats=False, test_shared_regions=False, connectome_target='FC', save_model_json=False):        
         """
         Initialization of simulation parameters
         """
@@ -87,6 +87,7 @@ class Simulation:
         self.include_conn_feats = include_conn_feats
         self.test_shared_regions = test_shared_regions
         self.connectome_target = connectome_target.upper()
+        self.save_model_json = save_model_json
         self.results = []
 
     
@@ -100,6 +101,7 @@ class Simulation:
         self.X = load_transcriptome()
         self.Y_fc = load_connectome(measure='FC')
         self.Y_sc = load_connectome(measure='SC')
+        self.Y_sc_spectral = load_connectome(measure='SC', spectral=True)
         self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
         self.X_pca = load_transcriptome(run_PCA=True)
         self.coords = load_coords()
@@ -125,6 +127,7 @@ class Simulation:
                         'transcriptomePCA': self.X_pca,
                         'functional':self.Y, 
                         'structural':self.Y_sc, 
+                        'structural_spectral':self.Y_sc_spectral,
                         'euclidean':self.coords}
 
         X = []
@@ -153,7 +156,7 @@ class Simulation:
                           kron_input_dim = self.PC_dim)
 
                         
-    def run_innercv_wandb(self, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('wandb', 'mse'), n_iter=100):
+    def run_innercv_wandb(self, X_train, Y_train, X_test, Y_test,train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('wandb', 'mse'), n_iter=100):
         """Inner cross-validation with W&B support for neural networks"""
         # Create inner CV object for X_train and Y_train
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
@@ -197,21 +200,19 @@ class Simulation:
         
         device = torch.device("cuda")
         
-        config_counter = 1
-
         def train_sweep(config=None):
-            global config_counter  # Access the global counter
-            print(f"Starting sweep for configuration {config_counter}")
-            
+            print(f"Starting sweep for configuration")
+            # placeholder unique identifier for each run
+            random_run_id = random.randint(1, 1000)
+
             # Initialize a new run to log summary metrics, or log directly in the sweep context if preferred
             run = wandb.init(
                 project="gx2conn_dynamicNN",
-                name=f"fold_{outer_fold_idx}_summary",
+                name=f"fold{outer_fold_idx}_run{random_run_id}_train_summary",
                 group=f"sweep_{sweep_id}",
-                tags=["cross_validation", f"fold_{outer_fold_idx}", f"config{config_counter}"], 
+                tags=["cross_validation", f"fold{outer_fold_idx}"],
                 reinit=True
             )
-            config_counter += 1
 
             sweep_config = wandb.config # need to check if this will yield same config for each iter of the loop
             
@@ -234,7 +235,7 @@ class Simulation:
                 # Log losses per epoch within each fold
                 for epoch, (train_loss, val_loss) in enumerate(zip(fold_results['train_losses'], fold_results['val_losses'])):
                     print('epoch', epoch)
-                    wandb.log({'inner fold': fold_idx, f'inner_fold{fold_idx}_epoch': epoch, f'inner_fold{fold_idx}_train_loss': train_loss, f'inner_fold{fold_idx}_val_loss': val_loss})
+                    wandb.log({'inner fold': fold_idx, f'innerfold{fold_idx}_epoch': epoch, f'innerfold{fold_idx}_train_loss': train_loss, f'innerfold{fold_idx}_val_loss': val_loss})
 
                 train_loss = fold_results['final_train_loss']
                 val_loss = fold_results['final_val_loss']
@@ -265,7 +266,7 @@ class Simulation:
         print('n_iter', n_iter)
         wandb.agent(sweep_id, function=train_sweep, count=n_iter) # run train_sweep n_iter times with different hyperparameter configs each time
         print('SWEEP COMPLETE')
-        
+
         # Get best run from sweep
         api = wandb.Api()
         sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn_dynamicNN/{sweep_id}") 
@@ -275,16 +276,17 @@ class Simulation:
         print('best val loss', best_val_loss)
         print('best run config', best_config)
         
-        # Initialize final model with best config
-        best_model = DynamicNN(input_dim=best_config['input_dim'], 
-                               hidden_dims=best_config['hidden_dims'],
-                               batch_size=best_config['batch_size'],
-                               epochs=best_config['epochs'],
-                               dropout_rate=best_config['dropout_rate'],
-                               learning_rate=best_config['learning_rate'],
-                               weight_decay=best_config['weight_decay']).to(device)
+        # Initialize and train the final model using the best configuration
+        best_model = DynamicNN(
+            input_dim=best_config['input_dim'], 
+            hidden_dims=best_config['hidden_dims'],
+            batch_size=best_config['batch_size'],
+            epochs=best_config['epochs'],
+            dropout_rate=best_config['dropout_rate'],
+            learning_rate=best_config['learning_rate'],
+            weight_decay=best_config['weight_decay']
+        ).to(device)
         
-        wandb.finish()
         return best_model, best_val_loss
 
 
@@ -335,9 +337,9 @@ class Simulation:
         print("Best Parameters: ", param_search.best_params_)
         print("Best Cross-Validation Score: ", param_search.best_score_)
         
-        if search_type == 'bayes':
-            _ = plot_objective(param_search.optimizer_results_[0], size=5)
-            plt.show()
+        # if search_type == 'bayes':
+        #     _ = plot_objective(param_search.optimizer_results_[0], size=5)
+        #     plt.show()
         
         best_model = model.get_model()
         best_model.set_params(**param_search.best_params_)
@@ -364,40 +366,81 @@ class Simulation:
             network_dict = self.cv_obj.networks
             train_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
 
-            # Step 5: Inner CV on training data
-            print('SEARCH METHOD', search_method)
-            if search_method[0] == 'wandb':
-                wandb.login()
-                best_model, best_val_score = self.run_innercv_wandb(train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method, n_iter=3)
-            else: # search_method options: random, grid, bayes
-                best_model, best_val_score = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
-
             # convert to cupy if necessary
             if self.gpu_acceleration:
                 X_train = cp.array(X_train)
                 Y_train = cp.array(Y_train)
                 X_test = cp.array(X_test)
                 Y_test = cp.array(Y_test)
-            
-            # Step 6: Retrain the best parameter model on training data and test on testing data
-            best_model.fit(X_train, Y_train)  
-            # Might want to add some more wandb logging here...
 
-            evaluator = ModelEvaluator(best_model, X_train, Y_train, X_test, Y_test, [self.use_shared_regions, self.include_conn_feats, self.test_shared_regions])
+            # Step 5: Inner CV on training data
+            print('SEARCH METHOD', search_method)
+            if search_method[0] == 'wandb':
+                wandb.login()
+                best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method, n_iter=3)
+                
+                # teardown and login again to clear environment variables so the test acc can be logged
+                wandb.teardown()
+                wandb.login()
+
+                # Train on full training data
+                test_results = best_model.fit(X_train, Y_train)
+
+                # Evaluate on the test set
+                evaluator = ModelEvaluator(
+                    best_model, X_train, Y_train, X_test, Y_test,
+                    [self.use_shared_regions, self.include_conn_feats, self.test_shared_regions]
+                )
+                train_metrics = evaluator.get_train_metrics()
+                test_metrics = evaluator.get_test_metrics()
+
+                # Initialize a new, standalone W&B run for final evaluation results
+                final_eval_run = wandb.init(
+                    project="gx2conn_dynamicNN",
+                    name=f"final_evaluation_outerfold_{fold_idx}",
+                    tags=["final_evaluation", f"outerfold_{fold_idx}", "test_metrics"],
+                    reinit=True
+                )
+
+                # Log final evaluation metrics
+                wandb.log({
+                    'final_train_metrics': train_metrics,
+                    'final_test_metrics': test_metrics,
+                    'final_train_loss': test_results['final_train_loss'],
+                    'final_train_losses': test_results['train_losses'],
+                    'best_val_loss': best_val_score
+                })
+
+                # Close the final evaluation run
+                final_eval_run.finish()
+
+                print("Final evaluation metrics logged successfully.")
+                wandb.finish()
+            else: # search_method options: random, grid, bayes
+                best_model, best_val_score = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
+
+                # Step 6: Retrain the best parameter model on training data and test on testing data
+                best_model.fit(X_train, Y_train)
+                evaluator = ModelEvaluator(best_model, X_train, Y_train, X_test, Y_test, [self.use_shared_regions, self.include_conn_feats, self.test_shared_regions])
             
-            train_metrics = evaluator.get_train_metrics()
-            test_metrics = evaluator.get_test_metrics()
+                train_metrics = evaluator.get_train_metrics()
+                test_metrics = evaluator.get_test_metrics()
 
             print("\nTrain Metrics:", train_metrics)
             print("Test Metrics:", test_metrics)
             print('BEST VAL SCORE', best_val_score)
             print('BEST MODEL PARAMS', best_model.get_params())
-            
+
+            model_json = None
+
             # Implement function to grab feature importances here - can do for ridge too
-            if self.model_type == 'pls': 
+            if self.model_type == 'pls':
                 feature_importances_ = best_model.x_weights_[:, 0]  # Weights for the first component
             elif self.model_type == 'xgboost': 
                 feature_importances_ = best_model.feature_importances_
+                if self.save_model_json:
+                    booster = best_model.get_booster()
+                    model_json = booster.save_raw("json").decode("utf-8")   # Save JSON as string in memory
             elif self.model_type == 'ridge': 
                 feature_importances_ = best_model.coef_
             else: 
@@ -410,7 +453,8 @@ class Simulation:
                 'test_metrics': test_metrics,
                 'y_true': Y_test.get() if self.gpu_acceleration else Y_test,
                 'y_pred': best_model.predict(X_test) if self.gpu_acceleration else best_model.predict(X_test), 
-                'feature_importances': feature_importances_
+                'feature_importances': feature_importances_,
+                'model_json': model_json
             })
 
             # Display CPU and RAM utilization 

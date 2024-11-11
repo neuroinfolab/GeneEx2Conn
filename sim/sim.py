@@ -439,7 +439,8 @@ class Simulation:
             elif self.model_type == 'xgboost': 
                 feature_importances_ = best_model.feature_importances_
                 if self.save_model_json:
-                    model_json = best_model.save_model(None)  # Returns model as JSON string
+                    booster = best_model.get_booster()
+                    model_json = booster.save_raw("json").decode("utf-8")   # Save JSON as string in memory
             elif self.model_type == 'ridge': 
                 feature_importances_ = best_model.coef_
             else: 

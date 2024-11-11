@@ -240,4 +240,5 @@ prefix: /ext3/miniconda3
       - Werkzeug==3.0.3
       - xarray==2024.10.0
       - xgboost==2.0.3
+      - shap==0.46.0
 prefix: /ext3/miniconda3
