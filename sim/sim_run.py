@@ -119,7 +119,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     return
 
 
-def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target='FC', summary_measure=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse')):
+def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target='FC', summary_measure=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse'), save_model_json=False):
     """
     Runs a single simulation for a given feature type and model configuration.
 
@@ -168,6 +168,9 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
     search_method : str, optional
         The hyperparameter search method to use. Options include: 'random', 'grid', 'bayes'. 
 
+    save_model_json : bool, optional
+        If True, the model JSON will be saved to disk. This is only applicable for XGBoost models.
+
     Returns:
     -------
     single_model_results : list
@@ -203,7 +206,8 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
                     predict_connectome_from_connectome=False,
                     include_conn_feats=False,
                     test_shared_regions=test_shared_regions,
-                    connectome_target=connectome_target, 
+                    connectome_target=connectome_target,
+                    save_model_json=save_model_json
                 )
     
     sim.run_sim(search_method)

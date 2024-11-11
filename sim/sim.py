@@ -69,7 +69,7 @@ from skopt.plots import plot_objective, plot_histogram
 
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, summary_measure=None, euclidean=False, structural=False, resolution=1.0,random_seed=42,
-                 use_shared_regions=False, include_conn_feats=False, test_shared_regions=False, connectome_target='FC'):        
+                 use_shared_regions=False, include_conn_feats=False, test_shared_regions=False, connectome_target='FC', save_model_json=False):        
         """
         Initialization of simulation parameters
         """
@@ -87,6 +87,7 @@ class Simulation:
         self.include_conn_feats = include_conn_feats
         self.test_shared_regions = test_shared_regions
         self.connectome_target = connectome_target.upper()
+        self.save_model_json = save_model_json
         self.results = []
 
     
@@ -429,12 +430,16 @@ class Simulation:
             print("Test Metrics:", test_metrics)
             print('BEST VAL SCORE', best_val_score)
             print('BEST MODEL PARAMS', best_model.get_params())
-            
+
+            model_json = None
+
             # Implement function to grab feature importances here - can do for ridge too
             if self.model_type == 'pls':
                 feature_importances_ = best_model.x_weights_[:, 0]  # Weights for the first component
             elif self.model_type == 'xgboost': 
                 feature_importances_ = best_model.feature_importances_
+                if self.save_model_json:
+                    model_json = best_model.save_model(None)  # Returns model as JSON string
             elif self.model_type == 'ridge': 
                 feature_importances_ = best_model.coef_
             else: 
@@ -447,7 +452,8 @@ class Simulation:
                 'test_metrics': test_metrics,
                 'y_true': Y_test.get() if self.gpu_acceleration else Y_test,
                 'y_pred': best_model.predict(X_test) if self.gpu_acceleration else best_model.predict(X_test), 
-                'feature_importances': feature_importances_
+                'feature_importances': feature_importances_,
+                'model_json': model_json
             })
 
             # Display CPU and RAM utilization 
