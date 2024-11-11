@@ -100,6 +100,7 @@ class Simulation:
         self.X = load_transcriptome()
         self.Y_fc = load_connectome(measure='FC')
         self.Y_sc = load_connectome(measure='SC')
+        self.Y_sc_spectral = load_connectome(measure='SC', spectral=True)
         self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
         self.X_pca = load_transcriptome(run_PCA=True)
         self.coords = load_coords()
@@ -125,6 +126,7 @@ class Simulation:
                         'transcriptomePCA': self.X_pca,
                         'functional':self.Y, 
                         'structural':self.Y_sc, 
+                        'structural_spectral':self.Y_sc_spectral,
                         'euclidean':self.coords}
 
         X = []
@@ -334,9 +336,9 @@ class Simulation:
         print("Best Parameters: ", param_search.best_params_)
         print("Best Cross-Validation Score: ", param_search.best_score_)
         
-        if search_type == 'bayes':
-            _ = plot_objective(param_search.optimizer_results_[0], size=5)
-            plt.show()
+        # if search_type == 'bayes':
+        #     _ = plot_objective(param_search.optimizer_results_[0], size=5)
+        #     plt.show()
         
         best_model = model.get_model()
         best_model.set_params(**param_search.best_params_)
@@ -429,7 +431,7 @@ class Simulation:
             print('BEST MODEL PARAMS', best_model.get_params())
             
             # Implement function to grab feature importances here - can do for ridge too
-            if self.model_type == 'pls': 
+            if self.model_type == 'pls':
                 feature_importances_ = best_model.x_weights_[:, 0]  # Weights for the first component
             elif self.model_type == 'xgboost': 
                 feature_importances_ = best_model.feature_importances_

@@ -1,6 +1,8 @@
 # Gene2Conn/data/data_load.py
 
 from imports import *
+from scipy.sparse.csgraph import laplacian
+from scipy.linalg import eig
 
 def load_transcriptome(parcellation='schaefer_100', stability = '0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False):
     '''
@@ -64,7 +66,7 @@ def load_transcriptome(parcellation='schaefer_100', stability = '0.2', dataset='
             ahba_in_utsw = pickle.load(f)
         return np.array(ahba_in_utsw)
 
-def load_connectome(parcellation='schaefer_100', dataset='AHBA', omit_subcortical=False, measure='FC'):
+def load_connectome(parcellation='schaefer_100', dataset='AHBA', omit_subcortical=False, measure='FC', spectral=False):
     # measure can be 'FC', 'SC'
     relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)        
 
@@ -77,7 +79,20 @@ def load_connectome(parcellation='schaefer_100', dataset='AHBA', omit_subcortica
         elif measure == 'SC': 
             sc_combined_mat_schaef_100, sc_combined_labels_schaef_100 = load_sc_as_one(parcellation='schaefer_100')
             if omit_subcortical: 
-                sc_combined_mat_schaef_100 = sc_combined_mat_schaef_100[:100, :100] 
+                sc_combined_mat_schaef_100 = sc_combined_mat_schaef_100[:100, :100]
+
+            if spectral:
+                # Step 1: Compute the normalized Laplacian
+                L = laplacian(sc_combined_mat_schaef_100, normed=True)
+
+                # Step 2: Perform eigendecomposition
+                eigenvalues, eigenvectors = eig(L)
+                eigenvalues = np.sort(np.real(eigenvalues))  # Sort eigenvalues in ascending order
+
+                k = 10  # Try 3, 10, 20, 40 dimensions for embedding
+                embedding = eigenvectors[:, 1:k+1]  # Skip the first eigenvector if it's the zero eigenvalue
+                sc_combined_mat_schaef_100 = embedding
+                
             return sc_combined_mat_schaef_100
             
     elif dataset == 'GTEx': 
