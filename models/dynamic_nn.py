@@ -9,7 +9,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from torch.optim import Adam
 
 class DynamicNN(nn.Module):
-    def __init__(self, input_dim, hidden_dims=[64, 32], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0, batch_size=64, epochs=100):
+    def __init__(self, input_dim, hidden_dims=[64, 32], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0, batch_size=64, symmetry_weight=0.1, epochs=100):
         super(DynamicNN, self).__init__()
         
         # Model hyperparameters
@@ -17,6 +17,7 @@ class DynamicNN(nn.Module):
         self.weight_decay = weight_decay
         self.batch_size = batch_size
         self.epochs = epochs
+        self.symmetry_weight = symmetry_weight
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Build network layers dynamically
@@ -49,12 +50,8 @@ class DynamicNN(nn.Module):
     def symmetry_loss(self, predictions):
         """
         Compute symmetry loss for consecutive pairs in the batch.
-        
-        Args:
-            predictions (tensor): Predicted values for the batch.
-        
-        Returns:
-            symmetry_loss (tensor): Calculated symmetry loss.
+        Args: predictions (tensor): Predicted values for the batch.
+        Returns: symmetry_loss (tensor): Calculated symmetry loss.
         """
         # Split predictions into consecutive pairs (i, j) and (j, i)
         predictions_i_j = predictions[::2]
@@ -95,7 +92,7 @@ class DynamicNN(nn.Module):
                 with torch.no_grad():
                     for batch_X, batch_y in val_loader:
                         predictions = self(batch_X)
-                        val_loss = self.loss_fn(predictions, batch_y)
+                        val_loss = self.criterion(predictions, batch_y)
                         total_val_loss += val_loss.item()
                 average_val_loss = total_val_loss / len(val_loader)
                 train_history["val_loss"].append(average_val_loss)

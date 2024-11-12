@@ -1,0 +1,24 @@
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+parameters:
+  hidden_dims:
+    values:
+      - [64, 32]
+      - [128, 64]
+      - [256, 128, 64]
+  learning_rate:
+    values: [0.0001, 0.001, 0.003, 0.01, 0.03]
+  batch_size:
+    values: [16, 32, 64, 128]
+  dropout_rate:
+    values: [00, 0.1, 0.2, 0.3, 0.4, 0.5]
+  weight_decay:
+    values: [0.00001, 0.00003, 0.0001, 0.0003, 0.001, 0]
+  input_dim:
+    value: !!int 0  # Placeholder, replace with actual input_dim in code
+  symmetry_weight:
+    values: [0.0, 0.1, 0.2, 0.3, 0.4]
+  epochs:
+    values: [100, 200]

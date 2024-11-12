@@ -60,11 +60,12 @@ importlib.reload(models.metrics.eval)
 
 # sim utility functions
 import sim.sim_utils
-from sim.sim_utils import bayes_search_init, grid_search_init, random_search_init, drop_test_network, find_best_params
+from sim.sim_utils import bayes_search_init, grid_search_init, random_search_init, drop_test_network, find_best_params, load_sweep_config
 from sim.sim_utils import bytes2human, print_system_usage
 importlib.reload(sim.sim_utils)
 
 from skopt.plots import plot_objective, plot_histogram
+import yaml
 
 
 class Simulation:
@@ -162,40 +163,18 @@ class Simulation:
         # Create inner CV object for X_train and Y_train
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
         
-        # Get all inner fold splits
-        if self.predict_connectome_from_connectome:
-            inner_fold_splits = process_cv_splits_conn_only_model(
-                self.Y, self.Y, 
-                inner_cv_obj,
-                self.use_shared_regions,
-                self.test_shared_regions
-            )
-        else:
-            inner_fold_splits = process_cv_splits(
-                self.X, self.Y, 
-                inner_cv_obj,
-                self.use_shared_regions,
-                self.test_shared_regions,
-                struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
-                kron=(True if self.summary_measure == 'kronecker' else False),
-                kron_input_dim=self.PC_dim
-            )
+        inner_fold_splits = process_cv_splits(
+            self.X, self.Y, 
+            inner_cv_obj,
+            self.use_shared_regions,
+            self.test_shared_regions,
+            struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
+            kron=(True if self.summary_measure == 'kronecker' else False),
+            kron_input_dim=self.PC_dim
+        )
 
-        input_dim = inner_fold_splits[0][0].shape[1]
-
-        sweep_config = {
-        'method': 'random',
-        'metric': {'name': 'mean_val_loss', 'goal': 'minimize'},
-        'parameters': {
-            'hidden_dims': {'values': [[64, 32], [128, 64], [256, 128, 64]]},
-            'learning_rate': {'distribution': 'log_uniform_values', 'min': 1e-4, 'max': 1e-2},
-            'batch_size': {'distribution': 'q_log_uniform_values', 'q': 8, 'min': 32, 'max': 256},
-            'dropout_rate': {'distribution': 'uniform', 'min': 0.1, 'max': 0.5},
-            'weight_decay': {'distribution': 'log_uniform_values', 'min': 1e-5, 'max': 1e-3},
-            'input_dim': {'value': input_dim},
-            'epochs': {'value': 10}
-            }
-        }
+        sweep_config_path = os.path.join(os.getcwd(), 'models', 'dynamic_nn_sweep_config.yml')
+        sweep_config = load_sweep_config(sweep_config_path, input_dim=inner_fold_splits[0][0].shape[1]) # take num features from a fold
         
         device = torch.device("cuda")
         
@@ -204,16 +183,22 @@ class Simulation:
             # placeholder unique identifier for each run
             random_run_id = random.randint(1, 1000)
 
+            # Create descriptive run name based on features, target and CV split type
+            feature_str = '_'.join(self.feature_type)  # Join feature types with underscore
+            target_str = self.connectome_target
+            cv_type = self.cv_type
+            run_name = f"{feature_str}_{target_str}_{cv_type}_fold{outer_fold_idx}_run{random_run_id}_train_summary"
+
             # Initialize a new run to log summary metrics, or log directly in the sweep context if preferred
             run = wandb.init(
                 project="gx2conn_dynamicNN",
-                name=f"fold{outer_fold_idx}_run{random_run_id}_train_summary",
+                name=run_name,
                 group=f"sweep_{sweep_id}",
                 tags=["cross_validation", f"fold{outer_fold_idx}"],
                 reinit=True
             )
 
-            sweep_config = wandb.config # need to check if this will yield same config for each iter of the loop
+            sweep_config = wandb.config
             
             inner_fold_final_train_losses = []
             inner_fold_final_val_losses = []
@@ -223,21 +208,30 @@ class Simulation:
                 print(f'Processing inner fold {fold_idx}')
 
                 # Model initialization per inner fold
-                model = DynamicNN(input_dim=sweep_config['input_dim'], hidden_dims=sweep_config['hidden_dims']).to(device)
+                model = DynamicNN(
+                    input_dim=sweep_config['input_dim'],
+                    hidden_dims=sweep_config['hidden_dims'],
+                    learning_rate=sweep_config['learning_rate'],
+                    batch_size=sweep_config['batch_size'], 
+                    dropout_rate=sweep_config['dropout_rate'],
+                    weight_decay=sweep_config['weight_decay'],
+                    symmetry_weight= 0.1,  # sweep_config['symmetry_weight'],
+                    epochs= 10 # sweep_config['epochs']
+                ).to(device)
                 
-                train_loader = model._create_data_loader(X_train, y_train, batch_size=sweep_config['batch_size'], shuffle=False)
-                val_loader = model._create_data_loader(X_val, y_val, batch_size=sweep_config['batch_size'], shuffle=False)
+                train_loader = model._create_data_loader(X_train, y_train, shuffle=False)
+                val_loader = model._create_data_loader(X_val, y_val, shuffle=False)
         
                 # Train model on this inner fold
-                fold_results = model.train_model(train_loader, val_loader, epochs=sweep_config['epochs'], mode='learn', verbose=True)
+                train_history = model.train_model(train_loader, val_loader, verbose=True)
                 
                 # Log losses per epoch within each fold
-                for epoch, (train_loss, val_loss) in enumerate(zip(fold_results['train_losses'], fold_results['val_losses'])):
+                for epoch, (train_loss, val_loss) in enumerate(zip(train_history['train_loss'], train_history['val_loss'])):
                     print('epoch', epoch)
                     wandb.log({'inner fold': fold_idx, f'innerfold{fold_idx}_epoch': epoch, f'innerfold{fold_idx}_train_loss': train_loss, f'innerfold{fold_idx}_val_loss': val_loss})
 
-                train_loss = fold_results['final_train_loss']
-                val_loss = fold_results['final_val_loss']
+                train_loss = train_history['train_loss'][-1]
+                val_loss = train_history['val_loss'][-1]
                 print('inner fold train loss', train_loss)
                 print('inner fold val loss', val_loss)
                 
@@ -277,13 +271,14 @@ class Simulation:
         
         # Initialize and train the final model using the best configuration
         best_model = DynamicNN(
-            input_dim=best_config['input_dim'], 
+            input_dim=best_config['input_dim'],
             hidden_dims=best_config['hidden_dims'],
-            batch_size=best_config['batch_size'],
-            epochs=best_config['epochs'],
-            dropout_rate=best_config['dropout_rate'],
             learning_rate=best_config['learning_rate'],
-            weight_decay=best_config['weight_decay']
+            batch_size=best_config['batch_size'],
+            dropout_rate=best_config['dropout_rate'],
+            weight_decay=best_config['weight_decay'],
+            symmetry_weight=best_config['symmetry_weight'],
+            epochs=best_config['epochs']
         ).to(device)
         
         return best_model, best_val_loss
@@ -383,7 +378,7 @@ class Simulation:
                 wandb.login()
 
                 # Train on full training data
-                test_results = best_model.fit(X_train, Y_train)
+                train_history = best_model.fit(X_train, Y_train)
 
                 # Evaluate on the test set
                 evaluator = ModelEvaluator(
@@ -393,10 +388,17 @@ class Simulation:
                 train_metrics = evaluator.get_train_metrics()
                 test_metrics = evaluator.get_test_metrics()
 
+                # Create descriptive run name based on features, target and CV split type
+                feature_str = '_'.join(self.feature_type)  # Join feature types with underscore
+                target_str = self.connectome_target
+                cv_type = self.cv_type
+                run_name = f"{feature_str}_{target_str}_{cv_type}_fold{fold_idx}_final_eval"
+
+                # Log final evaluation metrics
                 # Initialize a new, standalone W&B run for final evaluation results
                 final_eval_run = wandb.init(
                     project="gx2conn_dynamicNN",
-                    name=f"final_evaluation_outerfold_{fold_idx}",
+                    name=run_name,
                     tags=["final_evaluation", f"outerfold_{fold_idx}", "test_metrics"],
                     reinit=True
                 )
@@ -405,14 +407,12 @@ class Simulation:
                 wandb.log({
                     'final_train_metrics': train_metrics,
                     'final_test_metrics': test_metrics,
-                    'final_train_loss': test_results['final_train_loss'],
-                    'final_train_losses': test_results['train_losses'],
+                    'final_train_loss': train_history['train_loss'][-1],
+                    'final_train_losses': train_history['train_loss'],
                     'best_val_loss': best_val_score
                 })
 
-                # Close the final evaluation run
                 final_eval_run.finish()
-
                 print("Final evaluation metrics logged successfully.")
                 wandb.finish()
             else: # search_method options: random, grid, bayes

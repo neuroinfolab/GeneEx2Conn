@@ -54,6 +54,7 @@ from models.metrics.eval import (
 )
 import models.metrics.eval
 importlib.reload(models.metrics.eval)
+import yaml
 
 def bytes2human(n):
     """
@@ -79,6 +80,15 @@ def print_system_usage():
     print(f"Available RAM: {bytes2human(memory_info.available)}")
     print(f"Total RAM: {bytes2human(memory_info.total)}")
 
+
+def load_sweep_config(file_path, input_dim):
+    """
+    Load a sweep config file and update the input_dim parameter.
+    """
+    with open(file_path, 'r') as file:
+        config = yaml.safe_load(file)
+    config['parameters']['input_dim']['value'] = input_dim
+    return config
 
 def drop_test_network(cv_type, network_dict, value, idx):
         """
