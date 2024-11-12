@@ -77,6 +77,10 @@ import wandb
 # cuda and GPU
 import cupy as cp
 import torch
+import torch.nn as nn
+from torch.utils.data import TensorDataset, DataLoader
+from torch.optim import Adam
+import torchmetrics
 import GPUtil
 
 # gene expression

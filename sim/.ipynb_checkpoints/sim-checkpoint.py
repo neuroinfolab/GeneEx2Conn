@@ -157,7 +157,7 @@ class Simulation:
                           kron_input_dim = self.PC_dim)
 
                         
-    def run_innercv_wandb(self, X_train, Y_train, X_test, Y_test,train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('wandb', 'mse'), n_iter=100):
+    def run_innercv_wandb(self, X_train, Y_train, X_test, Y_test,train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('wandb', 'mse'), n_iter=10):
         """Inner cross-validation with W&B support for neural networks"""
         
         # Create inner CV object for X_train and Y_train
@@ -200,9 +200,8 @@ class Simulation:
 
             sweep_config = wandb.config
             
-            inner_fold_final_train_losses = []
-            inner_fold_final_val_losses = []
-            
+            inner_fold_final_train_losses, inner_fold_final_val_losses, inner_fold_final_train_pearsons, inner_fold_final_val_pearsons = [], [], [], []
+
             # Loop through all inner CV splits
             for fold_idx, (X_train, X_val, y_train, y_val) in enumerate(inner_fold_splits):
                 print(f'Processing inner fold {fold_idx}')
@@ -215,8 +214,8 @@ class Simulation:
                     batch_size=sweep_config['batch_size'], 
                     dropout_rate=sweep_config['dropout_rate'],
                     weight_decay=sweep_config['weight_decay'],
-                    symmetry_weight= 0.1,  # sweep_config['symmetry_weight'],
-                    epochs= 10 # sweep_config['epochs']
+                    symmetry_weight= sweep_config['symmetry_weight'], # 0.1, 
+                    epochs= sweep_config['epochs'] # 10 
                 ).to(device)
                 
                 train_loader = model._create_data_loader(X_train, y_train, shuffle=False)
@@ -225,28 +224,36 @@ class Simulation:
                 # Train model on this inner fold
                 train_history = model.train_model(train_loader, val_loader, verbose=True)
                 
-                # Log losses per epoch within each fold
-                for epoch, (train_loss, val_loss) in enumerate(zip(train_history['train_loss'], train_history['val_loss'])):
-                    print('epoch', epoch)
-                    wandb.log({'inner fold': fold_idx, f'innerfold{fold_idx}_epoch': epoch, f'innerfold{fold_idx}_train_loss': train_loss, f'innerfold{fold_idx}_val_loss': val_loss})
+                # Log losses and Pearson r per epoch within each fold
+                for epoch, (train_loss, val_loss, train_pearson_r, val_pearson_r) in enumerate(zip(train_history['train_loss'], train_history['val_loss'], train_history['train_pearson'], train_history['val_pearson'])):                   
+                    wandb.log({
+                        'inner fold': fold_idx, 
+                        f'innerfold{fold_idx}_epoch': epoch, 
+                        f'innerfold{fold_idx}_train_loss': train_loss, 
+                        f'innerfold{fold_idx}_val_loss': val_loss,
+                        f'innerfold{fold_idx}_train_pearson_r': train_pearson_r,
+                        f'innerfold{fold_idx}_val_pearson_r': val_pearson_r
+                    })
 
+                # values at end of training inner fold
                 train_loss = train_history['train_loss'][-1]
                 val_loss = train_history['val_loss'][-1]
-                print('inner fold train loss', train_loss)
-                print('inner fold val loss', val_loss)
+                train_pearson_r = train_history['train_pearson'][-1]
+                val_pearson_r = train_history['val_pearson'][-1]
+                print(f'inner fold metrics - train loss: {train_loss}, val loss: {val_loss}, train pearson r: {train_pearson_r}, val pearson r: {val_pearson_r}')
                 
                 inner_fold_final_train_losses.append(train_loss)
                 inner_fold_final_val_losses.append(val_loss)
+                inner_fold_final_train_pearsons.append(train_pearson_r)
+                inner_fold_final_val_pearsons.append(val_pearson_r) 
             
             # Calculate and log mean losses across all folds of the inner CV (this will be a run for one hyperparameter configuration over all inner folds)
             mean_train_loss = np.mean(inner_fold_final_train_losses)
             mean_val_loss = np.mean(inner_fold_final_val_losses)
-            wandb.log({'mean_train_loss': mean_train_loss, 'mean_val_loss': mean_val_loss})
-            print('Mean Train Loss:', mean_train_loss)
-            print('Mean Val Loss:', mean_val_loss)
-            
-            # this is the final relevant metric for the given sweep config
-            print(f"Configuration {config} - Mean Validation Loss: {mean_val_loss}")
+            mean_train_pearson = np.mean(inner_fold_final_train_pearsons)
+            mean_val_pearson = np.mean(inner_fold_final_val_pearsons)
+            wandb.log({'mean_train_loss': mean_train_loss, 'mean_val_loss': mean_val_loss, 'mean_train_pearson': mean_train_pearson, 'mean_val_pearson': mean_val_pearson})
+            print(f"Configuration {config} - Mean Train Loss: {mean_train_loss}, Mean Val Loss: {mean_val_loss}")
             
             run.finish()
             return mean_val_loss
@@ -371,14 +378,14 @@ class Simulation:
             print('SEARCH METHOD', search_method)
             if search_method[0] == 'wandb':
                 wandb.login()
-                best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method, n_iter=3)
+                best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method, n_iter=10)
                 
                 # Teardown and login again to clear environment variables so the test acc can be logged
                 wandb.teardown()
                 wandb.login()
 
                 # Train on full training data
-                train_history = best_model.fit(X_train, Y_train)
+                train_history = best_model.fit(X_train, Y_train, val_data=(X_test, Y_test)) # include test to track overfitting 
 
                 # Evaluate on the test set
                 evaluator = ModelEvaluator(
@@ -403,13 +410,22 @@ class Simulation:
                     reinit=True
                 )
 
+                for epoch, (train_loss, val_loss, train_pearson, val_pearson) in enumerate(zip(train_history['train_loss'], train_history['val_loss'], train_history['train_pearson'], train_history['val_pearson'])):
+                    wandb.log({
+                        'train_mse_loss': train_loss,
+                        'train_pearson': train_pearson,
+                        'test_mse_loss': val_loss,
+                        'test_pearson': val_pearson
+                    })
+                
                 # Log final evaluation metrics
                 wandb.log({
                     'final_train_metrics': train_metrics,
                     'final_test_metrics': test_metrics,
-                    'final_train_loss': train_history['train_loss'][-1],
-                    'final_train_losses': train_history['train_loss'],
-                    'best_val_loss': best_val_score
+                    'final_train_mse_loss': train_history['train_loss'][-1],
+                    'final_train_pearson': train_history['train_pearson'][-1],
+                    'best_val_loss': best_val_score,
+                    'config': best_model.get_params()
                 })
 
                 final_eval_run.finish()
