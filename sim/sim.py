@@ -68,7 +68,7 @@ from skopt.plots import plot_objective, plot_histogram
 
 
 class Simulation:
-    def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome, summary_measure=None, euclidean=False, structural=False, resolution=1.0,random_seed=42,
+    def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome=False, summary_measure=None, euclidean=False, structural=False, resolution=1.0,random_seed=42,
                  use_shared_regions=False, include_conn_feats=False, test_shared_regions=False, connectome_target='FC', save_model_json=False):        
         """
         Initialization of simulation parameters
@@ -158,11 +158,10 @@ class Simulation:
                         
     def run_innercv_wandb(self, X_train, Y_train, X_test, Y_test,train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('wandb', 'mse'), n_iter=100):
         """Inner cross-validation with W&B support for neural networks"""
+        
         # Create inner CV object for X_train and Y_train
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
-        #os.environ['WANDB_AGENT_DISABLE_FLAPPING'] = 'true'
-        #print('WANDB_AGENT_DISABLE_FLAPPING', os.environ['WANDB_AGENT_DISABLE_FLAPPING'])
-
+        
         # Get all inner fold splits
         if self.predict_connectome_from_connectome:
             inner_fold_splits = process_cv_splits_conn_only_model(
@@ -226,11 +225,11 @@ class Simulation:
                 # Model initialization per inner fold
                 model = DynamicNN(input_dim=sweep_config['input_dim'], hidden_dims=sweep_config['hidden_dims']).to(device)
                 
-                train_loader = model.create_data_loader(X_train, y_train, batch_size=sweep_config['batch_size'], shuffle=False)
-                val_loader = model.create_data_loader(X_val, y_val, batch_size=sweep_config['batch_size'], shuffle=False)
+                train_loader = model._create_data_loader(X_train, y_train, batch_size=sweep_config['batch_size'], shuffle=False)
+                val_loader = model._create_data_loader(X_val, y_val, batch_size=sweep_config['batch_size'], shuffle=False)
         
                 # Train model on this inner fold
-                fold_results = model.train_fold(train_loader, val_loader, epochs=sweep_config['epochs'], mode='learn', verbose=True)
+                fold_results = model.train_model(train_loader, val_loader, epochs=sweep_config['epochs'], mode='learn', verbose=True)
                 
                 # Log losses per epoch within each fold
                 for epoch, (train_loss, val_loss) in enumerate(zip(fold_results['train_losses'], fold_results['val_losses'])):
@@ -379,7 +378,7 @@ class Simulation:
                 wandb.login()
                 best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method, n_iter=3)
                 
-                # teardown and login again to clear environment variables so the test acc can be logged
+                # Teardown and login again to clear environment variables so the test acc can be logged
                 wandb.teardown()
                 wandb.login()
 
