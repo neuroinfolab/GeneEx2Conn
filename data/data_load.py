@@ -87,7 +87,7 @@ def load_connectome(parcellation='schaefer_100', dataset='AHBA', omit_subcortica
                 # Step 2: Perform eigendecomposition
                 eigenvalues, eigenvectors = eig(L)
                 eigenvalues = np.sort(np.real(eigenvalues))  # Sort eigenvalues in ascending order
-                k = 20  # Try 3, 10, 20, 40 dimensions for embedding
+                k = 100  # Try 3, 5, 10, 20, 40 dimensions for embedding
                 embedding = eigenvectors[:, 1:k+1]  # Skip the first eigenvector if it's the zero eigenvalue
                 sc_combined_mat_schaef_100 = embedding
                 

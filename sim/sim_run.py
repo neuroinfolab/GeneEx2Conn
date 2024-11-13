@@ -82,8 +82,7 @@ def open_pickled_results(file, added_dir='', backup=False): # Specify the path t
     
     return pickle_results
     
-
-def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed, connectome_target='FC'): 
+def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed, connectome_target='FC', summary_measure=None): 
     """
     Function to save all sim results to a pickle file
     """
@@ -91,7 +90,10 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     sim_results_file_path = os.getcwd() + '/sim/sim_results/'
     
     # Build filename components
-    results_file_str = f"{str(feature_type)}_{connectome_target}_{model_type}_{cv_type}"    
+    results_file_str = f"{str(feature_type)}"
+    if summary_measure:
+        results_file_str += f"_{summary_measure}"
+    results_file_str += f"_{connectome_target}_{model_type}_{cv_type}"    
     
     if cv_type == "community":
         results_file_str += str(resolution)
@@ -215,7 +217,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
     
     # Save sim data
     if save_sim: 
-        save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed, connectome_target)
+        save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed, connectome_target, summary_measure)
     
     return single_model_results
 

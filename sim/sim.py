@@ -132,8 +132,12 @@ class Simulation:
                         'euclidean':self.coords}
 
         X = []
+
         for feature in self.feature_type:
-            feature_X = feature_dict[feature]
+            if feature == 'structural_spectral':
+                feature_X = self.Y_sc_spectral[:, :int(self.summary_measure)]
+            else:
+                feature_X = feature_dict[feature]
             X.append(feature_X)
         
         X = np.hstack(X)
@@ -144,7 +148,7 @@ class Simulation:
             self.PC_dim = int(feature_X.shape[1])
         else:
             self.PC_dim = None # save dimensionality for kronecker for region-wise expansion
-        
+ 
         if self.summary_measure == 'kronecker':
             kron = True
 
