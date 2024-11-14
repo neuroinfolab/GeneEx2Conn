@@ -93,6 +93,8 @@ from inmoose.pycombat import pycombat_norm, pycombat_seq
 # network analysis
 import networkx as nx
 import matplotlib.patches as patches
+from scipy.sparse.csgraph import laplacian
+from scipy.linalg import eig
 
 # optimization
 import scipy.optimize as optimize

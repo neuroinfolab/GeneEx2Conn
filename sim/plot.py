@@ -191,3 +191,118 @@ def plot_fold_performance(feature_type, cv_type, model_type, metric='pearson_cor
     print(f"Average Train {metric}: {np.mean(train_scores):.3f} ± {np.std(train_scores):.3f}")
     print(f"Average Test {metric}: {np.mean(test_scores):.3f} ± {np.std(test_scores):.3f}")
 
+
+def plot_summary_measure_comparison(feature_type, cv_type, model_type, summary_measures, metric='pearson_corr',
+                                  connectome_target='FC', search_method=('bayes', 'mse'), random_seed=42, 
+                                  use_shared_regions=False, test_shared_regions=False, backup=False, resolution=None):
+    """
+    Creates a plot comparing performance across different summary measures.
+    
+    Parameters:
+    -----------
+    feature_type : str or list
+        Type of features used in simulations (e.g., 'structural_spectralL')
+    cv_type : str
+        Type of cross-validation used (e.g., 'random', 'community')
+    model_type : str
+        Type of model used (e.g., 'xgboost', 'ridge')
+    summary_measures : list
+        List of summary measures to compare (e.g., ['3', '5', '10'])
+    metric : str, optional
+        Metric to plot ('pearson_corr', 'mse', 'r2', etc.)
+    connectome_target : str, optional
+        Target connectome type ('FC' or 'SC')
+    search_method : tuple, optional
+        Search method used ('bayes', 'grid', etc.) and optimization metric
+    random_seed : int, optional
+        Random seed used in simulations
+    use_shared_regions : bool, optional
+        Whether shared regions were used
+    test_shared_regions : bool, optional
+        Whether shared regions were tested
+    backup : bool, optional
+        Whether to load from backup directory
+    resolution : float, optional
+        Resolution parameter for community cross-validation
+    """
+    # Store results for each summary measure
+    train_means = []
+    train_stds = []
+    test_means = []
+    test_stds = []
+    
+    for summary_measure in summary_measures:
+        # Build filename based on parameters
+        results_file_str = f"{str(feature_type)}"
+        if summary_measure:
+            results_file_str += f"_{summary_measure}"
+        results_file_str += f"_{connectome_target}_{model_type}_{cv_type}"
+        if resolution is not None and cv_type == 'community':
+            results_file_str += str(resolution)
+        results_file_str += '_' + str(random_seed)
+        results_file_str += "_" + search_method[0] + "_" + search_method[1] + "_search"
+        
+        if use_shared_regions: 
+            results_file_str += "_useshared"
+            if test_shared_regions: 
+                results_file_str += "_testshared"
+            else: 
+                results_file_str += "_trainshared"        
+        
+        results_file_str = re.sub(r'[^\w\s_\-]', '', str(results_file_str))
+        
+        try:
+            # Load results using existing function
+            results = open_pickled_results(results_file_str + '.pickle', backup=backup)
+            
+            # Extract metrics for each fold
+            train_scores = []
+            test_scores = []
+            
+            for fold_results in results[0]:
+                train_scores.append(fold_results['train_metrics'][metric])
+                test_scores.append(fold_results['test_metrics'][metric])
+            
+            # Calculate mean and std
+            train_means.append(np.mean(train_scores))
+            train_stds.append(np.std(train_scores))
+            test_means.append(np.mean(test_scores))
+            test_stds.append(np.std(test_scores))
+            
+        except FileNotFoundError:
+            print(f"Results file not found for summary measure: {summary_measure}")
+            continue
+    
+    # Create plot
+    plt.figure(figsize=(10, 6))
+    x = np.arange(len(summary_measures))
+    width = 0.35
+    
+    plt.bar(x - width/2, train_means, width, label='Train', color='skyblue', 
+            yerr=train_stds, capsize=5)
+    plt.bar(x + width/2, test_means, width, label='Test', color='lightcoral',
+            yerr=test_stds, capsize=5)
+    
+    plt.xlabel('Number of Components')
+    plt.ylabel(metric.replace('_', ' ').title())
+    plt.title(f'Performance Comparison Across Different Numbers of Components\n{feature_type}')
+    plt.xticks(x, summary_measures)
+    plt.legend()
+    
+    # Add value labels on top of bars
+    for i, (train_mean, test_mean) in enumerate(zip(train_means, test_means)):
+        plt.text(i - width/2, train_mean, f'{train_mean:.3f}', 
+                ha='center', va='bottom')
+        plt.text(i + width/2, test_mean, f'{test_mean:.3f}',
+                ha='center', va='bottom')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Print summary statistics
+    print("\nSummary Statistics:")
+    for i, summary_measure in enumerate(summary_measures):
+        print(f"\nComponents: {summary_measure}")
+        print(f"Train {metric}: {train_means[i]:.3f} ± {train_stds[i]:.3f}")
+        print(f"Test {metric}: {test_means[i]:.3f} ± {test_stds[i]:.3f}")
+

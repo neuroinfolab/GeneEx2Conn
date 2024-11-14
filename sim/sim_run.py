@@ -91,8 +91,9 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     
     # Build filename components
     results_file_str = f"{str(feature_type)}"
-    if summary_measure:
-        results_file_str += f"_{summary_measure}"
+    if summary_measure is not None:
+        results_file_str += "_" + str(summary_measure)
+
     results_file_str += f"_{connectome_target}_{model_type}_{cv_type}"    
     
     if cv_type == "community":
@@ -108,7 +109,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
         else: 
             results_file_str += "_trainshared"        
 
-    results_file_str = re.sub(r'[^\w\s_]', '', str(results_file_str))
+    results_file_str = re.sub(r'[^\w\s_-]', '', str(results_file_str))
 
     results_file_path = os.path.join(str(sim_results_file_path), results_file_str)
     results_file_path_pickle = results_file_path + '.pickle'
@@ -134,7 +135,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
     ----------
     feature_type : str
         The type of feature used in the simulation. Options include: 
-        'transcriptome', 'transcriptomePCA', 'functional', 'structural', 'euclidean'.
+        'transcriptome', 'transcriptomePCA', 'functional', 'structural', 'structural_spectralL', 'structural_spectralA', 'euclidean'.
     
     cv_type : str
         The type of cross-validation method used (e.g., 'random', 'community').
@@ -150,8 +151,12 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
         Target connectome type to predict. Options are 'FC' (functional) or 'SC' (structural).
     
     summary_measure : str, optional
-        Summary measure used in the simulation. For example, 'kronecker' for Kronecker product measure or 'strength_and_corr' for structural summary measures.
-    
+        Summary measure used in the simulation.
+        For example:
+        - 'kronecker' for Kronecker product measure 
+        - 'strength_and_corr' for structural summary measures
+        - An integer value (e.g. '5', '10') specifying number of components to use from spectral embeddings
+        - A negative integer (e.g. '-5', '-10') to use last N components from spectral embeddings
     use_shared_regions : bool, optional
         Whether to include shared brain regions in the analysis. 
     
@@ -216,7 +221,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
     single_model_results.append(sim.results)
     
     # Save sim data
-    if save_sim: 
+    if save_sim:
         save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed, connectome_target, summary_measure)
     
     return single_model_results

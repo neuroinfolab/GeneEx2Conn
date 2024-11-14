@@ -106,14 +106,11 @@ class SchaeferCVSplit(BaseCrossValidator):
             if self.omit_subcortical and held_out_network == 'Subcortical':
                 continue 
             
-            print(held_out_network)
             # Combine all the training indices except for the held-out network
             train_indices = [index for network, indices in self.networks.items() if network != held_out_network for index in indices]
 
             # Append the training and testing indices for this fold to the list of folds
             network_folds.append((train_indices, test_indices))
-            
-            print(held_out_network)
 
         return network_folds
     

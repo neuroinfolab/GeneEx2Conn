@@ -101,9 +101,10 @@ class Simulation:
         omit_subcortical=False
         self.X = load_transcriptome()
         self.Y_fc = load_connectome(measure='FC')
-        self.Y_sc = load_connectome(measure='SC')
-        self.Y_sc_spectral = load_connectome(measure='SC', spectral=True)
+        self.Y_sc = load_connectome(measure='SC', spectral=None)
         self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
+        self.Y_sc_spectralL = load_connectome(measure='SC', spectral='L')
+        self.Y_sc_spectralA = load_connectome(measure='SC', spectral='A')
         self.X_pca = load_transcriptome(run_PCA=True)
         self.coords = load_coords()
     
@@ -117,7 +118,6 @@ class Simulation:
             self.cv_obj = SchaeferCVSplit()
         elif self.cv_type == 'community': # for comparability to SC as target the splits should be based on the functional connectome
             self.cv_obj = CommunityCVSplit(self.X, self.Y_fc, resolution=self.resolution, random_seed=self.random_seed) 
-
     
     def expand_data(self):
         """
@@ -128,14 +128,19 @@ class Simulation:
                         'transcriptomePCA': self.X_pca,
                         'functional':self.Y, 
                         'structural':self.Y_sc, 
-                        'structural_spectral':self.Y_sc_spectral,
+                        'structural_spectralL':self.Y_sc_spectralL,
+                        'structural_spectralA':self.Y_sc_spectralA,
                         'euclidean':self.coords}
 
         X = []
 
         for feature in self.feature_type:
-            if feature == 'structural_spectral':
-                feature_X = self.Y_sc_spectral[:, :int(self.summary_measure)]
+            if feature in ['structural_spectralL', 'structural_spectralA']:
+                feature_X = feature_dict[feature]
+                if int(self.summary_measure) < 0:
+                    feature_X = feature_X[:, int(self.summary_measure):] # Take columns from summary_measure to end
+                else:
+                    feature_X = feature_X[:, :int(self.summary_measure)]    # Take columns from start up to summary_measure
             else:
                 feature_X = feature_dict[feature]
             X.append(feature_X)

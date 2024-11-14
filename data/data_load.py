@@ -66,7 +66,7 @@ def load_transcriptome(parcellation='schaefer_100', stability = '0.2', dataset='
             ahba_in_utsw = pickle.load(f)
         return np.array(ahba_in_utsw)
 
-def load_connectome(parcellation='schaefer_100', dataset='AHBA', omit_subcortical=False, measure='FC', spectral=False):
+def load_connectome(parcellation='schaefer_100', dataset='AHBA', omit_subcortical=False, measure='FC', spectral=None):
     # measure can be 'FC', 'SC'
     relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)        
 
@@ -80,18 +80,27 @@ def load_connectome(parcellation='schaefer_100', dataset='AHBA', omit_subcortica
             sc_combined_mat_schaef_100, sc_combined_labels_schaef_100 = load_sc_as_one(parcellation='schaefer_100')
             if omit_subcortical: 
                 sc_combined_mat_schaef_100 = sc_combined_mat_schaef_100[:100, :100]
-
-            if spectral:
-                # Step 1: Compute the normalized Laplacian
+            if spectral == 'L':
+                print('computing eig of laplacian')
+                # Compute the normalized Laplacian and perform eigendecomposition
                 L = laplacian(sc_combined_mat_schaef_100, normed=True)
-                # Step 2: Perform eigendecomposition
                 eigenvalues, eigenvectors = eig(L)
                 eigenvalues = np.sort(np.real(eigenvalues))  # Sort eigenvalues in ascending order
-                k = 100  # Try 3, 5, 10, 20, 40 dimensions for embedding
+                k = int(L.shape[1]) - 1  # Try 3, 5, 10, 20, 40 dimensions for embedding
                 embedding = eigenvectors[:, 1:k+1]  # Skip the first eigenvector if it's the zero eigenvalue
                 sc_combined_mat_schaef_100 = embedding
-                
-            return sc_combined_mat_schaef_100
+                return sc_combined_mat_schaef_100
+            elif spectral == 'A':
+                print('computing eig of adjacency')
+                # Compute eigendecomposition of adjacency matrix
+                eigenvalues, eigenvectors = eig(sc_combined_mat_schaef_100)
+                eigenvalues = np.sort(np.real(eigenvalues))  # Sort eigenvalues in ascending order
+                k = int(sc_combined_mat_schaef_100.shape[1])  # Use full dimensionality
+                embedding = eigenvectors[:, :k]  # Take first k eigenvectors
+                sc_combined_mat_schaef_100 = embedding
+                return sc_combined_mat_schaef_100
+            else:
+                return sc_combined_mat_schaef_100
             
     elif dataset == 'GTEx': 
         gtex_connectome_path = relative_data_path + '/GeneEx2Conn_data/region_map_pickles/HCP_Connectome_GTEX_Regions.pkl'
