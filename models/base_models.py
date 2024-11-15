@@ -220,7 +220,7 @@ class RandomForestModel(BaseModel):
 class MLPModel(BaseEstimator, RegressorMixin):
     """Basic MLP model using PyTorch with support for bayesian hyperparameter tuning."""
     
-    def __init__(self, input_dim, output_dim=1, hidden_dims=None, dropout=0.0, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32,  max_grad_norm=1.0):
+    def __init__(self, input_dim, output_dim=1, hidden_dims=None, dropout=0.05, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32,  max_grad_norm=1.0):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
@@ -323,10 +323,10 @@ class MLPModel(BaseEstimator, RegressorMixin):
             # 'batch_size': [8, 64]
 
             # single run params for debugging
-            'l2_reg': [0], # [1e-3, 0]
+            'l2_reg': [1e-3, 0], # [1e-3, 0]
             'lr': [1e-3], #, 0.01, 0.03],
             'epochs': [200], #[50, 100, 300],
-            'batch_size': [32] # [32, 64]. has to be an even number, 32 works well with 1e_3 learning rate, no reg, dropout 0.2
+            'batch_size': [32, 64] # [32, 64]. has to be an even number, 32 works well with 1e_3 learning rate, no reg, dropout 0.2
         }
     
     def get_param_dist(self):
