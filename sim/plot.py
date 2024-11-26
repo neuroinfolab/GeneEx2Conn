@@ -306,3 +306,563 @@ def plot_summary_measure_comparison(feature_type, cv_type, model_type, summary_m
         print(f"Train {metric}: {train_means[i]:.3f} ± {train_stds[i]:.3f}")
         print(f"Test {metric}: {test_means[i]:.3f} ± {test_stds[i]:.3f}")
 
+
+def extract_simulation_metrics(base_path, subfolder, model_types, cv_types, 
+                             feature_types, summary_measures=None, resolutions=None, 
+                             random_seeds=None, connectome_target='FC', metric='pearson_corr',
+                             use_shared_regions=False, test_shared_regions=False):
+    """
+    Helper function to extract metrics from simulation pickle files.
+    
+    Parameters:
+    -----------
+    base_path : str
+        Base path to simulation results directory
+    subfolder : str
+        Subfolder within sim_results if any
+    model_types : str or list
+        Model type(s) to extract results for
+    cv_types : str or list
+        Cross-validation type(s) to extract results for
+    feature_types : list
+        List of feature types to compare
+    summary_measures : list, optional
+        List of summary measures to compare
+    resolutions : list, optional
+        List of resolutions for community CV
+    random_seeds : list, optional
+        List of random seeds used
+    connectome_target : str, optional
+        Target connectome type ('FC' or 'SC')
+    metric : str, optional
+        Metric to extract ('pearson_corr' or 'mse')
+    use_shared_regions : bool, optional
+        Whether shared regions were used
+    test_shared_regions : bool, optional
+        Whether shared regions were tested
+    
+    Returns:
+    --------
+    pd.DataFrame
+        DataFrame containing extracted metrics
+    """
+    # Convert single values to lists for consistent processing
+    model_types = [model_types] if isinstance(model_types, str) else model_types
+    cv_types = [cv_types] if isinstance(cv_types, str) else cv_types
+    
+    # Initialize lists to store results
+    results_data = []
+    
+    # Default values if not provided
+    if random_seeds is None:
+        random_seeds = [42]
+    if resolutions is None:
+        resolutions = [None]
+    if summary_measures is None:
+        summary_measures = [None]
+        
+    # Iterate through all combinations
+    for model_type in model_types:
+        for cv_type in cv_types:
+            for feature_type in feature_types:
+                for summary_measure in summary_measures:
+                    for resolution in resolutions:
+                        for seed in random_seeds:
+                            # Build base filename pattern
+                            base_pattern = f"{str(feature_type)}"
+                            if summary_measure:
+                                base_pattern += f"_{summary_measure}"
+                            base_pattern += f"_{connectome_target}_{model_type}_{cv_type}"
+                            if resolution is not None and cv_type == 'community':
+                                base_pattern += str(resolution)
+                            base_pattern += f'_{seed}'
+                            
+                            # Clean the base pattern for regex
+                            base_pattern = re.sub(r'[^\w\s_\-]', '', str(base_pattern))
+                            
+                            # List all files in directory
+                            sim_dir = os.path.join(base_path, 'sim/sim_results/', subfolder)
+                            matching_files = [f for f in os.listdir(sim_dir) 
+                                           if f.startswith(base_pattern) and f.endswith('.pickle')]
+                            
+                            if not matching_files:
+                                print(f"No matching files found for pattern: {base_pattern}")
+                                continue
+                                
+                            # Use the first matching file
+                            results_file = matching_files[0]
+                            
+                            try:
+                                # Load results
+                                results = open_pickled_results(
+                                    results_file,
+                                    added_dir=subfolder,
+                                    backup=False
+                                )
+                                
+                                # Extract metrics for each fold
+                                test_scores = []
+                                for fold_results in results[0]:
+                                    test_scores.append(fold_results['test_metrics'][metric])
+                                
+                                # Store results
+                                results_data.append({
+                                    'Model Type': model_type,
+                                    'CV Type': cv_type,
+                                    'Feature Type': feature_type,
+                                    'Summary Measure': summary_measure,
+                                    'Resolution': resolution,
+                                    'Seed': seed,
+                                    'Mean Score': np.mean(test_scores),
+                                    'Std Error': np.std(test_scores) / np.sqrt(len(test_scores))
+                                })
+                                
+                            except FileNotFoundError:
+                                print(f"File not found: {results_file}")
+                                continue
+                            except Exception as e:
+                                print(f"Error processing {results_file}: {str(e)}")
+                                continue
+    
+    return pd.DataFrame(results_data)
+
+def plot_performance_comparison(results_df, metric='pearson_corr', group_by='Feature Type',
+                              hue='Model Type', style='academic', figsize=(12, 6)):
+    """
+    Creates a bar plot comparing performance across different configurations.
+    
+    Parameters:
+    -----------
+    results_df : pd.DataFrame
+        DataFrame containing simulation results from extract_simulation_metrics
+    metric : str, optional
+        Metric to plot ('pearson_corr' or 'mse')
+    group_by : str, optional
+        Column to group results by on x-axis
+    hue : str, optional
+        Column to use for different colored bars
+    style : str, optional
+        Plot style ('academic' or 'default')
+    figsize : tuple, optional
+        Figure size
+    """
+    if style == 'academic':
+        plt.style.use('seaborn-whitegrid')
+        plt.rcParams.update({
+            'font.size': 12,
+            'axes.labelsize': 14,
+            'axes.titlesize': 16,
+            'xtick.labelsize': 12,
+            'ytick.labelsize': 12
+        })
+    
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    # Group data and calculate statistics
+    grouped_data = results_df.groupby([group_by, hue]).agg({
+        'Mean Score': ['mean', 'std', 'count']
+    }).reset_index()
+    
+    # Calculate standard error
+    grouped_data['std_err'] = grouped_data[('Mean Score', 'std')] / np.sqrt(grouped_data[('Mean Score', 'count')])
+    
+    # Set up plot parameters
+    unique_hues = grouped_data[hue].unique()
+    n_groups = len(grouped_data[group_by].unique())
+    n_hues = len(unique_hues)
+    width = 0.8 / n_hues
+    
+    # Create bars
+    for i, hue_val in enumerate(unique_hues):
+        mask = grouped_data[hue] == hue_val
+        x = np.arange(n_groups) + i * width - (n_hues-1) * width/2
+        
+        bars = ax.bar(x, 
+                     grouped_data[mask][('Mean Score', 'mean')],
+                     width,
+                     yerr=grouped_data[mask]['std_err'],
+                     label=hue_val,
+                     capsize=5)
+        
+        # Add value labels on top of bars
+        for idx, bar in enumerate(bars):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2, height,
+                   f'{height:.3f}',
+                   ha='center', va='bottom')
+    
+    # Customize plot
+    ax.set_xlabel(group_by)
+    ax.set_ylabel('Pearson Correlation' if metric == 'pearson_corr' else 'Mean Squared Error')
+    ax.set_title(f'Model Performance Comparison\nGrouped by {group_by}')
+    ax.set_xticks(np.arange(n_groups))
+    ax.set_xticklabels(grouped_data[group_by].unique(), rotation=45, ha='right')
+    
+    # Add legend
+    ax.legend(title=hue, bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Print summary statistics
+    print("\nSummary Statistics:")
+    summary_stats = grouped_data.pivot_table(
+        values=[('Mean Score', 'mean'), 'std_err'],
+        index=group_by,
+        columns=hue
+    )
+    print(summary_stats.round(3))
+
+def compare_simulation_results(model_types, cv_types, feature_types, summary_measures=None,
+                             resolutions=None, random_seeds=None, connectome_target='FC',
+                             metric='pearson_corr', group_by='Feature Type', 
+                             style='academic', figsize=(12, 6)):
+    """
+    High-level function to extract and plot simulation comparison results.
+    
+    Parameters:
+    -----------
+    model_types : str or list
+        Model type(s) to compare
+    cv_types : str or list
+        Cross-validation type(s) to compare
+    feature_types : list
+        List of feature types to compare
+    summary_measures : list, optional
+        List of summary measures to compare
+    resolutions : list, optional
+        List of resolutions for community CV
+    random_seeds : list, optional
+        List of random seeds used
+    connectome_target : str, optional
+        Target connectome type ('FC' or 'SC')
+    metric : str, optional
+        Metric to plot ('pearson_corr' or 'mse')
+    group_by : str, optional
+        Column to group results by on x-axis
+    style : str, optional
+        Plot style ('academic' or 'default')
+    figsize : tuple, optional
+        Figure size
+    """
+    # Extract metrics
+    results_df = extract_simulation_metrics(
+        base_path=os.getcwd(),
+        subfolder='',
+        model_types=model_types,
+        cv_types=cv_types,
+        feature_types=feature_types,
+        summary_measures=summary_measures,
+        resolutions=resolutions,
+        random_seeds=random_seeds,
+        connectome_target=connectome_target,
+        metric=metric
+    )
+    
+    # Create plot
+    if not results_df.empty:
+        plot_performance_comparison(
+            results_df,
+            metric=metric,
+            group_by=group_by,
+            style=style,
+            figsize=figsize
+        )
+    else:
+        print("No results found for the specified parameters.")
+
+def get_sim_performance(feature_type, cv_type, model_type, metric='pearson_corr',
+                       connectome_target='FC', summary_measure=None, resolution=None, 
+                       random_seed=42, use_shared_regions=False, test_shared_regions=False):
+    """
+    Get mean train and test performance metrics for a single simulation configuration.
+    
+    Parameters:
+    -----------
+    feature_type : str or list
+        Type of features used in simulation (e.g., ['transcriptome', 'structural_spectralA'])
+    cv_type : str
+        Type of cross-validation used (e.g., 'random', 'community')
+    model_type : str
+        Type of model used (e.g., 'xgboost', 'mlp')
+    metric : str, optional
+        Metric to extract ('pearson_corr' or 'mse')
+    connectome_target : str, optional
+        Target connectome type ('FC' or 'SC')
+    summary_measure : str, optional
+        Summary measure used in simulation (e.g., '10' for spectral embeddings)
+    resolution : float, optional
+        Resolution parameter for community CV
+    random_seed : int, optional
+        Random seed used in simulation
+    use_shared_regions : bool, optional
+        Whether shared regions were used
+    test_shared_regions : bool, optional
+        Whether shared regions were tested
+    
+    Returns:
+    --------
+    dict
+        Dictionary containing mean and std error for both train and test performance
+        Keys: 'train_mean', 'train_stderr', 'test_mean', 'test_stderr'
+    """
+    # Build base filename pattern
+    base_pattern = f"{str(feature_type)}"
+    if summary_measure:
+        base_pattern += f"_{summary_measure}"
+    base_pattern += f"_{connectome_target}_{model_type}_{cv_type}"
+    if resolution is not None and cv_type == 'community':
+        base_pattern += str(resolution)
+    base_pattern += f'_{random_seed}'
+    
+    # Clean the pattern
+    base_pattern = re.sub(r'[^\w\s_\-]', '', str(base_pattern))
+    
+    # List all files in directory
+    sim_dir = os.path.join(os.getcwd(), 'sim/sim_results/')
+    matching_files = [f for f in os.listdir(sim_dir) 
+                     if f.startswith(base_pattern) and f.endswith('.pickle')]
+    
+    if not matching_files:
+        raise FileNotFoundError(f"No matching files found for pattern: {base_pattern}")
+    
+    # Use the first matching file
+    try:
+        results = open_pickled_results(matching_files[0])
+        
+        # Extract metrics for each fold
+        train_scores = []
+        test_scores = []
+        
+        for fold_results in results[0]:
+            train_scores.append(fold_results['train_metrics'][metric])
+            test_scores.append(fold_results['test_metrics'][metric])
+        
+        # Calculate statistics
+        performance_stats = {
+            'train_mean': np.mean(train_scores),
+            'train_stderr': np.std(train_scores) / np.sqrt(len(train_scores)),
+            'test_mean': np.mean(test_scores),
+            'test_stderr': np.std(test_scores) / np.sqrt(len(test_scores))
+        }
+        
+        return performance_stats
+        
+    except Exception as e:
+        print(f"Error processing {matching_files[0]}: {str(e)}")
+        return None
+
+def get_aggregate_performance(feature_type, cv_type, model_type, resolutions, random_seeds,
+                            metric='pearson_corr', connectome_target='FC', summary_measure=None,
+                            use_shared_regions=False, test_shared_regions=False):
+    """
+    Get aggregate performance metrics across multiple resolutions and seeds.
+    
+    Parameters:
+    -----------
+    feature_type : str or list
+        Type of features used in simulation (e.g., ['transcriptome', 'structural_spectralA'])
+    cv_type : str
+        Type of cross-validation used (e.g., 'random', 'community')
+    model_type : str
+        Type of model used (e.g., 'xgboost', 'mlp')
+    resolutions : list
+        List of resolutions to aggregate over (e.g., [1.01, 1.02])
+    random_seeds : list
+        List of random seeds to aggregate over (e.g., [1, 2, 42])
+    metric : str, optional
+        Metric to extract ('pearson_corr' or 'mse')
+    connectome_target : str, optional
+        Target connectome type ('FC' or 'SC')
+    summary_measure : str, optional
+        Summary measure used in simulation (e.g., '10' for spectral embeddings)
+    use_shared_regions : bool, optional
+        Whether shared regions were used
+    test_shared_regions : bool, optional
+        Whether shared regions were tested
+    
+    Returns:
+    --------
+    dict
+        Dictionary containing aggregated statistics:
+        - 'train_mean': Mean training performance across all runs
+        - 'train_stderr': Standard error of training performance
+        - 'test_mean': Mean test performance across all runs
+        - 'test_stderr': Standard error of test performance
+        - 'n_runs': Number of successful runs
+        - 'failed_runs': List of (resolution, seed) pairs that failed
+    """
+    # Lists to store all scores
+    all_train_means = []
+    all_test_means = []
+    failed_runs = []
+    
+    # Iterate through all combinations
+    for resolution in resolutions:
+        for seed in random_seeds:
+            try:
+                stats = get_sim_performance(
+                    feature_type=feature_type,
+                    cv_type=cv_type,
+                    model_type=model_type,
+                    metric=metric,
+                    connectome_target=connectome_target,
+                    summary_measure=summary_measure,
+                    resolution=resolution,
+                    random_seed=seed,
+                    use_shared_regions=use_shared_regions,
+                    test_shared_regions=test_shared_regions
+                )
+                
+                if stats:
+                    all_train_means.append(stats['train_mean'])
+                    all_test_means.append(stats['test_mean'])
+                else:
+                    failed_runs.append((resolution, seed))
+                    
+            except FileNotFoundError:
+                failed_runs.append((resolution, seed))
+                continue
+            except Exception as e:
+                print(f"Error processing resolution {resolution}, seed {seed}: {str(e)}")
+                failed_runs.append((resolution, seed))
+                continue
+    
+    # Calculate aggregate statistics
+    n_successful = len(all_train_means)
+    
+    if n_successful == 0:
+        print("No successful runs found")
+        return None
+    
+    aggregate_stats = {
+        'train_mean': np.mean(all_train_means),
+        'train_stderr': np.std(all_train_means) / np.sqrt(n_successful),
+        'test_mean': np.mean(all_test_means),
+        'test_stderr': np.std(all_test_means) / np.sqrt(n_successful),
+        'n_runs': n_successful,
+        'failed_runs': failed_runs
+    }
+    
+    # Print summary
+    print(f"\nSummary for {model_type} model with {feature_type}:")
+    print(f"Successfully processed {n_successful} out of {len(resolutions) * len(random_seeds)} runs")
+    if failed_runs:
+        print(f"Failed runs (resolution, seed): {failed_runs}")
+    
+    return aggregate_stats
+
+def plot_model_feature_comparison(feature_types, model_types, cv_type, resolutions, random_seeds,
+                                metric='pearson_corr', connectome_target='FC', use_grayscale=True):
+    """
+    Create a bar plot comparing model performance across different feature types.
+    """
+    # Store results for plotting
+    results = []
+    
+    # Feature type mapping for display
+    feature_display_names = {
+        'transcriptome': 'Gene Expression',
+        'structural_spectralA_10': 'Structural',
+        'transcriptome structural_spectralA_10': 'Gene Expression\n+Structural'
+    }
+    
+    # Get performance for each feature-model combination
+    for feature in feature_types:
+        for model in model_types:
+            stats = get_aggregate_performance(
+                feature_type=feature,
+                cv_type=cv_type,
+                model_type=model,
+                resolutions=resolutions,
+                random_seeds=random_seeds,
+                metric=metric,
+                connectome_target=connectome_target
+            )
+            
+            if stats:
+                results.append({
+                    'Feature Type': feature_display_names.get(feature, feature),
+                    'Model': model.upper(),
+                    'Mean': stats['test_mean'],
+                    'Std Err': stats['test_stderr']
+                })
+    
+    if not results:
+        print("No results found for the specified parameters")
+        return
+    
+    # Convert to DataFrame for easier plotting
+    df = pd.DataFrame(results)
+    
+    # Set up plot with narrower width
+    plt.figure(figsize=(10, 5))
+    
+    # Calculate bar positions
+    n_features = len(feature_types)
+    n_models = len(model_types)
+    bar_width = 0.2
+    x = np.arange(n_features)
+    
+    # Set colors
+    if use_grayscale:
+        colors = ['#737373', '#bdbdbd', '#d9d9d9', '#525252'][:n_models]
+    else:
+        colors = sns.color_palette('pastel', n_models)
+    
+    # Create bars for each model
+    for i, (model, color) in enumerate(zip(model_types, colors)):
+        model_data = df[df['Model'] == model.upper()]
+        
+        plt.bar(x + i*bar_width - (n_models-1)*bar_width/2, 
+               model_data['Mean'],
+               bar_width,
+               yerr=model_data['Std Err'],
+               label=model.upper(),
+               color=color,
+               capsize=5,
+               edgecolor='black')
+    
+    # Customize plot
+    plt.xticks(x, [feature_display_names.get(f, f) for f in feature_types], 
+               fontsize=18)
+    plt.yticks(fontsize=16)
+    
+    # Set y-axis label and limits, and determine metric name for title
+    if metric == 'pearson_corr':
+        plt.ylabel('Pearson r', fontsize=20)
+        plt.ylim(0.0, 0.7)
+        metric_name = 'Pearson correlation'
+    else:
+        plt.ylabel('MSE', fontsize=20)
+        plt.ylim(0.0, 0.15)
+        metric_name = 'MSE'
+    
+    # Add dynamic title
+    plt.title(f'Test performance ({metric_name}) over 5 community splits', 
+             fontsize=20, 
+             pad=20)
+    
+    # Remove gridlines
+    plt.grid(False)
+    
+    # Move legend outside the plot
+    plt.legend(title='Model Type', 
+              fontsize=16, 
+              title_fontsize=16, 
+              loc='upper left', 
+              bbox_to_anchor=(1, 1))
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Print summary statistics
+    print("\nSummary Statistics:")
+    summary_df = df.pivot_table(
+        values=['Mean', 'Std Err'],
+        index='Feature Type',
+        columns='Model',
+        aggfunc='first'
+    )
+    print(summary_df.round(3))
+
