@@ -27,15 +27,13 @@ def load_transcriptome(parcellation='schaefer_100', stability = '0.2', dataset='
         
         if run_PCA: 
             pca = PCA(n_components=100)
-            
             schaefer114_genes_pca = pca.fit_transform(schaefer114_genes)
             cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
             var_thresh = 0.95
             
             # Find the number of components that explain at least 95% of the variance
-            num_components_variance = np.argmax(cumulative_variance >= var_thresh) + 1
-            
-            print(f"Number of components explaining {var_thresh*100}% of the variance: {num_components_variance}")
+            num_components_variance = np.argmax(cumulative_variance >= var_thresh) + 1            
+            # print(f"Number of components explaining {var_thresh*100}% of the variance: {num_components_variance}")
             schaefer114_genes_var = schaefer114_genes_pca[:, :num_components_variance]
             schaefer114_genes = schaefer114_genes_var
         
@@ -66,10 +64,11 @@ def load_transcriptome(parcellation='schaefer_100', stability = '0.2', dataset='
             ahba_in_utsw = pickle.load(f)
         return np.array(ahba_in_utsw)
 
+
 def load_connectome(parcellation='schaefer_100', dataset='AHBA', omit_subcortical=False, measure='FC', spectral=None):
     # measure can be 'FC', 'SC'
     relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)        
-
+    
     if dataset == 'AHBA':
         if measure == 'FC':
             fc_combined_mat_schaef_100, fc_combined_labels_schaef_100 = load_fc_as_one(parcellation='schaefer_100')

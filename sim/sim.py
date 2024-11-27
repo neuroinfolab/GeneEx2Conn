@@ -64,12 +64,8 @@ from sim.sim_utils import bayes_search_init, grid_search_init, random_search_ini
 from sim.sim_utils import bytes2human, print_system_usage
 importlib.reload(sim.sim_utils)
 
-from skopt.plots import plot_objective, plot_histogram
-import yaml
-
-
 class Simulation:
-    def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome=False, summary_measure=None, euclidean=False, structural=False, resolution=1.0,random_seed=42,
+    def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome=False, feature_interactions=None, resolution=1.0,random_seed=42,
                  use_shared_regions=False, include_conn_feats=False, test_shared_regions=False, connectome_target='FC', save_model_json=False):        
         """
         Initialization of simulation parameters
@@ -78,10 +74,8 @@ class Simulation:
         self.model_type = model_type
         self.gpu_acceleration = gpu_acceleration
         self.feature_type = feature_type
+        self.feature_interactions = feature_interactions
         self.predict_connectome_from_connectome = predict_connectome_from_connectome
-        self.summary_measure = summary_measure
-        self.euclidean = euclidean
-        self.structural = structural
         self.resolution = resolution
         self.random_seed=random_seed
         self.use_shared_regions = use_shared_regions
@@ -96,17 +90,15 @@ class Simulation:
         """
         Load transcriptome and connectome data
         """
-        # load everything but apply logic to expand data for different data types!!!
-        # reformatted needs to go in this way first
-        omit_subcortical=False
         self.X = load_transcriptome()
-        self.Y_fc = load_connectome(measure='FC')
+        self.X_pca = load_transcriptome(run_PCA=True)
         self.Y_sc = load_connectome(measure='SC', spectral=None)
-        self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
         self.Y_sc_spectralL = load_connectome(measure='SC', spectral='L')
         self.Y_sc_spectralA = load_connectome(measure='SC', spectral='A')
-        self.X_pca = load_transcriptome(run_PCA=True)
+        self.Y_fc = load_connectome(measure='FC')
+        self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
         self.coords = load_coords()
+
     
     def select_cv(self):
         """
@@ -123,47 +115,74 @@ class Simulation:
         """
         Expand data based on feature type and prediction type
         """
-        # create a dict to map inputted feature types to data array
-        feature_dict = {'transcriptome': self.X, 
-                        'transcriptomePCA': self.X_pca,
-                        'functional':self.Y, 
-                        'structural':self.Y_sc, 
-                        'structural_spectralL':self.Y_sc_spectralL,
-                        'structural_spectralA':self.Y_sc_spectralA,
-                        'euclidean':self.coords}
 
+        print('feature_type', self.feature_type)
+        
+        # create a list of features to be expanded into edge-wise dataset
+        features = []
+        for feature_dict in self.feature_type:
+            for feature_name, processing_type in feature_dict.items():
+                print('feature_name', feature_name)
+                print('processing_type', processing_type)
+                if processing_type is None:
+                    features.append(feature_name)
+                else:
+                    features.append(feature_name + '_' + processing_type)
+
+        print('features', features)
+
+        # create a dict to map inputted feature types to data array - more can be addded to this
+        feature_dict = {'transcriptome': self.X, 
+                        'transcriptome_PCA': self.X_pca,
+                        'structural':self.Y_sc,
+                        'structural_spectral_L':self.Y_sc_spectralL,
+                        'structural_spectral_A':self.Y_sc_spectralA, 
+                        'functional':self.Y_fc,
+                        'euclidean':self.coords
+                        }
+        
+        # append feature data into a horizontal stack indexed by node
         X = []
 
-        for feature in self.feature_type:
-            if feature in ['structural_spectralL', 'structural_spectralA']:
-                feature_X = feature_dict[feature]
-                if int(self.summary_measure) < 0:
-                    feature_X = feature_X[:, int(self.summary_measure):] # Take columns from summary_measure to end
+        for feature in features:
+            print('feature', feature)
+            if 'spectral' in feature:
+                feature_type = '_'.join(feature.split('_')[:-1])  # Take everything before the number
+                feature_X = feature_dict[feature_type]
+                num_latents = int(feature.split('_')[-1])
+                if num_latents < 0:
+                    feature_X = feature_X[:, num_latents:] # Take columns from num_latents to end
                 else:
-                    feature_X = feature_X[:, :int(self.summary_measure)]    # Take columns from start up to summary_measure
+                    feature_X = feature_X[:, :num_latents]    # Take columns from start up to num_latents
             else:
                 feature_X = feature_dict[feature]
+            
             X.append(feature_X)
         
-        X = np.hstack(X)
-        self.X = X
-        
-        if 'transcriptomePCA' in self.feature_type:
-            feature_X = feature_dict['transcriptomePCA']
+        self.X = np.hstack(X)
+        print('X shape', self.X.shape)
+
+        # temporarily suspend feature interactions for now
+        # to add back in need to loop through feature_interactions and cleverly save indices from X to apply interaction from there
+        '''
+        if 'transcriptome_PCA' in self.feature_type:
+            feature_X = feature_dict['transcriptome_PCA']
             self.PC_dim = int(feature_X.shape[1])
         else:
             self.PC_dim = None # save dimensionality for kronecker for region-wise expansion
  
-        if self.summary_measure == 'kronecker':
+        if self.feature_interactions == 'kronecker':
             kron = True
+        '''
 
         self.fold_splits = process_cv_splits(self.X, self.Y, self.cv_obj, 
                           self.use_shared_regions, 
                           self.include_conn_feats, 
-                          self.test_shared_regions,
-                          struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
-                          kron=(True if self.summary_measure == 'kronecker' else False),
-                          kron_input_dim = self.PC_dim)
+                          self.test_shared_regions
+                          )
+                          #struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
+                          #kron=(True if self.summary_measure == 'kronecker' else False),
+                          #kron_input_dim = self.PC_dim) # adjust this syntax to be more general
 
                         
     def run_innercv_wandb(self, X_train, Y_train, X_test, Y_test,train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('wandb', 'mse'), n_iter=10):
@@ -176,10 +195,10 @@ class Simulation:
             self.X, self.Y, 
             inner_cv_obj,
             self.use_shared_regions,
-            self.test_shared_regions,
-            struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
-            kron=(True if self.summary_measure == 'kronecker' else False),
-            kron_input_dim=self.PC_dim
+            self.test_shared_regions
+            #struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
+            #kron=(True if self.summary_measure == 'kronecker' else False),
+            #kron_input_dim=self.PC_dim
         )
 
         sweep_config_path = os.path.join(os.getcwd(), 'models', 'dynamic_nn_sweep_config.yml')
@@ -302,7 +321,7 @@ class Simulation:
 
     def run_innercv(self, train_indices, test_indices, train_network_dict, search_method=('random', 'mse'), n_iter=100):
         """
-        Inner cross-validation with option for Grid, Bayesian, or Randomized hyperparamter search
+        Inner cross-validation with option for Grid, Bayesian, or Randomized hyperparameter search
         """
         # Create inner CV object (just indices) for X_train and Y_train for any strategy 
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
@@ -314,10 +333,10 @@ class Simulation:
         else:
             inner_fold_splits = process_cv_splits(self.X, self.Y, inner_cv_obj, 
                                                   self.use_shared_regions, 
-                                                  self.test_shared_regions,
-                                                  struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
-                                                  kron=(True if self.summary_measure == 'kronecker' else False),
-                                                  kron_input_dim = self.PC_dim
+                                                  self.test_shared_regions
+                                                  #struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
+                                                  #kron=(True if self.summary_measure == 'kronecker' else False),
+                                                  #kron_input_dim = self.PC_dim
                                                  )
 
         # Inner CV data packaged into a large matrix with indices for individual folds
@@ -387,38 +406,41 @@ class Simulation:
             print('SEARCH METHOD', search_method)
             if search_method[0] == 'wandb':
                 wandb.login()
-                best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method, n_iter=10)
+                best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method, n_iter=10)                
+                train_history = best_model.fit(X_train, Y_train, val_data=(X_test, Y_test))
+            else: # search_method options: random, grid, bayes
+                best_model, best_val_score = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
+                best_model.fit(X_train, Y_train)
                 
-                # Teardown and login again to clear environment variables so the test acc can be logged
-                wandb.teardown()
-                wandb.login()
+            # Teardown and login again to clear environment variables so the test acc can be logged
+            wandb.teardown()
+            wandb.login()
 
-                # Train on full training data
-                train_history = best_model.fit(X_train, Y_train, val_data=(X_test, Y_test)) # include test to track overfitting 
+            # Evaluate on the test set
+            evaluator = ModelEvaluator(
+                best_model, X_train, Y_train, X_test, Y_test,
+                [self.use_shared_regions, self.include_conn_feats, self.test_shared_regions]
+            )
+            train_metrics = evaluator.get_train_metrics()
+            test_metrics = evaluator.get_test_metrics()
 
-                # Evaluate on the test set
-                evaluator = ModelEvaluator(
-                    best_model, X_train, Y_train, X_test, Y_test,
-                    [self.use_shared_regions, self.include_conn_feats, self.test_shared_regions]
-                )
-                train_metrics = evaluator.get_train_metrics()
-                test_metrics = evaluator.get_test_metrics()
+            # Create descriptive run name based on features, target and CV split type
+            feature_str = '_'.join(self.feature_type)  # Join feature types with underscore
+            target_str = self.connectome_target
+            cv_type = self.cv_type
+            model_type = self.model_type
+            run_name = f"{model_type}_{feature_str}_{target_str}_{cv_type}_fold{fold_idx}_final_eval"
 
-                # Create descriptive run name based on features, target and CV split type
-                feature_str = '_'.join(self.feature_type)  # Join feature types with underscore
-                target_str = self.connectome_target
-                cv_type = self.cv_type
-                run_name = f"{feature_str}_{target_str}_{cv_type}_fold{fold_idx}_final_eval"
+            # Log final evaluation metrics
+            # Initialize a new, standalone W&B run for final evaluation results
+            final_eval_run = wandb.init(
+                project="gx2conn",
+                name=run_name,
+                tags=["final_evaluation", f"outerfold_{fold_idx}", "test_metrics"],
+                reinit=True
+            )
 
-                # Log final evaluation metrics
-                # Initialize a new, standalone W&B run for final evaluation results
-                final_eval_run = wandb.init(
-                    project="gx2conn_dynamicNN",
-                    name=run_name,
-                    tags=["final_evaluation", f"outerfold_{fold_idx}", "test_metrics"],
-                    reinit=True
-                )
-
+            if search_method[0] == 'wandb':
                 for epoch, (train_loss, val_loss, train_pearson, val_pearson) in enumerate(zip(train_history['train_loss'], train_history['val_loss'], train_history['train_pearson'], train_history['val_pearson'])):
                     wandb.log({
                         'train_mse_loss': train_loss,
@@ -436,20 +458,18 @@ class Simulation:
                     'best_val_loss': best_val_score,
                     'config': best_model.get_params()
                 })
-
-                final_eval_run.finish()
-                print("Final evaluation metrics logged successfully.")
-                wandb.finish()
-            else: # search_method options: random, grid, bayes
-                best_model, best_val_score = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
-
-                # Step 6: Retrain the best parameter model on training data and test on testing data
-                best_model.fit(X_train, Y_train)
-                evaluator = ModelEvaluator(best_model, X_train, Y_train, X_test, Y_test, [self.use_shared_regions, self.include_conn_feats, self.test_shared_regions])
+            else: 
+                wandb.log({
+                    'final_train_metrics': train_metrics,
+                    'final_test_metrics': test_metrics,
+                    'best_val_loss': best_val_score,
+                    'config': best_model.get_params()
+                })
             
-                train_metrics = evaluator.get_train_metrics()
-                test_metrics = evaluator.get_test_metrics()
-
+            final_eval_run.finish()
+            print("Final evaluation metrics logged successfully.")
+            wandb.finish()
+        
             print("\nTrain Metrics:", train_metrics)
             print("Test Metrics:", test_metrics)
             print('BEST VAL SCORE', best_val_score)

@@ -99,6 +99,7 @@ from scipy.linalg import eig
 # optimization
 import scipy.optimize as optimize
 from scipy.optimize import Bounds
+from skopt.plots import plot_objective, plot_histogram
 
 # gene ontology
 import gseapy as gp

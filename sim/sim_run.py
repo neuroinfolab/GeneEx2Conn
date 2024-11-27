@@ -34,26 +34,6 @@ from data.cv_split import (
     CommunityCVSplit, 
     SubnetworkCVSplit
 )
-import data.cv_split
-importlib.reload(data.cv_split)
-
-# prebuilt model classes
-from models.base_models import ModelBuild
-import models.base_models
-importlib.reload(models.base_models)
-
-# metric classes
-from models.metrics.eval import (
-    ModelEvaluator,
-    pearson_numpy,
-    pearson_cupy,
-    mse_numpy,
-    mse_cupy,
-    r2_numpy,
-    r2_cupy
-)
-import models.metrics.eval
-importlib.reload(models.metrics.eval)
 
 # sim utility functions
 import sim.sim_utils
@@ -82,7 +62,7 @@ def open_pickled_results(file, added_dir='', backup=False): # Specify the path t
     
     return pickle_results
     
-def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed, connectome_target='FC', summary_measure=None): 
+def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed, connectome_target='FC'): 
     """
     Function to save all sim results to a pickle file
     """
@@ -90,10 +70,16 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     sim_results_file_path = os.getcwd() + '/sim/sim_results/'
     
     # Build filename components
-    results_file_str = f"{str(feature_type)}"
-    if summary_measure is not None:
-        results_file_str += "_" + str(summary_measure)
-
+    results_file_str = ""
+    for feature in feature_type:
+        for key, value in feature.items():
+            if value is None:
+                results_file_str += str(key)
+            else:
+                results_file_str += f"{key}_{value}"
+        results_file_str += "_"
+    results_file_str = results_file_str.rstrip("_")  # Remove trailing underscore
+    
     results_file_str += f"_{connectome_target}_{model_type}_{cv_type}"    
     
     if cv_type == "community":
@@ -118,11 +104,11 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     with open(results_file_path_pickle, 'wb') as f:
         pickle.dump(multi_model_results, f)
     
-    print("Simulation results have been saved.")
+    print("Simulation results have been saved to ", results_file_path_pickle)
     return
 
 
-def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target='FC', summary_measure=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse'), save_model_json=False):
+def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target='FC', feature_interactions=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse'), save_model_json=False):
     """
     Runs a single simulation for a given feature type and model configuration.
 
@@ -142,7 +128,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
     
     model_type : str
         The machine learning model type used in the simulation. Options include: 
-        'ridge', 'random_forest', 'xgboost', 'mlp', etc.
+        'ridge', 'random_forest', 'xgboost', 'dynamic neural net' etc.
     
     use_gpu : bool
         If True, the simulation will use GPU acceleration for models and computations where applicable.
@@ -157,6 +143,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
         - 'strength_and_corr' for structural summary measures
         - An integer value (e.g. '5', '10') specifying number of components to use from spectral embeddings
         - A negative integer (e.g. '-5', '-10') to use last N components from spectral embeddings
+
     use_shared_regions : bool, optional
         Whether to include shared brain regions in the analysis. 
     
@@ -205,7 +192,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
                     feature_type=feature_type,
                     cv_type=cv_type,
                     model_type=model_type, 
-                    summary_measure=summary_measure, 
+                    feature_interactions=feature_interactions, 
                     gpu_acceleration=use_gpu,
                     resolution=resolution,
                     random_seed=random_seed,
@@ -222,7 +209,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
     
     # Save sim data
     if save_sim:
-        save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed, connectome_target, summary_measure)
+        save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed, connectome_target)
     
     return single_model_results
 
