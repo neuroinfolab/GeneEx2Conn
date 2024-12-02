@@ -42,7 +42,7 @@ from nichord.coord_labeler import get_idx_to_label
 
 # stats 
 from scipy import stats
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, spearmanr
 from scipy.stats import entropy
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
