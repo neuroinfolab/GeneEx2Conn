@@ -1,119 +1,159 @@
 # Gene2Conn/data/data_load.py
 
 from imports import *
-from scipy.sparse.csgraph import laplacian
-from scipy.linalg import eig
 
-def load_transcriptome(parcellation='schaefer_100', stability = '0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False):
-    '''
-    stability can be 0.2 or -1
-    '''
-    if dataset == 'AHBA':
-        ssl._create_default_https_context = ssl._create_unverified_context # Disable SSL certificate verification (use with caution)
+def load_transcriptome(parcellation='schaefer_100', stability='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False):
+    """
+    Load transcriptome data from various datasets with optional PCA dimensionality reduction.
+    
+    Parameters:
+    -----------
+    parcellation : str, default='schaefer_100'
+        Brain parcellation scheme to use
+    stability : str, default='0.2'
+        Stability threshold for AHBA data. Options: '0.2' or '-1'
+    dataset : str, default='AHBA'
+        Dataset to load. Options: 'AHBA', 'GTEx', 'AHBA in GTEx', 'UTSW', 'AHBA in UTSW'
+    run_PCA : bool, default=False
+        If True, applies PCA with 95% variance threshold
+    omit_subcortical : bool, default=False
+        If True, excludes subcortical regions
+    
+    Returns:
+    --------
+    np.ndarray
+        Processed gene expression data
+    """
+    def _apply_pca(data, var_thresh=0.95):
+        """Apply PCA with variance threshold."""
+        pca = PCA(n_components=100)
+        data_pca = pca.fit_transform(data)
+        cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
+        n_components = np.argmax(cumulative_variance >= var_thresh) + 1
+        return data_pca[:, :n_components]
 
+    def _load_ahba_data():
+        """Load and process AHBA dataset."""
+        ssl._create_default_https_context = ssl._create_unverified_context
         genes = fetch_ahba()
-    
-        # labels
-        region_labels = genes['label'].to_list()
-        gene_labels = list(genes.columns)
         
-        # gene expression data in schaefer version with most stringent similarity threshold >0.2
-        schaefer114_genes = pd.read_csv(f"./data/enigma/allgenes_stable_r{stability}_schaefer_100.csv")
-        schaefer114_genes.set_index('label', inplace=True)
-        schaefer114_genes = np.array(schaefer114_genes)
-    
-        if omit_subcortical: 
-            schaefer114_genes = schaefer114_genes[:100, :]
+        # Load gene expression data
+        genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r{stability}_schaefer_100.csv")
+        genes_data.set_index('label', inplace=True)
+        genes_data = np.array(genes_data)
         
-        if run_PCA: 
-            pca = PCA(n_components=100)
-            schaefer114_genes_pca = pca.fit_transform(schaefer114_genes)
-            cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
-            var_thresh = 0.95
+        if omit_subcortical:
+            genes_data = genes_data[:100, :]
+        
+        if run_PCA:
+            genes_data = _apply_pca(genes_data)
             
-            # Find the number of components that explain at least 95% of the variance
-            num_components_variance = np.argmax(cumulative_variance >= var_thresh) + 1            
-            # print(f"Number of components explaining {var_thresh*100}% of the variance: {num_components_variance}")
-            schaefer114_genes_var = schaefer114_genes_pca[:, :num_components_variance]
-            schaefer114_genes = schaefer114_genes_var
-        
-        return schaefer114_genes
-        
-    elif dataset == 'GTEx':
-        relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)    
-        gtex_in_ahba = relative_data_path + '/GeneEx2Conn_data/region_map_pickles/RxG_data_gtex_mean_gtex_ahba_space.pkl'
-        with open(gtex_in_ahba, 'rb') as f:
-            gtex_in_ahba = pickle.load(f)
-        return np.array(gtex_in_ahba)
-    elif dataset == 'AHBA in GTEx':
-        relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)    
-        ahba_in_gtex = relative_data_path + '/GeneEx2Conn_data/region_map_pickles/RxG_data_ahba_mean_gtex_ahba_space.pkl'
-        with open(ahba_in_gtex, 'rb') as f:
-            ahba_in_gtex = pickle.load(f)
-        return np.array(ahba_in_gtex)
-    elif dataset == 'UTSW':
-        relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)        
-        ut_in_ahba = relative_data_path + '/GeneEx2Conn_data/region_map_pickles/RxG_data_utsmc_mean_ahba_utsmc_space.pkl'
-        with open(ut_in_ahba, 'rb') as f:
-            ut_in_ahba = pickle.load(f)
-        return np.array(np.log1p(ut_in_ahba))
-    elif dataset == 'AHBA in UTSW':
-        relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)
-        ahba_in_utsw = relative_data_path + '/GeneEx2Conn_data/region_map_pickles/RxG_data_ahba_mean_ahba_utsmc_space.pkl'
-        with open(ahba_in_utsw, 'rb') as f:
-            ahba_in_utsw = pickle.load(f)
-        return np.array(ahba_in_utsw)
+        return genes_data
 
+    # Dataset paths configuration
+    relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)
+
+    dataset_configs = {
+        'GTEx': {
+            'path': '/GeneEx2Conn_data/region_map_pickles/RxG_data_gtex_mean_gtex_ahba_space.pkl',
+            'transform': lambda x: np.array(x)
+        },
+        'AHBA in GTEx': {
+            'path': '/GeneEx2Conn_data/region_map_pickles/RxG_data_ahba_mean_gtex_ahba_space.pkl',
+            'transform': lambda x: np.array(x)
+        },
+        'UTSW': {
+            'path': '/GeneEx2Conn_data/region_map_pickles/RxG_data_utsmc_mean_ahba_utsmc_space.pkl',
+            'transform': lambda x: np.array(np.log1p(x))
+        },
+        'AHBA in UTSW': {
+            'path': '/GeneEx2Conn_data/region_map_pickles/RxG_data_ahba_mean_ahba_utsmc_space.pkl',
+            'transform': lambda x: np.array(x)
+        }
+    }
+
+    # Load and process data
+    if dataset == 'AHBA':
+        return _load_ahba_data()
+    
+    if dataset in dataset_configs:
+        config = dataset_configs[dataset]
+        with open(relative_data_path + config['path'], 'rb') as f:
+            data = pickle.load(f)
+            return config['transform'](data)
+            
+    raise ValueError(f"Unknown dataset: {dataset}")
 
 def load_connectome(parcellation='schaefer_100', dataset='AHBA', omit_subcortical=False, measure='FC', spectral=None):
-    # measure can be 'FC', 'SC'
-    relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)        
+    """
+    Load and process connectome data from various datasets with optional spectral decomposition.
     
-    if dataset == 'AHBA':
-        if measure == 'FC':
-            fc_combined_mat_schaef_100, fc_combined_labels_schaef_100 = load_fc_as_one(parcellation='schaefer_100')
-            if omit_subcortical: 
-                fc_combined_mat_schaef_100 = fc_combined_mat_schaef_100[:100, :100]
-            return fc_combined_mat_schaef_100
-        elif measure == 'SC': 
-            sc_combined_mat_schaef_100, sc_combined_labels_schaef_100 = load_sc_as_one(parcellation='schaefer_100')
-            if omit_subcortical: 
-                sc_combined_mat_schaef_100 = sc_combined_mat_schaef_100[:100, :100]
-            if spectral == 'L':
-                print('computing eig of laplacian')
-                # Compute the normalized Laplacian and perform eigendecomposition
-                L = laplacian(sc_combined_mat_schaef_100, normed=True)
-                eigenvalues, eigenvectors = eig(L)
-                eigenvalues = np.sort(np.real(eigenvalues))  # Sort eigenvalues in ascending order
-                k = int(L.shape[1]) - 1  # Try 3, 5, 10, 20, 40 dimensions for embedding
-                embedding = eigenvectors[:, 1:k+1]  # Skip the first eigenvector if it's the zero eigenvalue
-                sc_combined_mat_schaef_100 = embedding
-                return sc_combined_mat_schaef_100
-            elif spectral == 'A':
-                print('computing eig of adjacency')
-                # Compute eigendecomposition of adjacency matrix
-                eigenvalues, eigenvectors = eig(sc_combined_mat_schaef_100)
-                eigenvalues = np.sort(np.real(eigenvalues))  # Sort eigenvalues in ascending order
-                k = int(sc_combined_mat_schaef_100.shape[1])  # Use full dimensionality
-                embedding = eigenvectors[:, :k]  # Take first k eigenvectors
-                sc_combined_mat_schaef_100 = embedding
-                return sc_combined_mat_schaef_100
-            else:
-                return sc_combined_mat_schaef_100
-            
-    elif dataset == 'GTEx': 
-        gtex_connectome_path = relative_data_path + '/GeneEx2Conn_data/region_map_pickles/HCP_Connectome_GTEX_Regions.pkl'
-        with open(gtex_connectome_path, 'rb') as f:
-            gtex_connectome = pickle.load(f)
-        return np.array(gtex_connectome)
-    elif dataset == 'UTSW':
-        ut_connectome_path = relative_data_path + '/GeneEx2Conn_data/region_map_pickles/HCP_Connectome_UTSMC_Regions.pkl'
-        with open(ut_connectome_path, 'rb') as f:
-            ut_connectome = pickle.load(f)
+    Parameters:
+    -----------
+    parcellation : str, default='schaefer_100'
+        Brain parcellation scheme to use
+    dataset : str, default='AHBA'
+        Dataset to load. Options: 'AHBA', 'GTEx', 'UTSW'
+    omit_subcortical : bool, default=False
+        If True, excludes subcortical regions
+    measure : str, default='FC'
+        Type of connectivity measure. Options: 'FC' (functional), 'SC' (structural)
+    spectral : str or None, default=None
+        Type of spectral decomposition. Options: 'L' (Laplacian), 'A' (Adjacency), None
+    
+    Returns:
+    --------
+    np.ndarray
+        Processed connectome data
+    """
+    relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)
+
+    def _apply_spectral_decomposition(matrix, method):
+        if method == 'L':
+            L = laplacian(matrix, normed=True)
+            _, eigenvectors = eig(L)
+            k = int(L.shape[1]) - 1
+            return eigenvectors[:, 1:k+1]  # Skip first eigenvector (zero eigenvalue)
         
-        return np.array(ut_connectome)
+        elif method == 'A':
+            _, eigenvectors = eig(matrix)
+            k = int(matrix.shape[1])
+            return eigenvectors[:, :k]
+        
+        return matrix
+
+    def _load_ahba_connectome():
+        if measure == 'FC':
+            matrix, _ = load_fc_as_one(parcellation='schaefer_100')
+        else:  # measure == 'SC'
+            matrix, _ = load_sc_as_one(parcellation='schaefer_100')
+        
+        if omit_subcortical:
+            matrix = matrix[:100, :100]
+            
+        return _apply_spectral_decomposition(matrix, spectral)
+
+    # Dataset loading logic
+    replication_dataset_paths = {
+        'GTEx': '/GeneEx2Conn_data/region_map_pickles/HCP_Connectome_GTEX_Regions.pkl',
+        'UTSW': '/GeneEx2Conn_data/region_map_pickles/HCP_Connectome_UTSMC_Regions.pkl'
+    }
+
+    if dataset == 'AHBA':
+        return _load_ahba_connectome()
+    
+    # Load other datasets
+    if dataset in replication_dataset_paths:
+        with open(relative_data_path + replication_dataset_paths[dataset], 'rb') as f:
+            return np.array(pickle.load(f))
+            
+    raise ValueError(f"Unknown dataset: {dataset}")
+
 
 def load_coords():
+    """
+    Return x, y, z coordinates of Schaefer 114 parcellation.
+    """
     relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)        
 
     hcp_schaef = pd.read_csv(relative_data_path + '/GeneEx2Conn_data/atlas_info/schaef114.csv')

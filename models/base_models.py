@@ -241,10 +241,10 @@ class MLPModel(BaseEstimator, RegressorMixin):
 
         for hidden_dim in self.hidden_dims:
             layers.append(nn.Linear(prev_dim, hidden_dim))
-            layers.append(nn.BatchNorm1d(hidden_dim))
+            #layers.append(nn.BatchNorm1d(hidden_dim))
             layers.append(nn.ReLU())
-            if self.dropout > 0:
-                layers.append(nn.Dropout(self.dropout))
+            #if self.dropout > 0:
+            #    layers.append(nn.Dropout(self.dropout))
             prev_dim = hidden_dim
         
         layers.append(nn.Linear(prev_dim, output_dim))
@@ -276,8 +276,10 @@ class MLPModel(BaseEstimator, RegressorMixin):
 
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=self.l2_reg)
         
-        X_tensor = torch.FloatTensor(X)
+        X_tensor = torch.FloatTensor(X) # requires_grad_(True) - can consider using this for gradient tracking
         y_tensor = torch.FloatTensor(y).unsqueeze(1)
+
+        # Move to device
         X_tensor = X_tensor.to(self.device)
         y_tensor = y_tensor.to(self.device)
         
@@ -291,7 +293,7 @@ class MLPModel(BaseEstimator, RegressorMixin):
                 outputs = self.forward(batch_X)
                 loss = self.criterion(outputs, batch_y)
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_grad_norm)
+                #torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_grad_norm)
                 optimizer.step()
                 epoch_loss += loss.item()
             

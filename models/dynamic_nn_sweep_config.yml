@@ -21,4 +21,4 @@ parameters:
   symmetry_weight:
     values: [0.0, 0.1] # [0.0, 0.01, 0.1, 0.2]
   epochs:
-    values: [300]
+    values: [10] # 300

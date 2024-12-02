@@ -20,6 +20,8 @@ import time
 import re
 import ssl
 import yaml
+from functools import partial
+
 
 # plotting 
 import seaborn as sns

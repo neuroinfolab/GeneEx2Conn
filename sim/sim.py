@@ -44,6 +44,11 @@ importlib.reload(models.base_models)
 
 # custom models
 from models.dynamic_nn import DynamicNN
+MODEL_CLASSES = {
+    'dynamic_nn': DynamicNN,
+    # Add other neural network models here as they're implemented
+    # 'transformer_nn': TransformerNN
+}
 
 # metric classes
 from models.metrics.eval import (
@@ -61,7 +66,7 @@ importlib.reload(models.metrics.eval)
 # sim utility functions
 import sim.sim_utils
 from sim.sim_utils import bayes_search_init, grid_search_init, random_search_init, drop_test_network, find_best_params, load_sweep_config
-from sim.sim_utils import bytes2human, print_system_usage
+from sim.sim_utils import bytes2human, print_system_usage, validate_inputs, train_sweep
 importlib.reload(sim.sim_utils)
 
 class Simulation:
@@ -70,6 +75,12 @@ class Simulation:
         """
         Initialization of simulation parameters
         """
+        validate_inputs(
+            cv_type=cv_type,
+            model_type=model_type,
+            connectome_target=connectome_target
+        )
+        
         self.cv_type = cv_type
         self.model_type = model_type
         self.gpu_acceleration = gpu_acceleration
@@ -111,13 +122,11 @@ class Simulation:
         elif self.cv_type == 'community': # for comparability to SC as target the splits should be based on the functional connectome
             self.cv_obj = CommunityCVSplit(self.X, self.Y_fc, resolution=self.resolution, random_seed=self.random_seed) 
     
+
     def expand_data(self):
         """
         Expand data based on feature type and prediction type
-        """
-
-        print('feature_type', self.feature_type)
-        
+        """        
         # create a list of features to be expanded into edge-wise dataset
         features = []
         for feature_dict in self.feature_type:
@@ -129,8 +138,6 @@ class Simulation:
                 else:
                     features.append(feature_name + '_' + processing_type)
 
-        print('features', features)
-
         # create a dict to map inputted feature types to data array - more can be addded to this
         feature_dict = {'transcriptome': self.X, 
                         'transcriptome_PCA': self.X_pca,
@@ -140,12 +147,12 @@ class Simulation:
                         'functional':self.Y_fc,
                         'euclidean':self.coords
                         }
-        
+        validate_inputs(features=features, feature_dict=feature_dict)
+
         # append feature data into a horizontal stack indexed by node
         X = []
 
         for feature in features:
-            print('feature', feature)
             if 'spectral' in feature:
                 feature_type = '_'.join(feature.split('_')[:-1])  # Take everything before the number
                 feature_X = feature_dict[feature_type]
@@ -196,126 +203,46 @@ class Simulation:
             inner_cv_obj,
             self.use_shared_regions,
             self.test_shared_regions
-            #struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
-            #kron=(True if self.summary_measure == 'kronecker' else False),
-            #kron_input_dim=self.PC_dim
         )
-
-        sweep_config_path = os.path.join(os.getcwd(), 'models', 'dynamic_nn_sweep_config.yml')
+        
+        sweep_config_path = os.path.join(os.getcwd(), 'models', f'{self.model_type}_sweep_config.yml')
         sweep_config = load_sweep_config(sweep_config_path, input_dim=inner_fold_splits[0][0].shape[1]) # take num features from a fold
         
         device = torch.device("cuda")
-        
-        def train_sweep(config=None):
-            print(f"Starting sweep for configuration")
-            # placeholder unique identifier for each run
-            random_run_id = random.randint(1, 1000)
 
-            # Create descriptive run name based on features, target and CV split type
-            feature_str = '_'.join(self.feature_type)  # Join feature types with underscore
-            target_str = self.connectome_target
-            cv_type = self.cv_type
-            run_name = f"{feature_str}_{target_str}_{cv_type}_fold{outer_fold_idx}_run{random_run_id}_train_summary"
-
-            # Initialize a new run to log summary metrics, or log directly in the sweep context if preferred
-            run = wandb.init(
-                project="gx2conn_dynamicNN",
-                name=run_name,
-                group=f"sweep_{sweep_id}",
-                tags=["cross_validation", f"fold{outer_fold_idx}"],
-                reinit=True
+        def train_sweep_wrapper(config=None):
+            return train_sweep(
+                config=config,  # Explicitly pass config as first argument
+                model_type=self.model_type,
+                feature_type=self.feature_type,
+                connectome_target=self.connectome_target,
+                cv_type=self.cv_type,
+                outer_fold_idx=outer_fold_idx,
+                inner_fold_splits=inner_fold_splits,
+                device=device,
+                sweep_id=sweep_id,
+                model_classes=MODEL_CLASSES
             )
-
-            sweep_config = wandb.config
-            
-            inner_fold_final_train_losses, inner_fold_final_val_losses, inner_fold_final_train_pearsons, inner_fold_final_val_pearsons = [], [], [], []
-
-            # Loop through all inner CV splits
-            for fold_idx, (X_train, X_val, y_train, y_val) in enumerate(inner_fold_splits):
-                print(f'Processing inner fold {fold_idx}')
-
-                # Model initialization per inner fold
-                model = DynamicNN(
-                    input_dim=sweep_config['input_dim'],
-                    hidden_dims=sweep_config['hidden_dims'],
-                    learning_rate=sweep_config['learning_rate'],
-                    batch_size=sweep_config['batch_size'], 
-                    dropout_rate=sweep_config['dropout_rate'],
-                    weight_decay=sweep_config['weight_decay'],
-                    symmetry_weight= sweep_config['symmetry_weight'], # 0.1, 
-                    epochs= sweep_config['epochs'] # 10 
-                ).to(device)
-                
-                train_loader = model._create_data_loader(X_train, y_train, shuffle=False)
-                val_loader = model._create_data_loader(X_val, y_val, shuffle=False)
         
-                # Train model on this inner fold
-                train_history = model.train_model(train_loader, val_loader, verbose=True)
-                
-                # Log losses and Pearson r per epoch within each fold
-                for epoch, (train_loss, val_loss, train_pearson_r, val_pearson_r) in enumerate(zip(train_history['train_loss'], train_history['val_loss'], train_history['train_pearson'], train_history['val_pearson'])):                   
-                    wandb.log({
-                        'inner fold': fold_idx, 
-                        f'innerfold{fold_idx}_epoch': epoch, 
-                        f'innerfold{fold_idx}_train_loss': train_loss, 
-                        f'innerfold{fold_idx}_val_loss': val_loss,
-                        f'innerfold{fold_idx}_train_pearson_r': train_pearson_r,
-                        f'innerfold{fold_idx}_val_pearson_r': val_pearson_r
-                    })
-
-                # values at end of training inner fold
-                train_loss = train_history['train_loss'][-1]
-                val_loss = train_history['val_loss'][-1]
-                train_pearson_r = train_history['train_pearson'][-1]
-                val_pearson_r = train_history['val_pearson'][-1]
-                print(f'inner fold metrics - train loss: {train_loss}, val loss: {val_loss}, train pearson r: {train_pearson_r}, val pearson r: {val_pearson_r}')
-                
-                inner_fold_final_train_losses.append(train_loss)
-                inner_fold_final_val_losses.append(val_loss)
-                inner_fold_final_train_pearsons.append(train_pearson_r)
-                inner_fold_final_val_pearsons.append(val_pearson_r) 
-            
-            # Calculate and log mean losses across all folds of the inner CV (this will be a run for one hyperparameter configuration over all inner folds)
-            mean_train_loss = np.mean(inner_fold_final_train_losses)
-            mean_val_loss = np.mean(inner_fold_final_val_losses)
-            mean_train_pearson = np.mean(inner_fold_final_train_pearsons)
-            mean_val_pearson = np.mean(inner_fold_final_val_pearsons)
-            wandb.log({'mean_train_loss': mean_train_loss, 'mean_val_loss': mean_val_loss, 'mean_train_pearson': mean_train_pearson, 'mean_val_pearson': mean_val_pearson})
-            print(f"Configuration {config} - Mean Train Loss: {mean_train_loss}, Mean Val Loss: {mean_val_loss}")
-            
-            run.finish()
-            return mean_val_loss
-
         # Initialize sweep
-        sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn_dynamicNN") # retrieve hyperparameter space
+        sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
         print('sweep id on outer call:', sweep_id)
 
         # Run sweep
-        print('n_iter', n_iter)
-        wandb.agent(sweep_id, function=train_sweep, count=n_iter) # run train_sweep n_iter times with different hyperparameter configs each time
+        wandb.agent(sweep_id, function=train_sweep_wrapper, count=n_iter)
         print('SWEEP COMPLETE')
 
         # Get best run from sweep
         api = wandb.Api()
-        sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn_dynamicNN/{sweep_id}") 
-        best_run = sweep.best_run() # over all runs of the sweep get the run with the lowest mean val loss
+        sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn/{sweep_id}")
+        best_run = sweep.best_run()
         best_val_loss = best_run.summary.mean_val_loss
-        best_config = best_run.config # VALIDATE THIS IS THE BEST CONFIG ACROSS ALL SWEEPS
-        print('best val loss', best_val_loss)
-        print('best run config', best_config)
+        best_config = best_run.config
         
-        # Initialize and train the final model using the best configuration
-        best_model = DynamicNN(
-            input_dim=best_config['input_dim'],
-            hidden_dims=best_config['hidden_dims'],
-            learning_rate=best_config['learning_rate'],
-            batch_size=best_config['batch_size'],
-            dropout_rate=best_config['dropout_rate'],
-            weight_decay=best_config['weight_decay'],
-            symmetry_weight=best_config['symmetry_weight'],
-            epochs=best_config['epochs']
-        ).to(device)
-        
+        # Initialize final model with best config
+        ModelClass = MODEL_CLASSES[self.model_type]
+        best_model = ModelClass(**best_config).to(device)
+            
         return best_model, best_val_loss
 
 
@@ -334,9 +261,6 @@ class Simulation:
             inner_fold_splits = process_cv_splits(self.X, self.Y, inner_cv_obj, 
                                                   self.use_shared_regions, 
                                                   self.test_shared_regions
-                                                  #struct_summ=(True if self.summary_measure == 'strength_and_corr' and 'structural' in self.feature_type else False),
-                                                  #kron=(True if self.summary_measure == 'kronecker' else False),
-                                                  #kron_input_dim = self.PC_dim
                                                  )
 
         # Inner CV data packaged into a large matrix with indices for individual folds
@@ -366,9 +290,8 @@ class Simulation:
         print("Best Parameters: ", param_search.best_params_)
         print("Best Cross-Validation Score: ", param_search.best_score_)
         
-        # if search_type == 'bayes':
-        #     _ = plot_objective(param_search.optimizer_results_[0], size=5)
-        #     plt.show()
+        # Display objective plots for hyperparameter search
+        # if search_type == 'bayes': _ = plot_objective(param_search.optimizer_results_[0], size=5); plt.show()
         
         best_model = model.get_model()
         best_model.set_params(**param_search.best_params_)
@@ -376,7 +299,7 @@ class Simulation:
         return best_model, param_search.best_score_
 
 
-    def run_sim(self, search_method=('random', 'mse')):
+    def run_sim(self, search_method=('random', 'mse'), track_wandb=False):
         """
         Main simulation method
         """
@@ -404,18 +327,14 @@ class Simulation:
 
             # Step 5: Inner CV on training data
             print('SEARCH METHOD', search_method)
-            if search_method[0] == 'wandb':
+            if track_wandb and self.model_type in ['dynamic_nn']: # need to change this to run for any epoch based model
                 wandb.login()
-                best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method, n_iter=10)                
+                best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method, n_iter=2)                
                 train_history = best_model.fit(X_train, Y_train, val_data=(X_test, Y_test))
-            else: # search_method options: random, grid, bayes
+            else:
                 best_model, best_val_score = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method, n_iter=100)
                 best_model.fit(X_train, Y_train)
                 
-            # Teardown and login again to clear environment variables so the test acc can be logged
-            wandb.teardown()
-            wandb.login()
-
             # Evaluate on the test set
             evaluator = ModelEvaluator(
                 best_model, X_train, Y_train, X_test, Y_test,
@@ -423,52 +342,36 @@ class Simulation:
             )
             train_metrics = evaluator.get_train_metrics()
             test_metrics = evaluator.get_test_metrics()
-
-            # Create descriptive run name based on features, target and CV split type
-            feature_str = '_'.join(self.feature_type)  # Join feature types with underscore
-            target_str = self.connectome_target
-            cv_type = self.cv_type
-            model_type = self.model_type
-            run_name = f"{model_type}_{feature_str}_{target_str}_{cv_type}_fold{fold_idx}_final_eval"
+        
+            # Create feature string for run name
+            feature_str = "+".join(str(k) if v is None else f"{k}_{v}" 
+                                 for feat in self.feature_type 
+                                 for k,v in feat.items())
+            
+            run_name = f"{self.model_type}_{feature_str}_pred{self.connectome_target}_{self.cv_type}_fold{fold_idx}_final_eval"
 
             # Log final evaluation metrics
-            # Initialize a new, standalone W&B run for final evaluation results
-            final_eval_run = wandb.init(
-                project="gx2conn",
-                name=run_name,
-                tags=["final_evaluation", f"outerfold_{fold_idx}", "test_metrics"],
-                reinit=True
-            )
+            if track_wandb:
+                # Initialize a new, standalone W&B run for final evaluation results
+                final_eval_run = wandb.init(
+                    project="gx2conn",
+                    name=run_name,
+                    tags=[f'cv_type_{self.cv_type}', f'outerfold_{fold_idx}',  f'model_type_{self.model_type}', f'feature_type_{feature_str}', f'target_{self.connectome_target}'],
+                    reinit=True
+                )
 
-            if search_method[0] == 'wandb':
-                for epoch, (train_loss, val_loss, train_pearson, val_pearson) in enumerate(zip(train_history['train_loss'], train_history['val_loss'], train_history['train_pearson'], train_history['val_pearson'])):
-                    wandb.log({
-                        'train_mse_loss': train_loss,
-                        'train_pearson': train_pearson,
-                        'test_mse_loss': val_loss,
-                        'test_pearson': val_pearson
-                    })
+                if self.model_type in ['dynamic neural net']: # track epoch based learning 
+                    for epoch, (train_loss, val_loss, train_pearson, val_pearson) in enumerate(zip(train_history['train_loss'], train_history['val_loss'], train_history['train_pearson'], train_history['val_pearson'])):
+                        wandb.log({'train_mse_loss': train_loss, 'train_pearson': train_pearson, 'test_mse_loss': val_loss, 'test_pearson': val_pearson}) 
+                        # 'final_train_mse_loss': train_history['train_loss'][-1], 'final_train_pearson': train_history['train_pearson'][-1],  # can add back in if we want to log final epoch metrics
+                    
+                wandb.log({
+                    'final_train_metrics': train_metrics, 'final_test_metrics': test_metrics, 'best_val_loss': best_val_score, 'config': best_model.get_params()
+                })
                 
-                # Log final evaluation metrics
-                wandb.log({
-                    'final_train_metrics': train_metrics,
-                    'final_test_metrics': test_metrics,
-                    'final_train_mse_loss': train_history['train_loss'][-1],
-                    'final_train_pearson': train_history['train_pearson'][-1],
-                    'best_val_loss': best_val_score,
-                    'config': best_model.get_params()
-                })
-            else: 
-                wandb.log({
-                    'final_train_metrics': train_metrics,
-                    'final_test_metrics': test_metrics,
-                    'best_val_loss': best_val_score,
-                    'config': best_model.get_params()
-                })
-            
-            final_eval_run.finish()
-            print("Final evaluation metrics logged successfully.")
-            wandb.finish()
+                final_eval_run.finish()
+                print("Final evaluation metrics logged successfully.")
+                wandb.finish()
         
             print("\nTrain Metrics:", train_metrics)
             print("Test Metrics:", test_metrics)
@@ -477,7 +380,7 @@ class Simulation:
 
             model_json = None
 
-            # Implement function to grab feature importances here - can do for ridge too
+            # Set model specific parameters to be saved in pickle file (such as feature importances or model JSON)
             if self.model_type == 'pls':
                 feature_importances_ = best_model.x_weights_[:, 0]  # Weights for the first component
             elif self.model_type == 'xgboost': 
@@ -490,13 +393,13 @@ class Simulation:
             else: 
                 feature_importances_ = None
             
-            self.results.append({ # Can we add validation accuracy here? 
+            self.results.append({
                 'model_parameters': best_model.get_params(),
                 'train_metrics': train_metrics,
                 'best_val_score': best_val_score,
                 'test_metrics': test_metrics,
                 'y_true': Y_test.get() if self.gpu_acceleration else Y_test,
-                'y_pred': best_model.predict(X_test) if self.gpu_acceleration else best_model.predict(X_test), 
+                'y_pred': best_model.predict(X_test) if self.gpu_acceleration else best_model.predict(X_test),
                 'feature_importances': feature_importances_,
                 'model_json': model_json
             })

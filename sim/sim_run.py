@@ -77,7 +77,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
                 results_file_str += str(key)
             else:
                 results_file_str += f"{key}_{value}"
-        results_file_str += "_"
+        results_file_str += "+"
     results_file_str = results_file_str.rstrip("_")  # Remove trailing underscore
     
     results_file_str += f"_{connectome_target}_{model_type}_{cv_type}"    
@@ -108,7 +108,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     return
 
 
-def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target='FC', feature_interactions=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse'), save_model_json=False):
+def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target='FC', feature_interactions=None, use_shared_regions=False, test_shared_regions=False, resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse'), save_model_json=False, track_wandb=False):
     """
     Runs a single simulation for a given feature type and model configuration.
 
@@ -149,7 +149,11 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
     
     test_shared_regions : bool, optional
         Whether to test on shared regions. 
-    
+
+    include_conn_feats : bool, optional
+        Whether to include functional connectivity features in the analysis 
+        Note - will append connectivity features to the end of the feature vector. will not include connectivity to test regions. 
+
     resolution : float, optional
         Resolution parameter for the community splits. 
     
@@ -204,7 +208,7 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
                     save_model_json=save_model_json
                 )
     
-    sim.run_sim(search_method)
+    sim.run_sim(search_method, track_wandb)
     single_model_results.append(sim.results)
     
     # Save sim data
