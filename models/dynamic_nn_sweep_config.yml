@@ -11,7 +11,7 @@ parameters:
   learning_rate:
     values: [0.0003, 0.0001, 0.001] # [0.0001, 0.001, 0.003, 0.01, 0.03]
   batch_size:
-    values: [32, 64] #, 64] # 16, 128
+    values: [64, 128] #, 64] # 16, 32 128
   dropout_rate:
     values: [0.0, 0.1, 0.2] # , 0.1, 0.2, 0.5]
   weight_decay:
@@ -21,4 +21,4 @@ parameters:
   symmetry_weight:
     values: [0.0, 0.1] # [0.0, 0.01, 0.1, 0.2]
   epochs:
-    values: [10] # 300
+    values: [100] # 300

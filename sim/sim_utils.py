@@ -286,7 +286,7 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
         bayes_search = BayesSearchCV(
             model.get_model(),
             search_space,
-            n_iter=20,
+            n_iter=10, # 20
             n_points=10,
             cv=train_test_indices,
             scoring=scorer,
@@ -426,3 +426,46 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
     
     run.finish()
     return mean_metrics['mean_val_loss']
+
+
+def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold_idx, train_metrics, test_metrics, best_val_score, best_model, train_history):
+    """
+    Log metrics to Weights & Biases for tracking experiments.
+    
+    Args:
+        feature_type (list): List of feature dictionaries
+        model_type (str): Type of model being used
+        connectome_target (str): Target connectome type
+        cv_type (str): Type of cross validation
+        fold_idx (int): Current fold index
+        train_history (dict): Training history for epoch-based models
+        train_metrics (dict): Final training metrics
+        test_metrics (dict): Final test metrics 
+        best_val_score (float): Best validation score
+        best_model: Trained model object
+    """
+    # Create feature string for run name
+    feature_str = "+".join(str(k) if v is None else f"{k}_{v}" 
+                        for feat in feature_type 
+                        for k,v in feat.items())
+    run_name = f"{model_type}_{feature_str}_pred{connectome_target}_{cv_type}_fold{fold_idx}_final_eval"
+
+    # Initialize a new, standalone W&B run for final evaluation results
+    final_eval_run = wandb.init(
+        project="gx2conn",
+        name=run_name,
+        tags=[f'cv_type_{cv_type}', f'outerfold_{fold_idx}',  f'model_type_{model_type}', f'feature_type_{feature_str}', f'target_{connectome_target}'],
+        reinit=True
+    )
+
+    if model_type in ['dynamic neural net']: # track epochs
+        for epoch, (train_loss, val_loss, train_pearson, val_pearson) in enumerate(zip(train_history['train_loss'], train_history['val_loss'], train_history['train_pearson'], train_history['val_pearson'])):
+            wandb.log({'train_mse_loss': train_loss, 'train_pearson': train_pearson, 'test_mse_loss': val_loss, 'test_pearson': val_pearson})
+
+    wandb.log({
+        'final_train_metrics': train_metrics, 'final_test_metrics': test_metrics, 'best_val_loss': best_val_score, 'config': best_model.get_params()
+    })
+    
+    final_eval_run.finish()
+    print("Final evaluation metrics logged successfully.")
+    wandb.finish()
