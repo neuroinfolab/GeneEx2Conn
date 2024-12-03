@@ -52,6 +52,7 @@ from scipy.stats import randint, uniform
 from sklearn.preprocessing import MinMaxScaler
 from scipy.signal import savgol_filter
 from scipy.spatial.distance import pdist, squareform
+from scipy.io import loadmat
 
 # modeling
 from sklearn.model_selection import train_test_split
