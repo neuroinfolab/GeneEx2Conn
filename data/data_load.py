@@ -2,7 +2,7 @@
 
 from imports import *
 
-def load_transcriptome(parcellation='S100', stability='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=True):
+def load_transcriptome(parcellation='S100', gene_list='richiardi2015', dataset='AHBA', run_PCA=False, omit_subcortical=True):
     """
     Load transcriptome data from various datasets with optional PCA dimensionality reduction.
     
@@ -10,15 +10,15 @@ def load_transcriptome(parcellation='S100', stability='0.2', dataset='AHBA', run
     -----------
     parcellation : str, default='S100'. Options: 'S100', 'S456'
         Brain parcellation scheme to use
-    stability : str, default='0.2'
-        Stability threshold for AHBA data. Options: '0.2' or '1'
+    gene_list : str, default='0.2'
+       Gene lists to subset from AHBA data. Options: '0.2', '1', 'brain', 'neuron', 'oligodendrocyte', 'synaptome', 'layers', 'all_abagen', 'syngo'
     dataset : str, default='AHBA'
         Dataset to load. Options: 'AHBA', 'GTEx', 'AHBA in GTEx', 'UTSW', 'AHBA in UTSW'
     run_PCA : bool, default=False
         If True, applies PCA with 95% variance threshold
     omit_subcortical : bool, default=False
         If True, excludes subcortical regions
-    
+
     Returns:
     --------
     np.ndarray
@@ -26,35 +26,67 @@ def load_transcriptome(parcellation='S100', stability='0.2', dataset='AHBA', run
     """
     def _apply_pca(data, var_thresh=0.95):
         """Apply PCA with variance threshold."""
+        # Find rows without NaNs
+        valid_rows = ~np.isnan(data).any(axis=1)
+        
+        # Fit PCA on valid rows only
         pca = PCA()
-        data_pca = pca.fit_transform(data)
+        data_valid = data[valid_rows]
+        data_pca_valid = pca.fit_transform(data_valid)
+        
+        # Get number of components based on variance threshold
         cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
         n_components = np.argmax(cumulative_variance >= var_thresh) + 1
-        return data_pca[:, :n_components]
-
-    def _load_ahba_data():
-        """Load and process AHBA dataset in respectiv parcellation"""
-        ssl._create_default_https_context = ssl._create_unverified_context
-        genes = fetch_ahba()
+        print(f"Number of components for PCA: {n_components}")
         
+        # Initialize output array with NaNs
+        data_pca = np.full((data.shape[0], n_components), np.nan)
+        
+        # Fill in transformed valid rows
+        data_pca[valid_rows] = data_pca_valid[:, :n_components]
+        
+        return data_pca
+
+    def _load_ahba_data(parcellation, omit_subcortical, run_PCA):
+        """Load and process AHBA dataset in respectiv parcellation"""
+        #ssl._create_default_https_context = ssl._create_unverified_context
+        #genes = fetch_ahba()
+        
+        # load the data with the largest gene set by default for both parcellations
         if parcellation == 'S100':
-            genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r{stability}_schaefer_100.csv")
-            genes_data.set_index('label', inplace=True)
-            genes_data = np.array(genes_data)
+            genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r1_schaefer_{parcellation[1:]}.csv")
         elif parcellation == 'S456':
             AHBA_UKBB_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data/Penn_UKBB_data/AHBA_population_MH/'
-            AHBA_S456_transcriptome = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
-            AHBA_S456_transcriptome = AHBA_S456_transcriptome.drop('label', axis=1)
-            genes_list = pd.read_csv(f"./data/enigma/gene_lists/allgenes_stable_r{stability}_schaefer_400.txt", header=None)[0].tolist()
-            genes_data = np.array(AHBA_S456_transcriptome[genes_list])
+            genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
+            genes_data = genes_data.drop('label', axis=1)
             
+        # subset based on gene list
+        if gene_list == '0.2' or gene_list == '1':
+            genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_{parcellation[1:]}.txt", header=None)[0].tolist()
+        elif gene_list in ['brain', 'neuron', 'oligodendrocyte', 'synaptome', 'layers']:
+            genes_list = abagen.fetch_gene_group(gene_list)
+        elif gene_list == 'all_abagen': 
+            genes_list = set.union(
+                        set(abagen.fetch_gene_group('brain')),
+                        set(abagen.fetch_gene_group('neuron')), 
+                        set(abagen.fetch_gene_group('oligodendrocyte')),
+                        set(abagen.fetch_gene_group('synaptome')),
+                        set(abagen.fetch_gene_group('layers')))
+        elif gene_list == 'richiardi2015':
+            genes_list = pd.read_csv('./data/enigma/gene_lists/richiardi2015.txt', header=None)[0].tolist()
+        elif gene_list == 'syngo':
+            genes_list = pd.read_csv('./data/enigma/gene_lists/syngo.txt', header=None)[0].tolist()
+
+        # subset data based on genes_list
+        genes_data = np.array(genes_data[[gene for gene in genes_list if gene in genes_data.columns]])
+    
+        if run_PCA:
+            genes_data = _apply_pca(genes_data)
+
         if omit_subcortical:
             # Retain only cortical regions by rounding down to nearest hundred
             n = (genes_data.shape[0] // 100) * 100
             genes_data = genes_data[:n, :]
-        
-        if run_PCA:
-            genes_data = _apply_pca(genes_data)
 
         return genes_data
 
@@ -82,7 +114,7 @@ def load_transcriptome(parcellation='S100', stability='0.2', dataset='AHBA', run
 
     # Load and process data
     if dataset == 'AHBA':
-        return _load_ahba_data()
+        return _load_ahba_data(parcellation, omit_subcortical, run_PCA)
     
     if dataset in dataset_configs:
         config = dataset_configs[dataset]
@@ -92,7 +124,7 @@ def load_transcriptome(parcellation='S100', stability='0.2', dataset='AHBA', run
             
     raise ValueError(f"Unknown dataset: {dataset}")
 
-def load_connectome(parcellation='S100', dataset='AHBA', omit_subcortical=True, measure='FC', spectral=None):
+def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', measure='FC', spectral=None):
     """
     Load and process connectome data from various datasets with optional spectral decomposition.
     
@@ -130,7 +162,7 @@ def load_connectome(parcellation='S100', dataset='AHBA', omit_subcortical=True, 
         
         return matrix
 
-    def _load_ahba_connectome():
+    def _load_ahba_connectome(parcellation, omit_subcortical, spectral):
         # pull from HCP Enigma data
         if parcellation == 'S100':
             if measure == 'FC':
@@ -158,7 +190,7 @@ def load_connectome(parcellation='S100', dataset='AHBA', omit_subcortical=True, 
     }
 
     if dataset == 'AHBA':
-        return _load_ahba_connectome()
+        return _load_ahba_connectome(parcellation, omit_subcortical, spectral)
     
     # Load other datasets
     if dataset in replication_dataset_paths:

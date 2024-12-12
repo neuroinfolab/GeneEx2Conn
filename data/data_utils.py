@@ -82,6 +82,8 @@ def expand_X_symmetric(X):
     expanded_X = np.zeros((num_combinations * 2, 2 * num_genes))
     
     for i, (region1, region2) in enumerate(region_combinations):
+        if region1 == region2:
+            continue
         expanded_X[i * 2] = np.concatenate((X[region1], X[region2]))
         expanded_X[i * 2 + 1] = np.concatenate((X[region2], X[region1]))
 
@@ -104,6 +106,8 @@ def expand_Y_symmetric(Y):
     expanded_Y = np.zeros(num_combinations * 2)
     
     for i, (region1, region2) in enumerate(region_combinations):
+        if region1 == region2:
+            continue
         expanded_Y[i * 2] = Y[region1, region2]
         expanded_Y[i * 2 + 1] = Y[region2, region1]
     
@@ -419,7 +423,7 @@ def process_cv_splits(X, Y, cv_obj, all_train=False, incl_conn=False, test_share
                     X_test = expand_X_symmetric(X_test)
                     Y_test = expand_Y_symmetric(Y_test)
 
-        # print(f"Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")
+        print(f"Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")
         results.append((X_train, X_test, Y_train, Y_test))
 
     return results

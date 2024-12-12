@@ -71,6 +71,7 @@ importlib.reload(sim.sim_utils)
 
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, predict_connectome_from_connectome=False, feature_interactions=None, resolution=1.0,random_seed=42,
+                 omit_subcortical=False, parcellation='S100', gene_list='0.2',
                  use_shared_regions=False, include_conn_feats=False, test_shared_regions=False, connectome_target='FC', save_model_json=False):        
         """
         Initialization of simulation parameters
@@ -90,6 +91,7 @@ class Simulation:
         self.predict_connectome_from_connectome = predict_connectome_from_connectome
         self.resolution = resolution
         self.random_seed=random_seed
+        self.omit_subcortical, self.parcellation, self.gene_list = omit_subcortical, parcellation, gene_list
         self.use_shared_regions = use_shared_regions
         self.include_conn_feats = include_conn_feats
         self.test_shared_regions = test_shared_regions
@@ -102,15 +104,36 @@ class Simulation:
         """
         Load transcriptome and connectome data
         """
-        self.X = load_transcriptome()
-        self.X_pca = load_transcriptome(run_PCA=True)
-        self.Y_sc = load_connectome(measure='SC', spectral=None)
-        self.Y_sc_spectralL = load_connectome(measure='SC', spectral='L')
-        self.Y_sc_spectralA = load_connectome(measure='SC', spectral='A')
-        self.Y_fc = load_connectome(measure='FC')
-        self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
-        self.coords = load_coords()
+        self.X = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list)        
+        self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list,run_PCA=True)
+        self.Y_sc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None)
+        self.Y_sc_spectralL = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L')
+        self.Y_sc_spectralA = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='A')
+        self.Y_fc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC')
+        self.coords = load_coords(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical)
 
+        valid_indices = ~np.isnan(self.X).all(axis=1)  # Find rows that are not all NaN
+
+        # Subset all data using valid indices
+        self.X = self.X[valid_indices]
+        # self.X_pca = self.X_pca[valid_indices] done internally
+        self.Y_sc = self.Y_sc[valid_indices][:, valid_indices]
+        self.Y_sc_spectralL = self.Y_sc_spectralL[valid_indices]
+        self.Y_sc_spectralA = self.Y_sc_spectralA[valid_indices]
+        self.Y_fc = self.Y_fc[valid_indices][:, valid_indices]
+        self.coords = self.coords[valid_indices]
+
+        # Print shapes
+        print(f"X shape: {self.X.shape}")
+        print(f"X_pca shape: {self.X_pca.shape}")
+        print(f"Y_sc shape: {self.Y_sc.shape}")
+        print(f"Y_sc_spectralL shape: {self.Y_sc_spectralL.shape}")
+        print(f"Y_sc_spectralA shape: {self.Y_sc_spectralA.shape}")
+        print(f"Y_fc shape: {self.Y_fc.shape}")
+        print(f"Coordinates shape: {self.coords.shape}")
+
+        self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
+        print('Y shape', self.Y.shape)
     
     def select_cv(self):
         """
