@@ -11,7 +11,7 @@ def load_transcriptome(parcellation='S100', stability='0.2', dataset='AHBA', run
     parcellation : str, default='S100'. Options: 'S100', 'S456'
         Brain parcellation scheme to use
     stability : str, default='0.2'
-        Stability threshold for AHBA data. Options: '0.2' or '-1'
+        Stability threshold for AHBA data. Options: '0.2' or '1'
     dataset : str, default='AHBA'
         Dataset to load. Options: 'AHBA', 'GTEx', 'AHBA in GTEx', 'UTSW', 'AHBA in UTSW'
     run_PCA : bool, default=False
@@ -45,12 +45,7 @@ def load_transcriptome(parcellation='S100', stability='0.2', dataset='AHBA', run
             AHBA_UKBB_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data/Penn_UKBB_data/AHBA_population_MH/'
             AHBA_S456_transcriptome = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
             AHBA_S456_transcriptome = AHBA_S456_transcriptome.drop('label', axis=1)
-            if stability == '0.2':
-                genes_list = pd.read_csv(f"./data/enigma/allgenes_stable_r{stability}_schaefer_400.csv").columns.tolist()
-            else: # use stable 100 genes as maximal gene list
-                genes_list = pd.read_csv(f"./data/enigma/allgenes_stable_r{stability}_schaefer_100.csv").columns.tolist()
-            
-            genes_list.remove('label')
+            genes_list = pd.read_csv(f"./data/enigma/gene_lists/allgenes_stable_r{stability}_schaefer_400.txt", header=None)[0].tolist()
             genes_data = np.array(AHBA_S456_transcriptome[genes_list])
             
         if omit_subcortical:
@@ -120,9 +115,7 @@ def load_connectome(parcellation='S100', dataset='AHBA', omit_subcortical=True, 
         Processed connectome data
     """
     relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)
-    UKBB_path = relative_data_path + '/GeneEx2Conn_data/Penn_UKBB_data/'
-    HCP_path = relative_data_path + '/GeneEx2Conn_data/HCP1200_DTI/'
-
+    
     def _apply_spectral_decomposition(matrix, method):
         if method == 'L':
             L = laplacian(matrix, normed=True)
@@ -149,7 +142,7 @@ def load_connectome(parcellation='S100', dataset='AHBA', omit_subcortical=True, 
             if measure == 'FC':
                 matrix = np.array(pd.read_csv('./data/UKBB/UKBB_S456_functional_conn.csv'))
             elif measure == 'SC':
-                matrix = np.log1p(loadmat(HCP_path + '/4S456/4S456_DTI_count.mat')['connectivity'])
+                matrix = np.log1p(loadmat('./data/HCP1200/4S456_DTI_count.mat')['connectivity'])
         
         if omit_subcortical:
             # Retain only cortical regions by rounding down to nearest hundred
@@ -175,7 +168,7 @@ def load_connectome(parcellation='S100', dataset='AHBA', omit_subcortical=True, 
     raise ValueError(f"Unknown dataset: {dataset}")
 
 
-def load_coords(parcellation='S100'):
+def load_coords(parcellation='S100', omit_subcortical=True):
     """
     Return x, y, z coordinates of parcellation.
     """
@@ -191,8 +184,13 @@ def load_coords(parcellation='S100'):
         mni_coords = [[x, y, z] for x, y, z in zip(UKBB_S456_atlas_info['mni_x'], 
                                               UKBB_S456_atlas_info['mni_y'],
                                               UKBB_S456_atlas_info['mni_z'])]
-        coordinates = mni_coords
+        coordinates = np.array(mni_coords)
         
+    if omit_subcortical:
+        # Retain only cortical regions by rounding down to nearest hundred
+        n = (coordinates.shape[0] // 100) * 100
+        coordinates = coordinates[:n, :]
+    
     return coordinates
 
 
