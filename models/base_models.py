@@ -241,10 +241,10 @@ class MLPModel(BaseEstimator, RegressorMixin):
 
         for hidden_dim in self.hidden_dims:
             layers.append(nn.Linear(prev_dim, hidden_dim))
-            #layers.append(nn.BatchNorm1d(hidden_dim))
+            layers.append(nn.BatchNorm1d(hidden_dim))
             layers.append(nn.ReLU())
-            #if self.dropout > 0:
-            #    layers.append(nn.Dropout(self.dropout))
+            if self.dropout > 0:
+                layers.append(nn.Dropout(self.dropout))
             prev_dim = hidden_dim
         
         layers.append(nn.Linear(prev_dim, output_dim))
@@ -293,7 +293,7 @@ class MLPModel(BaseEstimator, RegressorMixin):
                 outputs = self.forward(batch_X)
                 loss = self.criterion(outputs, batch_y)
                 loss.backward()
-                #torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_grad_norm)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_grad_norm)
                 optimizer.step()
                 epoch_loss += loss.item()
             
@@ -325,10 +325,10 @@ class MLPModel(BaseEstimator, RegressorMixin):
             # 'batch_size': [8, 64]
 
             # single run params for debugging
-            'l2_reg': [1e-3, 0], # [1e-3, 0]
+            'l2_reg': [1e-3], # [1e-3, 0]
             'lr': [1e-3], #, 0.01, 0.03],
             'epochs': [200], #[50, 100, 300],
-            'batch_size': [32, 64] # [32, 64]. has to be an even number, 32 works well with 1e_3 learning rate, no reg, dropout 0.2
+            'batch_size': [64] # [32, 64]. has to be an even number, 32 works well with 1e_3 learning rate, no reg, dropout 0.2
         }
     
     def get_param_dist(self):

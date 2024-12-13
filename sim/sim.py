@@ -116,7 +116,7 @@ class Simulation:
 
         # Subset all data using valid indices
         self.X = self.X[valid_indices]
-        # self.X_pca = self.X_pca[valid_indices] done internally
+        self.X_pca = self.X_pca[valid_indices]
         self.Y_sc = self.Y_sc[valid_indices][:, valid_indices]
         self.Y_sc_spectralL = self.Y_sc_spectralL[valid_indices]
         self.Y_sc_spectralA = self.Y_sc_spectralA[valid_indices]
