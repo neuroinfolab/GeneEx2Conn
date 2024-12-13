@@ -140,7 +140,7 @@ def validate_inputs(
     
     # Validate model type if provided
     if model_type is not None:
-        valid_model_types = {'ridge', 'pls', 'xgboost', 'mlp', 'dynamic_nn'}
+        valid_model_types = {'ridge', 'pls', 'xgboost', 'mlp', 'dynamic_nn', 'bilinear_baseline'}
         if model_type not in valid_model_types:
             raise ValueError(f"Invalid model_type: {model_type}. Must be one of {valid_model_types}")
     

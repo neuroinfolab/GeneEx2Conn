@@ -357,6 +357,204 @@ class MLPModel(BaseEstimator, RegressorMixin):
     #     y_pred = self.predict(X)
     #     return mse_cupy(y, y_pred)  # or another custom metric
 
+
+
+
+# SUBMODELS
+class BilinearRegressionModel(nn.Module):
+    """Basic bilinear model without activation function."""
+    def __init__(self, input_size, output_size):
+        super().__init__()
+        self.linear = nn.Linear(input_size, output_size, bias=False)
+        self.linear2 = nn.Linear(input_size, output_size, bias=False)
+
+    def forward(self, x1, x2):
+        # Project both inputs to lower dimensional space
+        out1 = self.linear(x1)   # Shape: [batch_size, output_size]
+        out2 = self.linear2(x2)  # Shape: [batch_size, output_size]
+        # Compute similarity between projections
+        return torch.matmul(out1, out2.T)  # Shape: [batch_size, batch_size]
+
+class BilinearSigmoidRegressionModel(nn.Module):
+    """Bilinear model with sigmoid activation for bounded output."""
+    def __init__(self, input_size, output_size):
+        super().__init__()
+        self.linear = nn.Linear(input_size, output_size, bias=False)
+        self.linear2 = nn.Linear(input_size, output_size, bias=False)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x1, x2):
+        # Project and apply sigmoid to constrain outputs between 0 and 1
+        out1 = self.sigmoid(self.linear(x1))
+        out2 = self.sigmoid(self.linear2(x2))
+        return torch.matmul(out1, out2.T)
+
+class BilinearReLURegressionModel(nn.Module):
+    """Bilinear model with ReLU activation for non-negative outputs."""
+    def __init__(self, input_size, output_size):
+        super().__init__()
+        self.linear = nn.Linear(input_size, output_size, bias=False)
+        self.linear2 = nn.Linear(input_size, output_size, bias=False)
+        self.relu = nn.ReLU()
+
+    def forward(self, x1, x2):
+        # Project and apply ReLU to ensure non-negative outputs
+        out1 = self.relu(self.linear(x1))
+        out2 = self.relu(self.linear2(x2))
+        return torch.matmul(out1, out2.T)
+
+class BilinearSoftplusModel(nn.Module):
+    """Bilinear model with Softplus activation for smooth non-negative outputs."""
+    def __init__(self, input_size, output_size):
+        super().__init__()
+        self.linear = nn.Linear(input_size, output_size, bias=False)
+        self.linear2 = nn.Linear(input_size, output_size, bias=False)
+        self.softplus = nn.Softplus()
+
+    def forward(self, x1, x2):
+        # Project and apply Softplus for smooth, non-negative outputs
+        out1 = self.softplus(self.linear(x1))
+        out2 = self.softplus(self.linear2(x2))
+        return torch.matmul(out1, out2.T)
+        
+# BASE MODEL
+class BilinearModel(BaseEstimator, RegressorMixin):
+    """PyTorch-based Bilinear Regression model for predicting connectivity from gene expression."""
+
+    def __init__(self, input_dim, reduced_dim=10, activation='none', lr=0.01, 
+                 epochs=100, batch_size=32, lambda_reg=1.0):
+        super().__init__()
+        self.input_dim = input_dim  # Gene expression dimension
+        self.reduced_dim = reduced_dim  # Dimension to project to (k in the paper)
+        self.activation = activation  # 'none', 'relu', 'sigmoid', or 'softplus'
+        self.lr = lr
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.lambda_reg = lambda_reg  # L1 regularization weight
+
+        # Initialize the PyTorch model
+        self.model = self._create_model()
+        self.criterion = nn.MSELoss()
+        self.criterion_l1 = nn.L1Loss()
+
+        # Move model to GPU if available
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = self.model.to(self.device)
+
+    def _create_model(self):
+        """Create the appropriate bilinear model based on activation type."""
+        if self.activation == 'sigmoid':
+            return BilinearSigmoidRegressionModel(self.input_dim, self.reduced_dim)
+        elif self.activation == 'relu':
+            return BilinearReLURegressionModel(self.input_dim, self.reduced_dim)
+        elif self.activation == 'softplus':
+            return Softplus_Model(self.input_dim, self.reduced_dim)
+        else:
+            return BilinearRegressionModel(self.input_dim, self.reduced_dim)
+
+    def fit(self, X, y):
+        """Fit the bilinear model using PyTorch."""
+        # Convert data to tensors and move to device
+        X_tensor = torch.FloatTensor(X).to(self.device)
+        y_tensor = torch.FloatTensor(y).to(self.device)
+        print(f"X tensor shape: {X_tensor.shape}")
+        print(f"y tensor shape: {y_tensor.shape}")
+        
+        # Create dataset and dataloader
+        dataset = TensorDataset(X_tensor, y_tensor)
+        train_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+
+        # Define optimizer
+        optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
+
+        # Training loop
+        self.model.train()
+        
+        print("Model architecture:")
+        print(self.model)
+        print("\nModel parameters:")
+        total_params = sum(p.numel() for p in self.model.parameters())
+        print(f"Total parameters: {total_params:,}")
+
+        for epoch in range(self.epochs):
+            total_loss = 0
+            for batch_X, batch_y in train_loader:
+                # Forward pass using tensor indexing
+                optimizer.zero_grad()
+
+                pred = self.predict(batch_X)
+                
+                # Compute loss with L1 regularization
+                mse_loss = self.criterion(pred, batch_y)
+                l1_loss = (self.criterion_l1(self.model.linear.weight, torch.zeros_like(self.model.linear.weight)) +
+                          self.criterion_l1(self.model.linear2.weight, torch.zeros_like(self.model.linear2.weight)))
+                loss = mse_loss + self.lambda_reg * l1_loss
+
+                # Backward pass and optimization
+                loss.backward()
+                optimizer.step()
+                print(f"loss: {loss.item()}")
+                total_loss += loss.item()
+
+            if (epoch + 1) % 10 == 0:
+                print(f'Epoch [{epoch+1}/{self.epochs}], Loss: {total_loss/len(train_loader):.4f}')
+
+        return self
+
+    def predict(self, X):
+        """Make predictions using the trained bilinear model."""
+        self.model.eval()
+        X_tensor = torch.FloatTensor(X).to(self.device)
+        
+        with torch.no_grad():
+            region_feature_dim = X_tensor.size(1) // 2
+            predictions = self.model(X_tensor[:, :region_feature_dim], X_tensor[:, region_feature_dim:]).cpu().numpy()
+        return predictions
+
+    def get_params(self, deep=True):
+        """Get parameters for this estimator."""
+        return {
+            "input_dim": self.input_dim,
+            "reduced_dim": self.reduced_dim,
+            "activation": self.activation,
+            "lr": self.lr,
+            "epochs": self.epochs,
+            "batch_size": self.batch_size,
+            "lambda_reg": self.lambda_reg
+        }
+
+    def set_params(self, **parameters):
+        """Set parameters for this estimator."""
+        for parameter, value in parameters.items():
+            setattr(self, parameter, value)
+        self.model = self._create_model()
+        return self
+
+    def get_param_grid(self):
+        """Return a parameter grid for hyperparameter tuning."""
+        return {
+            'reduced_dim': [10], # [5, 10, 20],
+            'activation': ['none'], # ['none', 'relu', 'sigmoid', 'softplus'],
+            'lr': [0.0001], #[0.001, 0.01],
+            'lambda_reg': [10], #[0.1, 1.0, 10.0],
+            'batch_size': [16] #[32, 64]
+        }
+    
+    def get_param_dist(self):
+        """Return the parameter distribution for Bayesian optimization."""
+        return {
+            'reduced_dim': Integer(5, 50),
+            'activation': Categorical(['none', 'relu', 'sigmoid', 'softplus']),
+            'lr': Real(1e-4, 1e-2, prior='log-uniform'),
+            'lambda_reg': Real(1e-1, 1e2, prior='log-uniform')
+        }
+
+    def get_model(self):
+        """Return the PyTorch model instance."""
+        return self
+
+
+
 class ModelBuild:
     """Factory class to create models based on the given model type."""
         
@@ -366,15 +564,18 @@ class ModelBuild:
             'xgboost': XGBModel,
             'random_forest': RandomForestModel,
             'ridge_torch': RidgeModelTorch,
+            'bilinear_baseline': BilinearModel,
             'ridge': RidgeModel,
             'pls': PLSModel, 
-            'mlp': MLPModel 
+            'mlp': MLPModel
         }
     
         if model_type in model_mapping:
             if model_type in ['mlp', 'ridge_torch']:
                 print('GPU model input size', input_size)
                 return model_mapping[model_type](input_dim=input_size)
+            elif model_type == 'bilinear_baseline':
+                return model_mapping[model_type](input_dim=input_size / 2)
             else:
                 return model_mapping[model_type]()
         else:

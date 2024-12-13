@@ -301,7 +301,6 @@ def expand_X_symmetric(X):
     num_regions, num_genes = X.shape
     region_combinations = list(combinations(range(num_regions), 2))
     num_combinations = len(region_combinations)
-    print(f"Number of combinations: {num_combinations}")
 
     expanded_X = np.zeros((num_combinations * 2, 2 * num_genes))
     
