@@ -2,7 +2,7 @@
 
 from imports import *
 
-def load_transcriptome(parcellation='S100', gene_list='richiardi2015', dataset='AHBA', run_PCA=False, omit_subcortical=True):
+def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=True):
     """
     Load transcriptome data from various datasets with optional PCA dimensionality reduction.
     
