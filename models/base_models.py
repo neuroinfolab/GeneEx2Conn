@@ -359,22 +359,8 @@ class MLPModel(BaseEstimator, RegressorMixin):
 
 
 
-
 # SUBMODELS
-class BilinearRegressionModel(nn.Module):
-    """Basic bilinear model without activation function."""
-    def __init__(self, input_size, output_size):
-        super().__init__()
-        self.linear = nn.Linear(input_size, output_size, bias=False)
-        self.linear2 = nn.Linear(input_size, output_size, bias=False)
-
-    def forward(self, x1, x2):
-        # Project both inputs to lower dimensional space
-        out1 = self.linear(x1)   # Shape: [batch_size, output_size]
-        out2 = self.linear2(x2)  # Shape: [batch_size, output_size]
-        # Compute similarity between projections
-        return torch.matmul(out1, out2.T)  # Shape: [batch_size, batch_size]
-
+'''
 class BilinearSigmoidRegressionModel(nn.Module):
     """Bilinear model with sigmoid activation for bounded output."""
     def __init__(self, input_size, output_size):
@@ -416,7 +402,22 @@ class BilinearSoftplusModel(nn.Module):
         out1 = self.softplus(self.linear(x1))
         out2 = self.softplus(self.linear2(x2))
         return torch.matmul(out1, out2.T)
-        
+'''
+
+class BilinearRegressionModel(nn.Module):
+    """Basic bilinear model without activation function."""
+    def __init__(self, input_size, output_size):
+        super(BilinearRegressionModel, self).__init__()
+        self.linear = nn.Linear(input_size, output_size, bias=False)
+        self.linear2 = nn.Linear(input_size, output_size, bias=False)
+
+    def forward(self, x1, x2):
+        # Project both inputs to lower dimensional space
+        out1 = self.linear(x1)   # Shape: [batch_size, output_size]
+        out2 = self.linear2(x2)  # Shape: [batch_size, output_size]
+        # Compute similarity between projections
+        return torch.matmul(out1, out2.T)  # Shape: [batch_size, batch_size]
+
 # BASE MODEL
 class BilinearModel(BaseEstimator, RegressorMixin):
     """PyTorch-based Bilinear Regression model for predicting connectivity from gene expression."""
@@ -431,7 +432,7 @@ class BilinearModel(BaseEstimator, RegressorMixin):
         self.epochs = epochs
         self.batch_size = batch_size
         self.lambda_reg = lambda_reg  # L1 regularization weight
-
+        
         # Initialize the PyTorch model
         self.model = self._create_model()
         self.criterion = nn.MSELoss()
@@ -440,6 +441,12 @@ class BilinearModel(BaseEstimator, RegressorMixin):
         # Move model to GPU if available
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(self.device)
+        
+        print("Model architecture:")
+        print(self.model)
+        print("\nModel parameters:")
+        total_params = sum(p.numel() for p in self.model.parameters())
+        print(f"Total parameters: {total_params:,}")
 
     def _create_model(self):
         """Create the appropriate bilinear model based on activation type."""
@@ -470,12 +477,6 @@ class BilinearModel(BaseEstimator, RegressorMixin):
         # Training loop
         self.model.train()
         
-        print("Model architecture:")
-        print(self.model)
-        print("\nModel parameters:")
-        total_params = sum(p.numel() for p in self.model.parameters())
-        print(f"Total parameters: {total_params:,}")
-
         for epoch in range(self.epochs):
             total_loss = 0
             for batch_X, batch_y in train_loader:
@@ -488,6 +489,7 @@ class BilinearModel(BaseEstimator, RegressorMixin):
                 mse_loss = self.criterion(pred, batch_y)
                 l1_loss = (self.criterion_l1(self.model.linear.weight, torch.zeros_like(self.model.linear.weight)) +
                           self.criterion_l1(self.model.linear2.weight, torch.zeros_like(self.model.linear2.weight)))
+                
                 loss = mse_loss + self.lambda_reg * l1_loss
 
                 # Backward pass and optimization
@@ -509,6 +511,7 @@ class BilinearModel(BaseEstimator, RegressorMixin):
         with torch.no_grad():
             region_feature_dim = X_tensor.size(1) // 2
             predictions = self.model(X_tensor[:, :region_feature_dim], X_tensor[:, region_feature_dim:]).cpu().numpy()
+        
         return predictions
 
     def get_params(self, deep=True):
@@ -533,10 +536,10 @@ class BilinearModel(BaseEstimator, RegressorMixin):
     def get_param_grid(self):
         """Return a parameter grid for hyperparameter tuning."""
         return {
-            'reduced_dim': [10], # [5, 10, 20],
+            'reduced_dim': [2], # [5, 10, 20],
             'activation': ['none'], # ['none', 'relu', 'sigmoid', 'softplus'],
             'lr': [0.0001], #[0.001, 0.01],
-            'lambda_reg': [10], #[0.1, 1.0, 10.0],
+            'lambda_reg': [0], #[0.1, 1.0, 10.0],
             'batch_size': [16] #[32, 64]
         }
     
@@ -575,7 +578,7 @@ class ModelBuild:
                 print('GPU model input size', input_size)
                 return model_mapping[model_type](input_dim=input_size)
             elif model_type == 'bilinear_baseline':
-                return model_mapping[model_type](input_dim=input_size / 2)
+                return model_mapping[model_type](input_dim=int(input_size/2))
             else:
                 return model_mapping[model_type]()
         else:

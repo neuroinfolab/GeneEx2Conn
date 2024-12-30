@@ -155,8 +155,8 @@ class Simulation:
         features = []
         for feature_dict in self.feature_type:
             for feature_name, processing_type in feature_dict.items():
-                print('feature_name', feature_name)
-                print('processing_type', processing_type)
+                print('feature_name: ', feature_name)
+                print('processing_type: ', processing_type)
                 if processing_type is None:
                     features.append(feature_name)
                 else:

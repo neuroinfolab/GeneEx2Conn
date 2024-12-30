@@ -356,7 +356,7 @@ def process_cv_splits(X, Y, cv_obj, all_train=False, incl_conn=False, test_share
         Y_train, Y_test = Y[train_index][:, train_index], Y[test_index][:, test_index]
         Y_test_conn = Y_test
 
-        print(f"INPUT: Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")   
+        #print(f"INPUT: Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")   
         
         if all_train:
             if incl_conn:
@@ -422,7 +422,7 @@ def process_cv_splits(X, Y, cv_obj, all_train=False, incl_conn=False, test_share
                     X_test = expand_X_symmetric(X_test)
                     Y_test = expand_Y_symmetric(Y_test)
 
-        print(f"PROCESSED: Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")
+        #print(f"PROCESSED: Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")
         results.append((X_train, X_test, Y_train, Y_test))
 
     return results

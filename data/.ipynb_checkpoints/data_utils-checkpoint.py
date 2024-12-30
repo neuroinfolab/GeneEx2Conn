@@ -65,49 +65,6 @@ def make_symmetric(matrix):
     """
     return (matrix + matrix.T) / 2
 
-def expand_X_symmetric(X):
-    """
-    Expands the X matrix symmetrically by combining gene expressions from pairs of regions.
-
-    Parameters:
-    X (numpy.ndarray): Input matrix of gene expressions.
-
-    Returns:
-    numpy.ndarray: Expanded symmetric matrix.
-    """
-    num_regions, num_genes = X.shape
-    region_combinations = list(combinations(range(num_regions), 2))
-    num_combinations = len(region_combinations)
-
-    expanded_X = np.zeros((num_combinations * 2, 2 * num_genes))
-    
-    for i, (region1, region2) in enumerate(region_combinations):
-        expanded_X[i * 2] = np.concatenate((X[region1], X[region2]))
-        expanded_X[i * 2 + 1] = np.concatenate((X[region2], X[region1]))
-
-    return expanded_X
-
-def expand_Y_symmetric(Y):
-    """
-    Expands the Y matrix symmetrically by extracting pairwise connectivity values.
-
-    Parameters:
-    Y (numpy.ndarray): Input matrix of connectome values.
-
-    Returns:
-    numpy.ndarray: Expanded symmetric vector.
-    """
-    num_regions = Y.shape[0]
-    region_combinations = list(combinations(range(num_regions), 2))
-    num_combinations = len(region_combinations)
-    
-    expanded_Y = np.zeros(num_combinations * 2)
-    
-    for i, (region1, region2) in enumerate(region_combinations):
-        expanded_Y[i * 2] = Y[region1, region2]
-        expanded_Y[i * 2 + 1] = Y[region2, region1]
-    
-    return expanded_Y
 
 def expand_X_symmetric_kron(X, kron_input_dim):
     """
@@ -124,21 +81,17 @@ def expand_X_symmetric_kron(X, kron_input_dim):
     region_combinations = list(combinations(range(num_regions), 2))
     num_combinations = len(region_combinations)
     
+    if int(X.shape[1]) == kron_input_dim or kron_input_dim == None:
+        expanded_X = np.zeros((num_combinations * 2, num_genes**2))
+    else:
+        expanded_X = np.zeros((num_combinations * 2, kron_input_dim**2 + (2*(X.shape[1]-kron_input_dim))))
+
     for i, (region1, region2) in enumerate(region_combinations):
-        if int(X.shape[1]) == kron_input_dim or kron_input_dim == None: # kronecker was specified but not for transcriptome PCA
-            
-            expanded_X = np.zeros((num_combinations * 2, num_genes**2))
-            
-            # threshold = 1e-10
-            #expanded_X[i * 2] = np.log(np.maximum(np.kron(X[region1], X[region2]), threshold))
-            #expanded_X[i * 2 + 1] = np.log(np.maximum(np.kron(X[region2], X[region1]), threshold))
-            
-            # Kronecker product of the region1 and region2 gene expressions        
+        if int(X.shape[1]) == kron_input_dim or kron_input_dim == None: # kronecker specified for single feature type
+            # Kronecker product of the region1 and region2 gene expressions            
             expanded_X[i * 2] = np.kron(X[region1], X[region2])
             expanded_X[i * 2 + 1] = np.kron(X[region2]+1, X[region1]+1)
         else: 
-            expanded_X = np.zeros((num_combinations * 2, kron_input_dim**2 + (2*(X.shape[1]-kron_input_dim))))
-
             # Kronecker product of the region1 and region2 gene expressions concatenated with other features
             expanded_X[i * 2] = np.hstack((
                                     np.kron(X[region1][:kron_input_dim], X[region2][:kron_input_dim]), # kronecker product vector
@@ -149,6 +102,47 @@ def expand_X_symmetric_kron(X, kron_input_dim):
                                         np.kron(X[region2][:kron_input_dim], X[region1][:kron_input_dim]), 
                                         np.concatenate((X[region2][kron_input_dim:], X[region1][kron_input_dim:]))
                                     ))
+
+    return expanded_X
+
+def expand_X_symmetric_struct_summ(X, include_input=False):
+    """
+    Expands the X matrix symmetrically by extracting pairwise connectivity values and correlations of the structural connectivity profiles.
+    If include_input is True, also includes the original structural connectivity rows.
+    
+    Parameters:
+    X (numpy.ndarray): Input square connectivity matrix.
+    include_input (bool): Whether to include original structural connectivity rows.
+    
+    Returns:
+    numpy.ndarray: Expanded matrix with connectivity values, correlations, and optionally original rows.
+    """
+    num_regions = X.shape[0]
+    region_combinations = list(combinations(range(num_regions), 2))
+    num_combinations = len(region_combinations)
+    
+    if include_input:
+        expanded_X = np.zeros((num_combinations * 2, 2 + 2*num_regions))
+    else:
+        expanded_X = np.zeros((num_combinations * 2, 2))
+        print('STRUCT SUMM MODALITY')
+    
+    for i, (region1, region2) in enumerate(region_combinations):
+        # Get connectivity values
+        expanded_X[i * 2, 0] = X[region1, region2]
+        expanded_X[i * 2 + 1, 0] = X[region2, region1]
+        
+        # Compute correlations
+        corr = np.corrcoef(X[region1, :], X[region2, :])[0,1]
+        expanded_X[i * 2, 1] = corr
+        expanded_X[i * 2 + 1, 1] = corr
+
+        # Include original structural connectivity rows if requested
+        if include_input:
+            expanded_X[i * 2, 2:2+num_regions] = X[region1]
+            expanded_X[i * 2, 2+num_regions:] = X[region2]
+            expanded_X[i * 2 + 1, 2:2+num_regions] = X[region2]
+            expanded_X[i * 2 + 1, 2+num_regions:] = X[region1]
 
     return expanded_X
 
@@ -203,8 +197,6 @@ def expand_X_Y_symmetric_conn_only(X, Y):
     expanded_Y = np.zeros((num_combinations * 2))
 
     for i, (region1, region2) in enumerate(region_combinations):
-        if region1 == region2:
-            continue
         expanded_X[i * 2] = np.concatenate((X[region1], X[region2]))
         expanded_X[i * 2 + 1] = np.concatenate((X[region2], X[region1]))
         expanded_Y[i * 2] = Y[region1, region2]
@@ -265,6 +257,7 @@ def expand_shared_matrices(X_train, X_train2, Y_train2, Y_train_feats1=np.nan, Y
 
     return X_train_shared, Y_expanded
 
+
 def expand_X_symmetric_w_conn(X, Y, test=False):
     """
     Expands X matrix symmetrically and includes connectivity.
@@ -294,7 +287,54 @@ def expand_X_symmetric_w_conn(X, Y, test=False):
 
     return expanded_X
 
-def process_cv_splits(X, Y, cv_obj, all_train=True, incl_conn=False, test_shared=False, kron=False, kron_input_dim=None):
+
+def expand_X_symmetric(X):
+    """
+    Expands the X matrix symmetrically by combining featuresfrom pairs of regions.
+
+    Parameters:
+    X (numpy.ndarray): Input matrix of gene expressions.
+
+    Returns:
+    numpy.ndarray: Expanded symmetric matrix.
+    """
+    num_regions, num_genes = X.shape
+    region_combinations = list(combinations(range(num_regions), 2))
+    num_combinations = len(region_combinations)
+
+    expanded_X = np.zeros((num_combinations * 2, 2 * num_genes))
+    
+    for i, (region1, region2) in enumerate(region_combinations):
+        expanded_X[i * 2] = np.concatenate((X[region1], X[region2]))
+        expanded_X[i * 2 + 1] = np.concatenate((X[region2], X[region1]))
+
+    return expanded_X
+
+
+def expand_Y_symmetric(Y):
+    """
+    Expands the Y matrix symmetrically by extracting pairwise connectivity values.
+
+    Parameters:
+    Y (numpy.ndarray): Input matrix of connectome values.
+
+    Returns:
+    numpy.ndarray: Expanded symmetric vector.
+    """
+    num_regions = Y.shape[0]
+    region_combinations = list(combinations(range(num_regions), 2))
+    num_combinations = len(region_combinations)
+    
+    expanded_Y = np.zeros(num_combinations * 2)
+    
+    for i, (region1, region2) in enumerate(region_combinations):
+        expanded_Y[i * 2] = Y[region1, region2]
+        expanded_Y[i * 2 + 1] = Y[region2, region1]
+    
+    return expanded_Y
+
+
+def process_cv_splits(X, Y, cv_obj, all_train=False, incl_conn=False, test_shared=False, struct_summ=False, kron=False, kron_input_dim=None):
     """
     Function to process cross-validation splits, expand training and test data as needed.
 
@@ -311,13 +351,13 @@ def process_cv_splits(X, Y, cv_obj, all_train=True, incl_conn=False, test_shared
     """
     results = []
 
-    for fold_idx, (train_index, test_index) in enumerate(cv_obj.split(X, Y)):
-        print(f"Processing fold {fold_idx}...")
-        
+    for fold_idx, (train_index, test_index) in enumerate(cv_obj.split(X, Y)):        
         X_train, X_test = X[train_index], X[test_index]
         Y_train, Y_test = Y[train_index][:, train_index], Y[test_index][:, test_index]
         Y_test_conn = Y_test
 
+        #print(f"INPUT: Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")   
+        
         if all_train:
             if incl_conn:
                 X_train2, Y_train2 = X[test_index], Y[train_index][:, test_index]
@@ -369,6 +409,12 @@ def process_cv_splits(X, Y, cv_obj, all_train=True, incl_conn=False, test_shared
     
                     X_test = expand_X_symmetric_kron(X_test, kron_input_dim)
                     Y_test = expand_Y_symmetric(Y_test)
+                elif struct_summ: # struct summ case where we use the strength and correlation from structural connectivity
+                    X_train = expand_X_symmetric_struct_summ(X_train)
+                    Y_train = expand_Y_symmetric(Y_train)
+
+                    X_test = expand_X_symmetric_struct_summ(X_test)
+                    Y_test = expand_Y_symmetric(Y_test) 
                 else:
                     X_train = expand_X_symmetric(X_train)
                     Y_train = expand_Y_symmetric(Y_train)
@@ -376,8 +422,8 @@ def process_cv_splits(X, Y, cv_obj, all_train=True, incl_conn=False, test_shared
                     X_test = expand_X_symmetric(X_test)
                     Y_test = expand_Y_symmetric(Y_test)
 
+        #print(f"PROCESSED: Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")
         results.append((X_train, X_test, Y_train, Y_test))
-        #print(f"Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")
 
     return results
 
@@ -427,8 +473,9 @@ def process_cv_splits_conn_only_model(X, Y, cv_obj, all_train=True, test_shared=
             X_test = expand_X_symmetric(X_test)
             Y_test = expand_Y_symmetric(Y_test)
     
+        # print(f"Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")
         results.append((X_train, X_test, Y_train, Y_test))
-        #print(f"Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")
+
     
     return results
 
