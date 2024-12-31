@@ -254,6 +254,7 @@ class MLPModel(BaseEstimator, RegressorMixin):
             print(f"Using {torch.cuda.device_count()} GPUs")
             self.model = nn.DataParallel(self.model)
         self.model = self.model.to(self.device)
+        
 
     def _default_hidden_dims(self, input_dim):
         """Private method to define default hidden dimensions based on input size."""
@@ -266,7 +267,6 @@ class MLPModel(BaseEstimator, RegressorMixin):
     
     def forward(self, x):
         return self.model(x)
-
 
     def fit(self, X, y):
         """Train the model with PyTorch."""
@@ -327,7 +327,7 @@ class MLPModel(BaseEstimator, RegressorMixin):
             # single run params for debugging
             'l2_reg': [1e-3], # [1e-3, 0]
             'lr': [1e-3], #, 0.01, 0.03],
-            'epochs': [200], #[50, 100, 300],
+            'epochs': [100], #[50, 100, 300],
             'batch_size': [64] # [32, 64]. has to be an even number, 32 works well with 1e_3 learning rate, no reg, dropout 0.2
         }
     
@@ -356,7 +356,6 @@ class MLPModel(BaseEstimator, RegressorMixin):
     #     """Score the model using a custom scorer."""
     #     y_pred = self.predict(X)
     #     return mse_cupy(y, y_pred)  # or another custom metric
-
 
 
 # SUBMODELS
@@ -415,8 +414,8 @@ class BilinearRegressionModel(nn.Module):
         # Project both inputs to lower dimensional space
         out1 = self.linear(x1)   # Shape: [batch_size, output_size]
         out2 = self.linear2(x2)  # Shape: [batch_size, output_size]
-        # Compute similarity between projections
-        return torch.matmul(out1, out2.T)  # Shape: [batch_size, batch_size]
+        # Element-wise multiply and sum across feature dimension
+        return torch.sum(out1 * out2, dim=1)  # Shape: [batch_size]
 
 # BASE MODEL
 class BilinearModel(BaseEstimator, RegressorMixin):
@@ -432,21 +431,29 @@ class BilinearModel(BaseEstimator, RegressorMixin):
         self.epochs = epochs
         self.batch_size = batch_size
         self.lambda_reg = lambda_reg  # L1 regularization weight
-        
-        # Initialize the PyTorch model
-        self.model = self._create_model()
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = BilinearRegressionModel(self.input_dim, self.reduced_dim).to(self.device)
+        # self._create_model().to(self.device)
+
+        if torch.cuda.device_count() > 1:
+            print(f"Using {torch.cuda.device_count()} GPUs")
+            self.model = nn.DataParallel(self.model)
+
+        print(f"Model architecture:\n{self.model}")
+        print(f"Total parameters: {sum(p.numel() for p in self.model.parameters()):,}")
+        print(f"Hyperparameters:")
+        print(f"  Input dimension: {self.input_dim}")
+        print(f"  Reduced dimension: {self.reduced_dim}")
+        print(f"  Activation: {self.activation}")
+        print(f"  Learning rate: {self.lr}")
+        print(f"  Epochs: {self.epochs}")
+        print(f"  Batch size: {self.batch_size}")
+        print(f"  L1 regularization weight: {self.lambda_reg}")
+        print(f"  Device: {self.device}")
+
         self.criterion = nn.MSELoss()
         self.criterion_l1 = nn.L1Loss()
-
-        # Move model to GPU if available
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = self.model.to(self.device)
-        
-        print("Model architecture:")
-        print(self.model)
-        print("\nModel parameters:")
-        total_params = sum(p.numel() for p in self.model.parameters())
-        print(f"Total parameters: {total_params:,}")
 
     def _create_model(self):
         """Create the appropriate bilinear model based on activation type."""
@@ -457,19 +464,19 @@ class BilinearModel(BaseEstimator, RegressorMixin):
         elif self.activation == 'softplus':
             return Softplus_Model(self.input_dim, self.reduced_dim)
         else:
-            return BilinearRegressionModel(self.input_dim, self.reduced_dim)
-
+            return BilinearRegressionModel(self.input_dim, self.reduced_dim).to(self.device)
+    
     def fit(self, X, y):
         """Fit the bilinear model using PyTorch."""
-        # Convert data to tensors and move to device
-        X_tensor = torch.FloatTensor(X).to(self.device)
-        y_tensor = torch.FloatTensor(y).to(self.device)
+        # Convert inputs to tensors and move to device
+        X_tensor = torch.as_tensor(X, dtype=torch.float32).to(self.device)
+        y_tensor = torch.as_tensor(y, dtype=torch.float32).to(self.device)
         print(f"X tensor shape: {X_tensor.shape}")
         print(f"y tensor shape: {y_tensor.shape}")
         
         # Create dataset and dataloader
         dataset = TensorDataset(X_tensor, y_tensor)
-        train_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+        train_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
 
         # Define optimizer
         optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
@@ -480,11 +487,13 @@ class BilinearModel(BaseEstimator, RegressorMixin):
         for epoch in range(self.epochs):
             total_loss = 0
             for batch_X, batch_y in train_loader:
-                # Forward pass using tensor indexing
+                # Split features for each edge
+                mid = batch_X.size(1) // 2
                 optimizer.zero_grad()
-
-                pred = self.predict(batch_X)
                 
+                # Forward pass
+                pred = self.model(batch_X[:, :mid], batch_X[:, mid:])
+
                 # Compute loss with L1 regularization
                 mse_loss = self.criterion(pred, batch_y)
                 l1_loss = (self.criterion_l1(self.model.linear.weight, torch.zeros_like(self.model.linear.weight)) +
@@ -495,51 +504,29 @@ class BilinearModel(BaseEstimator, RegressorMixin):
                 # Backward pass and optimization
                 loss.backward()
                 optimizer.step()
-                print(f"loss: {loss.item()}")
                 total_loss += loss.item()
 
             if (epoch + 1) % 10 == 0:
                 print(f'Epoch [{epoch+1}/{self.epochs}], Loss: {total_loss/len(train_loader):.4f}')
 
-        return self
 
     def predict(self, X):
-        """Make predictions using the trained bilinear model."""
+        # used for trained model
         self.model.eval()
-        X_tensor = torch.FloatTensor(X).to(self.device)
-        
+        X_tensor = torch.as_tensor(X, dtype=torch.float32).to(self.device)
+
         with torch.no_grad():
-            region_feature_dim = X_tensor.size(1) // 2
-            predictions = self.model(X_tensor[:, :region_feature_dim], X_tensor[:, region_feature_dim:]).cpu().numpy()
-        
-        return predictions
-
-    def get_params(self, deep=True):
-        """Get parameters for this estimator."""
-        return {
-            "input_dim": self.input_dim,
-            "reduced_dim": self.reduced_dim,
-            "activation": self.activation,
-            "lr": self.lr,
-            "epochs": self.epochs,
-            "batch_size": self.batch_size,
-            "lambda_reg": self.lambda_reg
-        }
-
-    def set_params(self, **parameters):
-        """Set parameters for this estimator."""
-        for parameter, value in parameters.items():
-            setattr(self, parameter, value)
-        self.model = self._create_model()
-        return self
+            mid = X_tensor.size(1) // 2
+            predictions = self.model(X_tensor[:, :mid], X_tensor[:, mid:])
+            return predictions.cpu().numpy()
 
     def get_param_grid(self):
         """Return a parameter grid for hyperparameter tuning."""
         return {
-            'reduced_dim': [2], # [5, 10, 20],
+            'reduced_dim': [5, 10], # [5, 10, 20],
             'activation': ['none'], # ['none', 'relu', 'sigmoid', 'softplus'],
             'lr': [0.0001], #[0.001, 0.01],
-            'lambda_reg': [0], #[0.1, 1.0, 10.0],
+            'lambda_reg': [0, 0.1], #[0.1, 1.0, 10.0],
             'batch_size': [16] #[32, 64]
         }
     

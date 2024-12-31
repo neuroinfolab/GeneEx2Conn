@@ -292,7 +292,9 @@ class Simulation:
         # Initialize model
         model = ModelBuild.init_model(self.model_type, X_combined.shape[1])
         param_grid = model.get_param_grid()
+        print('param_grid!', param_grid)
         param_dist = model.get_param_dist()
+        print('param_dist!', param_dist)
 
         # Unpack search method and metric
         search_type, metric = search_method
@@ -349,7 +351,7 @@ class Simulation:
 
             # Step 5: Inner CV on training data
             print('SEARCH METHOD', search_method)
-            if track_wandb and self.model_type in ['dynamic_nn']: # need to change this to run for any epoch based model
+            if track_wandb: # and self.model_type in ['dynamic_nn']: # need to change this to run for any epoch based model
                 wandb.login()
                 best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method, n_iter=5)                
                 train_history = best_model.fit(X_train, Y_train, val_data=(X_test, Y_test))
