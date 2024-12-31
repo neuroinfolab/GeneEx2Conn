@@ -178,31 +178,6 @@ def expand_X_symmetric_shared(X_train1, X_train2, Y_train2):
     
     return expanded_X, expanded_Y
 
-def expand_X_Y_symmetric_conn_only(X, Y):
-    """
-    Expands X matrix symmetrically and vectorizes Y matrix for connectivity only model.
-
-    Parameters:
-    X (numpy.ndarray): Input matrix of gene expressions.
-    Y (numpy.ndarray): Input connectivity matrix.
-
-    Returns:
-    tuple: Expanded symmetric X and Y matrices.
-    """
-    num_regions, num_genes = X.shape
-    region_combinations = list(combinations(range(num_regions), 2))
-    num_combinations = len(region_combinations)
-
-    expanded_X = np.zeros((num_combinations * 2, 2 * num_genes))
-    expanded_Y = np.zeros((num_combinations * 2))
-
-    for i, (region1, region2) in enumerate(region_combinations):
-        expanded_X[i * 2] = np.concatenate((X[region1], X[region2]))
-        expanded_X[i * 2 + 1] = np.concatenate((X[region2], X[region1]))
-        expanded_Y[i * 2] = Y[region1, region2]
-        expanded_Y[i * 2 + 1] = Y[region2, region1]
-
-    return expanded_X, expanded_Y
 
 def expand_shared_matrices(X_train, X_train2, Y_train2, Y_train_feats1=np.nan, Y_train_feats2=np.nan, incl_conn=False):
     """
@@ -258,36 +233,6 @@ def expand_shared_matrices(X_train, X_train2, Y_train2, Y_train_feats1=np.nan, Y
     return X_train_shared, Y_expanded
 
 
-def expand_X_symmetric_w_conn(X, Y, test=False):
-    """
-    Expands X matrix symmetrically and includes connectivity.
-
-    Parameters:
-    X (numpy.ndarray): Input matrix of gene expressions.
-    Y (numpy.ndarray): Connectivity matrix.
-    test (bool, optional): Flag to indicate if X is being constructed for training or testing (dimensionalities may differ).
-
-    Returns:
-    numpy.ndarray: Expanded symmetric matrix with connectivity.
-    """
-    num_regions, num_genes = X.shape
-    region_combinations = list(combinations(range(num_regions), 2))
-    num_combinations = len(region_combinations)
-
-    if test:
-        num_regions = int(Y.shape[1])
-    
-    expanded_X = np.zeros((num_combinations * 2, 2 * (num_genes + num_regions)))
-    
-    for i, (region1, region2) in enumerate(region_combinations):
-        region1_combined = np.concatenate((X[region1], Y[region1]))
-        region2_combined = np.concatenate((X[region2], Y[region2]))
-        expanded_X[i * 2] = np.concatenate((region1_combined, region2_combined))
-        expanded_X[i * 2 + 1] = np.concatenate((region2_combined, region1_combined))
-
-    return expanded_X
-
-
 def expand_X_symmetric(X):
     """
     Expands the X matrix symmetrically by combining featuresfrom pairs of regions.
@@ -334,7 +279,7 @@ def expand_Y_symmetric(Y):
     return expanded_Y
 
 
-def process_cv_splits(X, Y, cv_obj, all_train=False, incl_conn=False, test_shared=False, struct_summ=False, kron=False, kron_input_dim=None):
+def process_cv_splits(X, Y, cv_obj, all_train=False, test_shared=False, struct_summ=False, kron=False, kron_input_dim=None):
     """
     Function to process cross-validation splits, expand training and test data as needed.
 
@@ -359,124 +304,44 @@ def process_cv_splits(X, Y, cv_obj, all_train=False, incl_conn=False, test_share
         #print(f"INPUT: Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")   
         
         if all_train:
-            if incl_conn:
-                X_train2, Y_train2 = X[test_index], Y[train_index][:, test_index]
-                Y_train_feats1 = Y[train_index][:, train_index]
-                Y_train_feats2 = Y[test_index][:, train_index]
-                X_train2, Y_train2 = expand_shared_matrices(X_train, X_train2, Y_train2, Y_train_feats1, Y_train_feats2, incl_conn)
-                
-                X_train = expand_X_symmetric_w_conn(X_train, Y_train)
+            X_train2, Y_train2 = X[test_index], Y[train_index][:, test_index]
+            X_train2, Y_train2 = expand_shared_matrices(X_train, X_train2, Y_train2)
+            
+            X_train = expand_X_symmetric(X_train)
+            Y_train = expand_Y_symmetric(Y_train)
+
+            X_test = expand_X_symmetric(X_test)
+            Y_test = expand_Y_symmetric(Y_test)
+
+            if not test_shared: 
+                X_train = np.concatenate((X_train, X_train2))
+                Y_train = np.concatenate((Y_train, Y_train2))
+            else: 
+                X_test = np.concatenate((X_test, X_train2))
+                Y_test = np.concatenate((Y_test, Y_train2))
+        else: 
+            if kron: # can implement this elsewhere if necessary
+                X_train = expand_X_symmetric_kron(X_train, kron_input_dim)
                 Y_train = expand_Y_symmetric(Y_train)
 
-                Y_test_alt = Y[test_index][:, train_index]
-                X_test = expand_X_symmetric_w_conn(X_test, Y_test_alt, test=True)
+                X_test = expand_X_symmetric_kron(X_test, kron_input_dim)
                 Y_test = expand_Y_symmetric(Y_test)
-                
-                if not test_shared: 
-                    X_train = np.concatenate((X_train, X_train2))
-                    Y_train = np.concatenate((Y_train, Y_train2))
-                else: 
-                    X_test = np.concatenate((X_test, X_train2))
-                    Y_test = np.concatenate((Y_test, Y_train2))
-            else: 
-                X_train2, Y_train2 = X[test_index], Y[train_index][:, test_index]
-                X_train2, Y_train2 = expand_shared_matrices(X_train, X_train2, Y_train2)
-                
+            elif struct_summ: # struct summ case where we use the strength and correlation from structural connectivity
+                X_train = expand_X_symmetric_struct_summ(X_train)
+                Y_train = expand_Y_symmetric(Y_train)
+
+                X_test = expand_X_symmetric_struct_summ(X_test)
+                Y_test = expand_Y_symmetric(Y_test) 
+            else:
                 X_train = expand_X_symmetric(X_train)
                 Y_train = expand_Y_symmetric(Y_train)
 
                 X_test = expand_X_symmetric(X_test)
                 Y_test = expand_Y_symmetric(Y_test)
 
-                if not test_shared: 
-                    X_train = np.concatenate((X_train, X_train2))
-                    Y_train = np.concatenate((Y_train, Y_train2))
-                else: 
-                    X_test = np.concatenate((X_test, X_train2))
-                    Y_test = np.concatenate((Y_test, Y_train2))
-        else: 
-            if incl_conn: 
-                X_train = expand_X_symmetric_w_conn(X_train, Y_train)
-                Y_train = expand_Y_symmetric(Y_train)
-
-                Y_test_alt = Y[test_index][:, train_index]
-                X_test = expand_X_symmetric_w_conn(X_test, Y_test_alt, test=True)
-                Y_test = expand_Y_symmetric(Y_test)
-            else:
-                if kron: # can implement this elsewhere if necessary
-                    X_train = expand_X_symmetric_kron(X_train, kron_input_dim)
-                    Y_train = expand_Y_symmetric(Y_train)
-    
-                    X_test = expand_X_symmetric_kron(X_test, kron_input_dim)
-                    Y_test = expand_Y_symmetric(Y_test)
-                elif struct_summ: # struct summ case where we use the strength and correlation from structural connectivity
-                    X_train = expand_X_symmetric_struct_summ(X_train)
-                    Y_train = expand_Y_symmetric(Y_train)
-
-                    X_test = expand_X_symmetric_struct_summ(X_test)
-                    Y_test = expand_Y_symmetric(Y_test) 
-                else:
-                    X_train = expand_X_symmetric(X_train)
-                    Y_train = expand_Y_symmetric(Y_train)
-    
-                    X_test = expand_X_symmetric(X_test)
-                    Y_test = expand_Y_symmetric(Y_test)
-
         #print(f"PROCESSED: Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")
         results.append((X_train, X_test, Y_train, Y_test))
 
-    return results
-
-
-def process_cv_splits_conn_only_model(X, Y, cv_obj, all_train=True, test_shared=False):
-    """
-    Function to process cross-validation splits, expand training and test data as needed.
-
-    Parameters:
-    - X (np.ndarray): Connecitivity matrix.
-    - Y (np.ndarray): Connectivity matrix.
-    - cv_obj: Cross-validation object with a split method.
-    - all_train (bool): Whether to include all training data in expansion.
-    - incl_conn (bool): Whether to include connectivity profiles in the expansion.
-    - test_shared (bool): Whether to include shared test data in the expansion.
-
-    Returns:
-    - list of tuples: Each tuple contains (X_train, X_test, Y_train, Y_test) for a fold.
-    """
-    results = []
-    
-    for fold_idx, (train_index, test_index) in enumerate(cv_obj.split(X, Y)):
-        X_train, X_test = X[train_index][:, train_index], X[test_index][:, train_index]
-        Y_train, Y_test = Y[train_index][:, train_index], Y[test_index][:, test_index]
-        Y_test_conn = Y_test
-        
-        if all_train: 
-            X_train2 =  X[test_index][:, train_index]
-            Y_train2 = Y[test_index][:, train_index]           
-            X_train2, Y_train2 = expand_X_symmetric_shared(X_train, X_train2, Y_train2)
-
-            X_train, Y_train = expand_X_Y_symmetric_conn_only(X_train, Y_train)
-            
-            X_test = expand_X_symmetric(X_test)
-            Y_test = expand_Y_symmetric(Y_test)
-            
-            if not test_shared: 
-                X_train = np.concatenate((X_train, X_train2))
-                Y_train = np.concatenate((Y_train, Y_train2))
-            else:
-                X_test = np.concatenate((X_test, X_train2))
-                Y_test = np.concatenate((Y_test, Y_train2))
-        else: 
-            X_train = expand_X_symmetric(X_train)
-            Y_train = expand_Y_symmetric(Y_train)
-            
-            X_test = expand_X_symmetric(X_test)
-            Y_test = expand_Y_symmetric(Y_test)
-    
-        # print(f"Fold {fold_idx} shapes - X_train: {X_train.shape}, X_test: {X_test.shape}, Y_train: {Y_train.shape}, Y_test: {Y_test.shape}")
-        results.append((X_train, X_test, Y_train, Y_test))
-
-    
     return results
 
 
@@ -518,7 +383,35 @@ def expanded_inner_folds_combined_plus_indices(inner_fold_splits):
 
     return X_combined, Y_combined, train_test_indices
 
+'''
+def expand_X_Y_symmetric_conn_only(X, Y):
+    """
+    Expands X matrix symmetrically and vectorizes Y matrix for connectivity only model.
 
+    Parameters:
+    X (numpy.ndarray): Input matrix of gene expressions.
+    Y (numpy.ndarray): Input connectivity matrix.
+
+    Returns:
+    tuple: Expanded symmetric X and Y matrices.
+    """
+    num_regions, num_genes = X.shape
+    region_combinations = list(combinations(range(num_regions), 2))
+    num_combinations = len(region_combinations)
+
+    expanded_X = np.zeros((num_combinations * 2, 2 * num_genes))
+    expanded_Y = np.zeros((num_combinations * 2))
+
+    for i, (region1, region2) in enumerate(region_combinations):
+        expanded_X[i * 2] = np.concatenate((X[region1], X[region2]))
+        expanded_X[i * 2 + 1] = np.concatenate((X[region2], X[region1]))
+        expanded_Y[i * 2] = Y[region1, region2]
+        expanded_Y[i * 2 + 1] = Y[region2, region1]
+
+    return expanded_X, expanded_Y
+'''
+
+'''
 def expanded_inner_folds_combined_plus_indices_connectome(X_train, X_test, Y_train, Y_test):
     """
     Combines the training and testing data from inner cross-validation folds and generates train-test indices.
@@ -555,5 +448,4 @@ def expanded_inner_folds_combined_plus_indices_connectome(X_train, X_test, Y_tra
     Y_combined = np.hstack(Y_combined)
 
     return X_combined, Y_combined, train_test_indices        
-
-
+'''

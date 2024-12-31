@@ -1,4 +1,4 @@
-# Gene2Conn/metrics/eval.py
+# Gene2Conn/models/metrics/eval.py
 
 from imports import *
 from data.data_utils import reconstruct_connectome
@@ -35,150 +35,123 @@ def connectome_r2(Y_pred, Y_ground_truth, include_diag=False, output=False):
         print(np.mean(pred_r2s))
     return np.mean(pred_r2s)
 
-
 # Custom numpy and cupy scorers for inner-CV 
 def pearson_numpy(y_true, y_pred):
-    corr, _ = pearsonr(y_true, y_pred)
-    return corr
+    """Compute Pearson correlation coefficient between true and predicted values using numpy."""
+    return pearsonr(y_true, y_pred)[0]
 
 def mse_numpy(y_true, y_pred):
-    # Compute the squared differences
-    squared_diff = np.square(np.subtract(y_true, y_pred))
-    
-    # Compute the mean of the squared differences
-    mse = np.mean(squared_diff)
-    return mse
+    """Compute mean squared error between true and predicted values using numpy."""
+    return np.mean(np.square(y_true - y_pred))
 
 def r2_numpy(y_true, y_pred):
-    # Compute the mean of the true values
+    """Compute R-squared score between true and predicted values using numpy."""
     y_true_mean = np.mean(y_true)
-    
-    # Total sum of squares
-    total_sum_of_squares = np.sum(np.square(np.subtract(y_true, y_true_mean)))
-    
-    # Residual sum of squares
-    residual_sum_of_squares = np.sum(np.square(np.subtract(y_true, y_pred)))
-    
-    # Compute R² using true division
-    r2 = 1 - np.true_divide(residual_sum_of_squares, total_sum_of_squares)
-    return r2
+    total_ss = np.sum(np.square(y_true - y_true_mean))
+    residual_ss = np.sum(np.square(y_true - y_pred))
+    return 1 - (residual_ss / total_ss)
 
-# Can create a bunch of custom scorers for cupy 
+# Custom cupy scorers for GPU acceleration
 def pearson_cupy(y_true, y_pred):
-    # minimize moving to cupy (try to keep it on GPU once on) 
+    """Compute Pearson correlation coefficient between true and predicted values using cupy."""
     y_pred = cp.asarray(y_pred)
-
-    if y_true.shape != y_pred.shape:
-        # print(f"Shape mismatch: y_true shape {y_true.shape}, y_pred shape {y_pred.shape}")
-        y_true = cp.asarray(y_true).ravel()  # Ensures it's a 1D vector
-        y_pred = cp.asarray(y_pred).ravel()  # Ensures it's a 1D vector
-
-    # Compute the correlation matrix
+    y_true = cp.asarray(y_true).ravel()
+    y_pred = y_pred.ravel()
+    
     corr_matrix = cp.corrcoef(y_true, y_pred)
-    
-    # Extract the Pearson correlation coefficient (off-diagonal element)
-    corr = corr_matrix[0, 1]
-    
-    cp.cuda.Stream.null.synchronize()  # Ensure GPU operations complete
+    cp.cuda.Stream.null.synchronize()
+    return corr_matrix[0, 1]
 
-    return corr
-
-def mse_cupy(y_true, y_pred): # try treating as np?
+def mse_cupy(y_true, y_pred):
+    """Compute mean squared error between true and predicted values using cupy."""
     y_pred = cp.asarray(y_pred)
-    
-    mse = cp.sum((y_pred-y_true)**2)/y_pred.shape[0]
-    
-    cp.cuda.Stream.null.synchronize()  # Ensure GPU operations complete
-
+    mse = cp.mean(cp.square(y_pred - y_true))
+    cp.cuda.Stream.null.synchronize()
     return mse
     
 def r2_cupy(y_true, y_pred):
+    """Compute R-squared score between true and predicted values using cupy."""
     y_pred = cp.asarray(y_pred)
-
-    # Compute the mean of the true values
     y_true_mean = cp.mean(y_true)
-    
-    # Total sum of squares
-    total_sum_of_squares = cp.sum(cp.square(cp.subtract(y_true, y_true_mean)))
-    
-    # Residual sum of squares
-    residual_sum_of_squares = cp.sum(cp.square(cp.subtract(y_true, y_pred)))
-    
-    # Compute R² using true division
-    r2 = 1 - cp.divide(residual_sum_of_squares, total_sum_of_squares)
-    return r2
-
+    total_ss = cp.sum(cp.square(y_true - y_true_mean))
+    residual_ss = cp.sum(cp.square(y_true - y_pred))
+    return 1 - (residual_ss / total_ss)
 
 
 class Metrics:
-    def __init__(self, Y_true, Y_pred):
+    def __init__(self, Y_true, Y_pred, square=False):
         self.Y_true = Y_true
         self.Y_pred = Y_pred
+        self.square = square
         self.compute_metrics()
 
     def compute_metrics(self):
-        Y_true = self.Y_true
-        Y_pred = self.Y_pred
-        
         try:
-            Y_true = Y_true.get()
-            Y_pred = Y_pred.get()
+            self.Y_true = self.Y_true.get()
+            self.Y_pred = self.Y_pred.get()
         except:
             pass
             
-        self.mse = mean_squared_error(Y_true, Y_pred)
-        self.mae = mean_absolute_error(Y_true, Y_pred)
+        # Compute standard metrics on flattened data
+        self.mse = mean_squared_error(Y_true.flatten(), Y_pred.flatten())
+        self.mae = mean_absolute_error(Y_true.flatten(), Y_pred.flatten())
         self.r2 = r2_score(Y_true.flatten(), Y_pred.flatten())
         self.pearson_corr = pearsonr(Y_true.flatten(), Y_pred.flatten())[0]
+
+        # Compute geodesic distance if data is square (connectome)
+        if self.square:
+            Y_pred_connectome = reconstruct_connectome(Y_pred)
+            Y_true_connectome = reconstruct_connectome(Y_true)
+            
+            # Visualize true and predicted connectomes
+            plt.figure(figsize=(12, 4))
+            
+            plt.subplot(131)
+            plt.imshow(Y_true_connectome, cmap='RdBu_r')
+            plt.colorbar()
+            plt.title('True Connectome')
+            
+            plt.subplot(132) 
+            plt.imshow(Y_pred_connectome, cmap='RdBu_r')
+            plt.colorbar()
+            plt.title('Predicted Connectome')
+            
+            plt.subplot(133)
+            plt.imshow(Y_true_connectome - Y_pred_connectome, cmap='RdBu_r')
+            plt.colorbar()
+            plt.title('Difference')
+            
+            plt.tight_layout()
+            plt.show()
+            self.geodesic_distance = distance_FC(Y_true_connectome, Y_pred_connectome).geodesic()
     
     def get_metrics(self):
-        return {
+        metrics = {
             'mse': self.mse,
             'mae': self.mae,
             'r2': self.r2,
             'pearson_corr': self.pearson_corr
         }
-
-class ConnectomeMetrics(Metrics):
-    def __init__(self, Y_true, Y_pred, include_diag=False):
-        super().__init__(Y_true, Y_pred)
-        self.include_diag = include_diag
-        self.compute_connectome_metrics()
-
-    def compute_connectome_metrics(self):
-        self.connectome_corr = connectome_correlation(self.Y_pred, self.Y_true, self.include_diag)
-        self.connectome_r2 = connectome_r2(self.Y_pred, self.Y_true, self.include_diag)
-        self.geodesic_distance = distance_FC(self.Y_true, self.Y_pred).geodesic()
-
-    def get_metrics(self):
-        base_metrics = super().get_metrics()
-        connectome_metrics = {
-            'connectome_corr': self.connectome_corr,
-            'connectome_r2': self.connectome_r2,
-            'geodesic_distance': self.geodesic_distance
-        }
-        return {**base_metrics, **connectome_metrics}
+        if self.square:
+            metrics['geodesic_distance'] = self.geodesic_distance
+        return metrics
 
 
 class ModelEvaluator:
-    def __init__(self, model, X_train, Y_train, X_test, Y_test, split_params):
+    def __init__(self, model, X_train, Y_train, X_test, Y_test, train_shared_regions, test_shared_regions):
         self.model = model
         self.X_train = X_train
         self.Y_train = Y_train
         self.X_test = X_test
         self.Y_test = Y_test
-        self.use_shared_regions, _, self.test_shared_regions = split_params
-        self.train_metrics = self.evaluate(self.X_train, self.Y_train, self.use_shared_regions)
-        self.test_metrics = self.evaluate(self.X_test, self.Y_test, self.test_shared_regions)
+        self.train_shared_regions = train_shared_regions
+        self.test_shared_regions = test_shared_regions
+        self.train_metrics = self.evaluate(self.X_train, self.Y_train, not self.train_shared_regions)
+        self.test_metrics = self.evaluate(self.X_test, self.Y_test, not self.test_shared_regions)
 
-    def evaluate(self, X, Y, non_square):
+    def evaluate(self, X, Y, square):
         Y_pred = self.model.predict(X)
-        if non_square == False:
-            Y_true_connectome = reconstruct_connectome(Y)
-            Y_pred_connectome = reconstruct_connectome(Y_pred)
-            return ConnectomeMetrics(Y_true_connectome, Y_pred_connectome).get_metrics()
-        else:
-            return Metrics(Y, Y_pred).get_metrics()
+        return Metrics(Y, Y_pred, square).get_metrics()
 
     def get_train_metrics(self):
         return self.train_metrics

@@ -428,7 +428,7 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
     return mean_metrics['mean_val_loss']
 
 
-def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold_idx, train_metrics, test_metrics, best_val_score, best_model, train_history):
+def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold_idx, train_metrics, test_metrics, best_val_score, best_model, train_history, model_classes):
     """
     Log metrics to Weights & Biases for tracking experiments.
     
@@ -458,7 +458,7 @@ def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold
         reinit=True
     )
 
-    if model_type in ['dynamic neural net']: # track epochs
+    if model_type in model_classes:
         for epoch, (train_loss, val_loss, train_pearson, val_pearson) in enumerate(zip(train_history['train_loss'], train_history['val_loss'], train_history['train_pearson'], train_history['val_pearson'])):
             wandb.log({'train_mse_loss': train_loss, 'train_pearson': train_pearson, 'test_mse_loss': val_loss, 'test_pearson': val_pearson})
 
@@ -469,3 +469,36 @@ def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold
     final_eval_run.finish()
     print("Final evaluation metrics logged successfully.")
     wandb.finish()
+
+
+def extract_feature_importances(model_type, best_model, save_model_json=False):
+    """
+    Extract feature importances and model JSON from trained models.
+    
+    Args:
+        model_type (str): Type of model ('pls', 'xgboost', 'ridge', etc.)
+        best_model: Trained model object
+        save_model_json (bool): Whether to save XGBoost model as JSON
+        
+    Returns:
+        tuple: (feature_importances, model_json)
+            - feature_importances: Array of feature importance values or None
+            - model_json: Model JSON string for XGBoost or None
+    """
+    model_json = None
+    feature_importances = None
+    
+    if model_type == 'pls':
+        feature_importances = best_model.x_weights_[:, 0]  # Weights for the first component
+    elif model_type == 'xgboost':
+        feature_importances = best_model.feature_importances_
+        if save_model_json:
+            booster = best_model.get_booster()
+            model_json = booster.save_raw("json").decode("utf-8")
+    elif model_type == 'ridge':
+        feature_importances = best_model.coef_
+        
+    return feature_importances, model_json
+
+
+
