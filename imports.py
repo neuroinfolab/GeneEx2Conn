@@ -63,6 +63,7 @@ from sklearn.cross_decomposition import PLSCanonical
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.linear_model import RidgeCV
 from sklearn.linear_model import Ridge
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import ShuffleSplit # or StratifiedShuffleSplit
 from sklearn.model_selection import KFold
 from sklearn.utils import resample

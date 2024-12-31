@@ -80,50 +80,49 @@ def r2_cupy(y_true, y_pred):
 
 class Metrics:
     def __init__(self, Y_true, Y_pred, square=False):
-        self.Y_true = Y_true
-        self.Y_pred = Y_pred
+        # convert cupy arrays to numpy arrays if necessary
+        self.Y_true = getattr(Y_true, 'get', lambda: Y_true)()
+        self.Y_pred = getattr(Y_pred, 'get', lambda: Y_pred)()    
+        self.Y_true_flat = self.Y_true.flatten()
+        self.Y_pred_flat = self.Y_pred.flatten()
+
+    
         self.square = square
         self.compute_metrics()
 
     def compute_metrics(self):
-        try:
-            self.Y_true = self.Y_true.get()
-            self.Y_pred = self.Y_pred.get()
-        except:
-            pass
-            
         # Compute standard metrics on flattened data
-        self.mse = mean_squared_error(Y_true.flatten(), Y_pred.flatten())
-        self.mae = mean_absolute_error(Y_true.flatten(), Y_pred.flatten())
-        self.r2 = r2_score(Y_true.flatten(), Y_pred.flatten())
-        self.pearson_corr = pearsonr(Y_true.flatten(), Y_pred.flatten())[0]
+        self.mse = mean_squared_error(self.Y_true_flat, self.Y_pred_flat)
+        self.mae = mean_absolute_error(self.Y_true_flat, self.Y_pred_flat)
+        self.r2 = r2_score(self.Y_true_flat, self.Y_pred_flat)
+        self.pearson_corr = pearsonr(self.Y_true_flat, self.Y_pred_flat)[0]
 
         # Compute geodesic distance if data is square (connectome)
         if self.square:
-            Y_pred_connectome = reconstruct_connectome(Y_pred)
-            Y_true_connectome = reconstruct_connectome(Y_true)
-            
+            Y_pred_connectome = reconstruct_connectome(self.Y_pred)
+            Y_true_connectome = reconstruct_connectome(self.Y_true)
+            self.geodesic_distance = distance_FC(Y_true_connectome, Y_pred_connectome).geodesic()
+
             # Visualize true and predicted connectomes
             plt.figure(figsize=(12, 4))
             
             plt.subplot(131)
-            plt.imshow(Y_true_connectome, cmap='RdBu_r')
-            plt.colorbar()
+            plt.imshow(Y_true_connectome, cmap='viridis', vmin=0, vmax=1)
+            plt.colorbar(shrink=0.5)
             plt.title('True Connectome')
             
             plt.subplot(132) 
-            plt.imshow(Y_pred_connectome, cmap='RdBu_r')
-            plt.colorbar()
+            plt.imshow(Y_pred_connectome, cmap='viridis', vmin=0, vmax=1)
+            plt.colorbar(shrink=0.5)
             plt.title('Predicted Connectome')
             
             plt.subplot(133)
-            plt.imshow(Y_true_connectome - Y_pred_connectome, cmap='RdBu_r')
-            plt.colorbar()
-            plt.title('Difference')
+            plt.imshow(abs(Y_true_connectome - Y_pred_connectome), cmap='RdYlGn_r')
+            plt.colorbar(shrink=0.5)
+            plt.title('Prediction Difference')
             
             plt.tight_layout()
             plt.show()
-            self.geodesic_distance = distance_FC(Y_true_connectome, Y_pred_connectome).geodesic()
     
     def get_metrics(self):
         metrics = {
@@ -141,16 +140,17 @@ class ModelEvaluator:
     def __init__(self, model, X_train, Y_train, X_test, Y_test, train_shared_regions, test_shared_regions):
         self.model = model
         self.X_train = X_train
-        self.Y_train = Y_train
+        self.Y_train = Y_train 
         self.X_test = X_test
         self.Y_test = Y_test
+        
         self.train_shared_regions = train_shared_regions
         self.test_shared_regions = test_shared_regions
         self.train_metrics = self.evaluate(self.X_train, self.Y_train, not self.train_shared_regions)
         self.test_metrics = self.evaluate(self.X_test, self.Y_test, not self.test_shared_regions)
 
     def evaluate(self, X, Y, square):
-        Y_pred = self.model.predict(X)
+        Y_pred = self.model.predict(X) # this outputs a np array
         return Metrics(Y, Y_pred, square).get_metrics()
 
     def get_train_metrics(self):

@@ -16,13 +16,9 @@ from data.data_utils import (
     expand_X_symmetric,
     expand_Y_symmetric,
     expand_X_symmetric_shared,
-    expand_X_Y_symmetric_conn_only,
     expand_shared_matrices,
-    expand_X_symmetric_w_conn, 
     process_cv_splits, 
-    process_cv_splits_conn_only_model, 
     expanded_inner_folds_combined_plus_indices,
-    expanded_inner_folds_combined_plus_indices_connectome
 )
 import data.data_utils
 importlib.reload(data.data_utils)
@@ -140,7 +136,7 @@ def validate_inputs(
     
     # Validate model type if provided
     if model_type is not None:
-        valid_model_types = {'ridge', 'pls', 'xgboost', 'mlp', 'dynamic_nn', 'bilinear_baseline'}
+        valid_model_types = {'ridge', 'pls', 'xgboost', 'mlp', 'dynamic_mlp', 'random_forest', 'bilinear_baseline'}
         if model_type not in valid_model_types:
             raise ValueError(f"Invalid model_type: {model_type}. Must be one of {valid_model_types}")
     

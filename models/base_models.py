@@ -546,18 +546,17 @@ class BilinearModel(BaseEstimator, RegressorMixin):
 
 
 class ModelBuild:
-    """Factory class to create models based on the given model type."""
-        
+    """Factory class to create base regressor models based on the given sklearn-like model type."""
     @staticmethod
     def init_model(model_type, input_size):
         model_mapping = {
             'xgboost': XGBModel,
             'random_forest': RandomForestModel,
             'ridge_torch': RidgeModelTorch,
-            'bilinear_baseline': BilinearModel,
             'ridge': RidgeModel,
             'pls': PLSModel, 
-            'mlp': MLPModel
+            'mlp': MLPModel, 
+            'bilinear_baseline': BilinearModel
         }
     
         if model_type in model_mapping:

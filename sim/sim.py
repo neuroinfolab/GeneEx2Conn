@@ -16,13 +16,9 @@ from data.data_utils import (
     expand_X_symmetric,
     expand_Y_symmetric,
     expand_X_symmetric_shared,
-    expand_X_Y_symmetric_conn_only,
     expand_shared_matrices,
-    expand_X_symmetric_w_conn, 
     process_cv_splits, 
-    process_cv_splits_conn_only_model, 
     expanded_inner_folds_combined_plus_indices,
-    expanded_inner_folds_combined_plus_indices_connectome
 )
 import data.data_utils
 importlib.reload(data.data_utils)
@@ -43,9 +39,9 @@ import models.base_models
 importlib.reload(models.base_models)
 
 # custom models
-from models.dynamic_nn import DynamicNN
+from models.dynamic_mlp import DynamicMLP
 MODEL_CLASSES = {
-    'dynamic_nn': DynamicNN,
+    'dynamic_mlp': DynamicMLP,
     # Add other deep learning models here as they're implemented
     # 'transformer_nn': TransformerNN
 }
@@ -65,7 +61,7 @@ importlib.reload(models.metrics.eval)
 
 # sim utility functions
 import sim.sim_utils
-from sim.sim_utils import bayes_search_init, grid_search_init, random_search_init, drop_test_network, find_best_params, load_sweep_config
+from sim.sim_utils import bayes_search_init, grid_search_init, random_search_init, drop_test_network, find_best_params, load_sweep_config, extract_feature_importances
 from sim.sim_utils import bytes2human, print_system_usage, validate_inputs, train_sweep, log_wandb_metrics
 importlib.reload(sim.sim_utils)
 
@@ -250,18 +246,13 @@ class Simulation:
         """
         Inner cross-validation with option for Grid, Bayesian, or Randomized hyperparameter search for sklearn-like models
         """
-        # Create inner CV object (just indices) for X_train and Y_train for any strategy 
+        # Create inner CV object (just indices) for X_train and Y_train for any strategy
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
 
-        if self.predict_connectome_from_connectome:
-            inner_fold_splits = process_cv_splits_conn_only_model(self.Y, self.Y, inner_cv_obj,
-                                                                  self.use_shared_regions,
-                                                                  self.test_shared_regions)
-        else:
-            inner_fold_splits = process_cv_splits(self.X, self.Y, inner_cv_obj, 
-                                                  self.use_shared_regions, 
-                                                  self.test_shared_regions
-                                                 )
+        inner_fold_splits = process_cv_splits(self.X, self.Y, inner_cv_obj, 
+                                                self.use_shared_regions, 
+                                                self.test_shared_regions
+                                                )
 
         # Inner CV data packaged into a large matrix with indices for individual folds
         X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
@@ -269,9 +260,7 @@ class Simulation:
         # Initialize model
         model = ModelBuild.init_model(self.model_type, X_combined.shape[1])
         param_grid = model.get_param_grid()
-        print('param_grid!', param_grid)
         param_dist = model.get_param_dist()
-        print('param_dist!', param_dist)
 
         search_type, metric, n_iter = search_method        
         if search_type == 'grid':
@@ -321,7 +310,7 @@ class Simulation:
             
             # Inner CV on current training fold
             print('SEARCH METHOD', search_method)
-            if search_method[0] == 'wandb': # and self.model_type in ['dynamic_nn']: # need to change this to run for any epoch based model
+            if search_method[0] == 'wandb': # this should run for any model with a sweep config
                 wandb.login()
                 best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method)                
                 train_history = best_model.fit(X_train, Y_train, val_data=(X_test, Y_test))
@@ -332,8 +321,7 @@ class Simulation:
             
             # Evaluate on the test fold                
             evaluator = ModelEvaluator(
-                best_model, X_train, Y_train, X_test, Y_test, self.use_shared_regions, self.test_shared_regions
-                )
+                best_model, X_train, Y_train, X_test, Y_test, self.use_shared_regions, self.test_shared_regions)
             train_metrics = evaluator.get_train_metrics()
             test_metrics = evaluator.get_test_metrics()
             
@@ -345,6 +333,7 @@ class Simulation:
 
             # Log final evaluation metrics
             if track_wandb:
+                wandb.login()
                 log_wandb_metrics(self.feature_type, self.model_type, self.connectome_target, self.cv_type, fold_idx, train_metrics, test_metrics, best_val_score, best_model, train_history, model_classes=MODEL_CLASSES)
             
             # Extract feature importances and model JSON

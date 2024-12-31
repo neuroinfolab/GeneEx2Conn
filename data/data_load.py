@@ -8,7 +8,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
     
     Parameters:
     -----------
-    parcellation : str, default='S100'. Options: 'S100', 'S456'
+    parcellation : str, default='S100'. Options: 'S100', 'S400' (S400 is same as S456)
         Brain parcellation scheme to use
     gene_list : str, default='0.2'
        Gene lists to subset from AHBA data. Options: '0.2', '1', 'brain', 'neuron', 'oligodendrocyte', 'synaptome', 'layers', 'all_abagen', 'syngo'
@@ -55,7 +55,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         # load the data with the largest gene set by default for both parcellations
         if parcellation == 'S100':
             genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r1_schaefer_{parcellation[1:]}.csv")
-        elif parcellation == 'S456':
+        elif parcellation == 'S400':
             AHBA_UKBB_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data/Penn_UKBB_data/AHBA_population_MH/'
             genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
             genes_data = genes_data.drop('label', axis=1)
@@ -65,7 +65,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_{parcellation[1:]}.txt", header=None)[0].tolist()
         elif gene_list in ['brain', 'neuron', 'oligodendrocyte', 'synaptome', 'layers']:
             genes_list = abagen.fetch_gene_group(gene_list)
-        elif gene_list == 'all_abagen': 
+        elif gene_list == 'all_abagen':  
             genes_list = set.union(
                         set(abagen.fetch_gene_group('brain')),
                         set(abagen.fetch_gene_group('neuron')), 
@@ -170,7 +170,7 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
             elif measure == 'SC':
                 matrix, _ = load_sc_as_one(parcellation='schaefer_100')
         # pull from UKBB+HCP1200 data
-        elif parcellation == 'S456':
+        elif parcellation == 'S400':
             if measure == 'FC':
                 matrix = np.array(pd.read_csv('./data/UKBB/UKBB_S456_functional_conn.csv'))
             elif measure == 'SC':
@@ -209,7 +209,7 @@ def load_coords(parcellation='S100', omit_subcortical=True):
     if parcellation == 'S100':
         hcp_schaef = pd.read_csv(relative_data_path + '/GeneEx2Conn_data/atlas_info/schaef114.csv')
         coordinates = hcp_schaef[['mni_x', 'mni_y', 'mni_z']].values
-    elif parcellation == 'S456':
+    elif parcellation == 'S400':
         UKBB_S456_atlas_info_path = relative_data_path + '/GeneEx2Conn_data/atlas_info/atlas-4S456Parcels_dseg_reformatted.csv'
         UKBB_S456_atlas_info = pd.read_csv(UKBB_S456_atlas_info_path)
         # Store MNI coordinates from atlas info as list of [x,y,z] coordinates

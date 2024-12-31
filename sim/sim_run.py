@@ -16,13 +16,9 @@ from data.data_utils import (
     expand_X_symmetric,
     expand_Y_symmetric,
     expand_X_symmetric_shared,
-    expand_X_Y_symmetric_conn_only,
     expand_shared_matrices,
-    expand_X_symmetric_w_conn, 
     process_cv_splits, 
-    process_cv_splits_conn_only_model, 
     expanded_inner_folds_combined_plus_indices,
-    expanded_inner_folds_combined_plus_indices_connectome
 )
 import data.data_utils
 importlib.reload(data.data_utils)
@@ -203,7 +199,6 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
                     resolution=resolution,
                     random_seed=random_seed,
                     use_shared_regions=use_shared_regions,
-                    predict_connectome_from_connectome=False,
                     test_shared_regions=test_shared_regions,
                     omit_subcortical=omit_subcortical,
                     parcellation=parcellation,
