@@ -22,7 +22,6 @@ import ssl
 import yaml
 from functools import partial
 
-
 # plotting 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -79,14 +78,18 @@ import lightgbm
 from lightgbm import LGBMRegressor
 import wandb
 
-# cuda and GPU
+# cuda, pytorch, GPU
+import GPUtil
 import cupy as cp
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 from torch.optim import Adam
 import torchmetrics
-import GPUtil
+from models.metrics.eval import pearson_numpy, pearson_cupy
+from torchmetrics import PearsonCorrCoef
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 # gene expression
 import scib

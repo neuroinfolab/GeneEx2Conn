@@ -5,7 +5,7 @@ metric:
 parameters:
   hidden_dims:
     values:
-      - [128, 64]
+      - [256, 128, 64]
       # - [256, 128]
       # - [512, 256, 128]
   learning_rate:

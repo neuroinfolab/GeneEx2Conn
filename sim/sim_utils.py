@@ -39,7 +39,7 @@ import models.base_models
 importlib.reload(models.base_models)
 
 # custom models
-from models.dynamic_nn import DynamicNN
+from models.dynamic_mlp import DynamicMLP
 
 # metric classes
 from models.metrics.eval import (
@@ -386,12 +386,8 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
         # Initialize model dynamically based on sweep config
         model = ModelClass(**sweep_config).to(device)
         
-        # Create data loaders
-        train_loader = model._create_data_loader(X_train, y_train, shuffle=False)
-        val_loader = model._create_data_loader(X_val, y_val, shuffle=False)
-        
         # Train model
-        history = model.train_model(train_loader, val_loader)
+        history = model.fit(X_train, y_train, X_val, y_val)
         
         # Log epoch-wise metrics
         for epoch, metrics in enumerate(zip(history['train_loss'], history['val_loss'], 

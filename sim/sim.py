@@ -313,7 +313,7 @@ class Simulation:
             if search_method[0] == 'wandb': # this should run for any model with a sweep config
                 wandb.login()
                 best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method)                
-                train_history = best_model.fit(X_train, Y_train, val_data=(X_test, Y_test))
+                train_history = best_model.fit(X_train, Y_train, X_test, Y_test) # test passed for train-test loss tracking
             else:
                 best_model, best_val_score = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method)
                 best_model.fit(X_train, Y_train)
