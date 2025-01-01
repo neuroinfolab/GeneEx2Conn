@@ -2,6 +2,12 @@
 
 from imports import *
 
+def create_data_loader(X, y, batch_size, device, shuffle=False):
+    X = torch.FloatTensor(X).to(device)
+    y = torch.FloatTensor(y).to(device)    
+    dataset = TensorDataset(X, y)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+
 def reconstruct_connectome(Y):
     """
     Reconstructs the full connectome matrix from a given input vector Y.

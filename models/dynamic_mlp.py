@@ -1,14 +1,13 @@
 # Gene2Conn/models/dynamic_nn.py
 
 from imports import *
-
+from data.data_utils import create_data_loader
 from models.train_val import train_model
 
 
 class DynamicMLP(nn.Module):
     def __init__(self, input_dim, hidden_dims=[128, 64], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0, batch_size=64, symmetry_weight=0.1, epochs=100):
         super().__init__()
-
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.batch_size = batch_size
@@ -58,14 +57,7 @@ class DynamicMLP(nn.Module):
             predictions = self(X).cpu().numpy()
         return predictions
 
-    def _create_data_loader(self, X, y, shuffle=False):
-        X = torch.FloatTensor(X).to(self.device)
-        y = torch.FloatTensor(y).to(self.device)
-        dataset = TensorDataset(X, y)
-        return DataLoader(dataset, batch_size=self.batch_size, shuffle=shuffle)
-
     def fit(self, X_train, y_train, X_test, y_test, verbose=True):
-        # fit should be passed data and initialize the train and val loaders
-        train_loader = self._create_data_loader(X_train, y_train, shuffle=False)
-        val_loader = self._create_data_loader(X_test, y_test, shuffle=False) # if X_test else None - when might this be none? 
-        return train_model(self.model, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, verbose=verbose)
+        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, shuffle=False)
+        val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, shuffle=False)
+        return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, verbose=verbose)

@@ -40,8 +40,10 @@ importlib.reload(models.base_models)
 
 # custom models
 from models.dynamic_mlp import DynamicMLP
+from models.bilinear import BilinearModel
 MODEL_CLASSES = {
     'dynamic_mlp': DynamicMLP,
+    'bilinear': BilinearModel
     # Add other deep learning models here as they're implemented
     # 'transformer_nn': TransformerNN
 }
