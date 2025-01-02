@@ -32,7 +32,10 @@ def train_epoch(model, train_loader, optimizer, criterion, device):
     for batch_X, batch_y in train_loader:
         optimizer.zero_grad()
         predictions = model(batch_X).squeeze()
-        loss = criterion(predictions, batch_y)
+        try:
+            loss = criterion(predictions, batch_y)
+        except:
+            loss = criterion(predictions, batch_y, model)
         loss.backward()
         optimizer.step()
         
@@ -54,7 +57,10 @@ def evaluate(model, val_loader, criterion, device):
     with torch.no_grad():
         for batch_X, batch_y in val_loader:
             predictions = model(batch_X).squeeze()
-            val_loss = criterion(predictions, batch_y)
+            try: 
+                val_loss = criterion(predictions, batch_y)
+            except:
+                val_loss = criterion(predictions, batch_y, model)
             total_val_loss += val_loss.item()
             pearson = PearsonCorrCoef().to(device)
             val_pearson_values.append(pearson(predictions, batch_y).item())

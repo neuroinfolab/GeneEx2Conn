@@ -30,7 +30,7 @@ class DynamicMLP(nn.Module):
             dist.init_process_group(backend='nccl')
             self.model = DDP(self.model)
         self.to(self.device)  # Move model to the appropriate device
-
+        
         self.criterion = nn.MSELoss()
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
     

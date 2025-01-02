@@ -282,7 +282,7 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
         bayes_search = BayesSearchCV(
             model.get_model(),
             search_space,
-            n_iter=10, # 20
+            n_iter=n_iter, 
             n_points=10,
             cv=train_test_indices,
             scoring=scorer,
@@ -352,12 +352,11 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
     Returns:
         float: Mean validation loss across inner folds
     """
-    # Create unique run identifier
-    random_run_id = random.randint(1, 1000)
+    random_run_id = random.randint(1, 1000) # # Create unique run identifier
     feature_str = "+".join(str(k) if v is None else f"{k}_{v}"
                          for feat in feature_type 
                          for k,v in feat.items())
-    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{outer_fold_idx}_run{random_run_id}"
+    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{outer_fold_idx}_innerCV"
 
     run = wandb.init(
         project="gx2conn",
@@ -385,7 +384,8 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
         
         # Initialize model dynamically based on sweep config
         model = ModelClass(**sweep_config).to(device)
-        
+        wandb.watch(model, log='all')
+
         # Train model
         history = model.fit(X_train, y_train, X_val, y_val)
         
@@ -451,6 +451,7 @@ def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold
     )
 
     if model_type in model_classes:
+        # wandb.watch(best_model, log='all')
         for epoch, (train_loss, val_loss, train_pearson, val_pearson) in enumerate(zip(train_history['train_loss'], train_history['val_loss'], train_history['train_pearson'], train_history['val_pearson'])):
             wandb.log({'train_mse_loss': train_loss, 'train_pearson': train_pearson, 'test_mse_loss': val_loss, 'test_pearson': val_pearson})
 
@@ -459,8 +460,8 @@ def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold
     })
     
     final_eval_run.finish()
-    print("Final evaluation metrics logged successfully.")
     wandb.finish()
+    print("Final evaluation metrics logged successfully.")
 
 
 def extract_feature_importances(model_type, best_model, save_model_json=False):

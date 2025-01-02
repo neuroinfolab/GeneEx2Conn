@@ -3,14 +3,15 @@
 from imports import *
 from data.data_utils import create_data_loader
 from models.train_val import train_model
-
+from models.losses import BilinearLoss
 
 class BilinearModel(nn.Module):
-    def __init__(self, input_dim, reduced_dim, activation='none', learning_rate=0.01, epochs=100, batch_size=128, lambda_reg=1.0):
+    def __init__(self, input_dim, reduced_dim, activation='none', learning_rate=0.01, epochs=100, batch_size=128, regularization='l1', lambda_reg=1.0):
         super().__init__()
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.batch_size = batch_size
+        self.regularization = regularization
         self.lambda_reg = lambda_reg
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -26,11 +27,10 @@ class BilinearModel(nn.Module):
         else:  # 'none'
             self.activation = nn.Identity()
 
-        self.criterion = nn.MSELoss()
-        self.criterion_l1 = nn.L1Loss()
+        self.criterion = BilinearLoss(regularization=regularization, lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate)
 
-
+    
     def get_params(self): # for local model saving
         return {
             'input_dim': self.linear.in_features,
@@ -39,6 +39,7 @@ class BilinearModel(nn.Module):
             'learning_rate': self.learning_rate,
             'epochs': self.epochs,
             'batch_size': self.batch_size,
+            'regularization': self.regularization,
             'lambda_reg': self.lambda_reg,
             'device': str(self.device)
         }

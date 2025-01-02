@@ -4,16 +4,18 @@ metric:
   goal: minimize
 parameters:
   activation:
-    values: ['none'] #, 'relu', 'sigmoid', 'softplus']
+    values: ['none', 'relu', 'sigmoid', 'softplus'] #, 'none','relu', 'sigmoid', 'softplus']
   learning_rate:
-    values: [0.001] #, 0.003, 0.001, 0.01]
+    values: [0.001, .003] #, 0.003, 0.001, 0.01]
   batch_size:
-    values: [128, 256] #64, 128, 256]
+    values: [128, 256, 512] #64, 128, 256]
+  regularization:
+    values: ['l1', 'l2'] #, 'l2'
   lambda_reg:
-    values: [0.0] #0.1, 0.5, 1.0, 2.0]
+    values: [0.0, 0.1, 1.0] #0.1, 0.5, 1.0, 2.0]
   input_dim:
-    value: !!int 0  # Placeholder, replace with actual input_size in code
+    value: !!int 0 
   reduced_dim:
-    values: [2, 3, 5, 10] # 1, 2, 5, 10]  # Placeholder, replace with actual output_size in code
+    values: [3, 5, 10, 20] # 1, 2, 5, 10]
   epochs:
-    values: [100, 200] #, 200]
+    values: [100, 200] # , 100, 200] #, 200]

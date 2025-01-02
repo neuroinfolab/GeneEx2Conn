@@ -224,6 +224,7 @@ class Simulation:
                 model_classes=MODEL_CLASSES
             )
         
+        wandb.login()
         # Initialize sweep
         sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
 
@@ -234,13 +235,15 @@ class Simulation:
         api = wandb.Api()
         sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn/{sweep_id}")
         best_run = sweep.best_run()
+        wandb.teardown()
+
         best_val_loss = best_run.summary.mean_val_loss
         best_config = best_run.config
         
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]
         best_model = ModelClass(**best_config).to(device)
-        
+                
         return best_model, best_val_loss
 
 
@@ -307,13 +310,15 @@ class Simulation:
             network_dict = self.cv_obj.networks
             train_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
             
+            # basic setup for GPU acceleration and wandb login
             if self.gpu_acceleration:
                 X_train, Y_train, X_test, Y_test = map(cp.array, [X_train, Y_train, X_test, Y_test])
-            
+            if search_method[0] == 'wandb' or track_wandb:
+                wandb.login()
+
             # Inner CV on current training fold
             print('SEARCH METHOD', search_method)
             if search_method[0] == 'wandb': # this should run for any model with a sweep config
-                wandb.login()
                 best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method)                
                 train_history = best_model.fit(X_train, Y_train, X_test, Y_test) # test passed for train-test loss tracking
             else:
@@ -322,8 +327,7 @@ class Simulation:
                 train_history = None
             
             # Evaluate on the test fold                
-            evaluator = ModelEvaluator(
-                best_model, X_train, Y_train, X_test, Y_test, self.use_shared_regions, self.test_shared_regions)
+            evaluator = ModelEvaluator(best_model, X_train, Y_train, X_test, Y_test, self.use_shared_regions, self.test_shared_regions)
             train_metrics = evaluator.get_train_metrics()
             test_metrics = evaluator.get_test_metrics()
             
@@ -335,7 +339,6 @@ class Simulation:
 
             # Log final evaluation metrics
             if track_wandb:
-                wandb.login()
                 log_wandb_metrics(self.feature_type, self.model_type, self.connectome_target, self.cv_type, fold_idx, train_metrics, test_metrics, best_val_score, best_model, train_history, model_classes=MODEL_CLASSES)
             
             # Extract feature importances and model JSON
