@@ -1,4 +1,4 @@
-# Gene2Conn/sim/sim.py
+# GeneEx2Conn/sim/sim.py
 
 # imports
 from imports import * 
@@ -40,10 +40,11 @@ importlib.reload(models.base_models)
 
 # custom models
 from models.dynamic_mlp import DynamicMLP
-from models.bilinear import BilinearModel
+from models.bilinear import BilinearLowRank, BilinearSCM
 MODEL_CLASSES = {
     'dynamic_mlp': DynamicMLP,
-    'bilinear': BilinearModel
+    'bilinear_lowrank': BilinearLowRank,
+    'bilinear_SCM': BilinearSCM
     # Add other deep learning models here as they're implemented
     # 'transformer_nn': TransformerNN
 }
@@ -205,7 +206,7 @@ class Simulation:
         )
         
         # Load sweep config
-        sweep_config_path = os.path.join(os.getcwd(), 'models', f'{self.model_type}_sweep_config.yml')
+        sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')
         sweep_config = load_sweep_config(sweep_config_path, input_dim=inner_fold_splits[0][0].shape[1]) # take num features from a fold
         
         device = torch.device("cuda")
@@ -337,6 +338,7 @@ class Simulation:
             print('BEST VAL SCORE', best_val_score)
             print('BEST MODEL PARAMS', best_model.get_params())
 
+            break
             # Log final evaluation metrics
             if track_wandb:
                 log_wandb_metrics(self.feature_type, self.model_type, self.connectome_target, self.cv_type, fold_idx, train_metrics, test_metrics, best_val_score, best_model, train_history, model_classes=MODEL_CLASSES)

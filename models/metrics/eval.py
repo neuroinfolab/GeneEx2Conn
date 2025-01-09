@@ -99,24 +99,30 @@ class Metrics:
 
         # Compute geodesic distance if data is square (connectome)
         if self.square:
-            Y_pred_connectome = reconstruct_connectome(self.Y_pred)
+            Y_pred_connectome = reconstruct_connectome(self.Y_pred, symmetric=True)
+            Y_pred_connectome_asymmetric = reconstruct_connectome(self.Y_pred, symmetric=False)
             Y_true_connectome = reconstruct_connectome(self.Y_true)
             self.geodesic_distance = distance_FC(Y_true_connectome, Y_pred_connectome).geodesic()
 
             # Visualize true and predicted connectomes
-            plt.figure(figsize=(12, 4))
+            plt.figure(figsize=(16, 4))
             
-            plt.subplot(131)
+            plt.subplot(141)
             plt.imshow(Y_true_connectome, cmap='viridis', vmin=0, vmax=1)
             plt.colorbar(shrink=0.5)
             plt.title('True Connectome')
             
-            plt.subplot(132) 
+            plt.subplot(142) 
+            plt.imshow(Y_pred_connectome_asymmetric, cmap='viridis', vmin=0, vmax=1)
+            plt.colorbar(shrink=0.5)
+            plt.title('Predicted Connectome (asymmetric)')
+
+            plt.subplot(143) 
             plt.imshow(Y_pred_connectome, cmap='viridis', vmin=0, vmax=1)
             plt.colorbar(shrink=0.5)
-            plt.title('Predicted Connectome')
+            plt.title('Predicted Connectome (symmetric)')
             
-            plt.subplot(133)
+            plt.subplot(144)
             plt.imshow(abs(Y_true_connectome - Y_pred_connectome), cmap='RdYlGn_r')
             plt.colorbar(shrink=0.5)
             plt.title('Prediction Difference')

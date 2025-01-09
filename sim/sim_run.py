@@ -1,4 +1,4 @@
-# Gene2Conn/sim/sim_run.py
+# GeneEx2Conn/sim/sim_run.py
 
 # imports
 from imports import * 

@@ -1,0 +1,23 @@
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+parameters:
+  activation:
+    values: ['none'] #, 'relu', 'sigmoid', 'softplus'] #, 'none','relu', 'sigmoid', 'softplus']
+  learning_rate:
+    values: [0.001] #, 0.003, 0.001, 0.01]
+  batch_size:
+    values: [128] # 64, 128, 256]
+  regularization:
+    values: ['l2'] # 'l1', 'l2'
+  lambda_reg:
+    values: [0.1] # 0.1, 0.5, 1.0, 2.0]
+  shared_weights:
+    values: [False]
+  input_dim:
+    value: !!int 0 
+  reduced_dim:
+    values: [5] # 1, 2, 5, 10]
+  epochs:
+    values: [100]

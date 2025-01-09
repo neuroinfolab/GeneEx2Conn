@@ -1,4 +1,4 @@
-# Gene2Conn/models/train_val.py
+# GeneEx2Conn/models/train_val.py
 
 from imports import *
 

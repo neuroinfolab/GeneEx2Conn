@@ -1,4 +1,4 @@
-# Gene2Conn/models/dynamic_nn.py
+# GeneEx2Conn/models/dynamic_mlp.py
 
 from imports import *
 from data.data_utils import create_data_loader
@@ -6,13 +6,12 @@ from models.train_val import train_model
 
 
 class DynamicMLP(nn.Module):
-    def __init__(self, input_dim, hidden_dims=[128, 64], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0, batch_size=64, symmetry_weight=0.1, epochs=100):
+    def __init__(self, input_dim, hidden_dims=[128, 64], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0, batch_size=64, epochs=100):
         super().__init__()
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.batch_size = batch_size
         self.epochs = epochs
-        self.symmetry_weight = symmetry_weight
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         layers = []
@@ -42,7 +41,6 @@ class DynamicMLP(nn.Module):
             'learning_rate': self.learning_rate,
             'weight_decay': self.weight_decay,
             'batch_size': self.batch_size,
-            'symmetry_weight': self.symmetry_weight,
             'epochs': self.epochs,
             'device': str(self.device)
         }

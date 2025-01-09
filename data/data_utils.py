@@ -7,16 +7,17 @@ def create_data_loader(X, y, batch_size, device, shuffle=False):
     y = torch.FloatTensor(y).to(device)    
     dataset = TensorDataset(X, y)
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
-
-def reconstruct_connectome(Y):
+    
+def reconstruct_connectome(Y, symmetric=True):
     """
     Reconstructs the full connectome matrix from a given input vector Y.
 
     Parameters:
     Y (numpy.ndarray): Input vector representing the connectome.
+    symmetric (bool): Whether to make the connectome symmetric. Default is True.
 
     Returns:
-    numpy.ndarray: Reconstructed symmetric connectome matrix.
+    numpy.ndarray: Reconstructed connectome matrix, symmetric if specified.
     """
     num_regions = math.floor(np.sqrt(Y.shape[0]))
 
@@ -34,7 +35,8 @@ def reconstruct_connectome(Y):
     Y_temp_lower = np.concatenate((matrix_with_row, column_of_zeros), axis=1)
 
     Y_connectome = Y_temp_upper + Y_temp_lower
-    Y_connectome = make_symmetric(Y_connectome)
+    if symmetric:
+        Y_connectome = make_symmetric(Y_connectome)
     
     return Y_connectome
 

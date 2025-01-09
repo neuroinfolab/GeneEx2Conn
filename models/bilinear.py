@@ -1,23 +1,48 @@
-# Gene2Conn/models/bilinear.py
+# GeneEx2Conn/models/bilinear.py
 
 from imports import *
 from data.data_utils import create_data_loader
 from models.train_val import train_model
-from models.losses import BilinearLoss
 
-class BilinearModel(nn.Module):
-    def __init__(self, input_dim, reduced_dim, activation='none', learning_rate=0.01, epochs=100, batch_size=128, regularization='l1', lambda_reg=1.0):
+class BilinearLoss(nn.Module):
+    """MSE loss with optional L1/L2 regularization for bilinear models."""
+    def __init__(self, regularization='l1', lambda_reg=1.0):
+        super().__init__()
+        self.regularization = regularization
+        self.lambda_reg = lambda_reg
+        self.mse = nn.MSELoss()
+        
+    def forward(self, predictions, targets, model):
+        mse_loss = self.mse(predictions, targets)
+        if self.lambda_reg > 0:
+            # Concatenate all parameters into a single tensor
+            params = torch.cat([p.view(-1) for p in model.parameters() if p.requires_grad])
+            
+            if self.regularization == 'l1':
+                reg_loss = torch.linalg.norm(params, ord=1)  # L1 norm
+            elif self.regularization == 'l2':
+                reg_loss = torch.linalg.norm(params, ord=2) # L2 norm
+            return mse_loss + self.lambda_reg * reg_loss
+
+        return mse_loss
+
+
+class BilinearLowRank(nn.Module):
+    def __init__(self, input_dim, reduced_dim, activation='none', learning_rate=0.01, epochs=100, 
+                 batch_size=128, regularization='l1', lambda_reg=1.0, shared_weights=True):
         super().__init__()
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.batch_size = batch_size
         self.regularization = regularization
         self.lambda_reg = lambda_reg
+        self.shared_weights = shared_weights
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.linear = nn.Linear(input_dim//2, reduced_dim, bias=False)
-        self.linear2 = nn.Linear(input_dim//2, reduced_dim, bias=False)
-
+        if not shared_weights:
+            self.linear2 = nn.Linear(input_dim//2, reduced_dim, bias=False)
+        
         if activation == 'sigmoid':
             self.activation = nn.Sigmoid()
         elif activation == 'relu':
@@ -32,7 +57,7 @@ class BilinearModel(nn.Module):
 
     
     def get_params(self): # for local model saving
-        return {
+        params = {
             'input_dim': self.linear.in_features,
             'reduced_dim': self.linear.out_features,
             'activation': self.activation.__class__.__name__.lower(),
@@ -41,13 +66,15 @@ class BilinearModel(nn.Module):
             'batch_size': self.batch_size,
             'regularization': self.regularization,
             'lambda_reg': self.lambda_reg,
-            'device': str(self.device)
+            'shared_weights': self.shared_weights,
+            'device': str(self.device),
         }
+        return params
     
     def forward(self, x): 
         mid = x.size(1) // 2 # define split point
         out1 = self.activation(self.linear(x[:, :mid]))
-        out2 = self.activation(self.linear2(x[:, mid:]))
+        out2 = self.activation(self.linear(x[:, mid:]) if self.shared_weights else self.linear2(x[:, mid:]))
         return torch.sum(out1 * out2, dim=1) # dot product for paired samples
 
     def predict(self, X):
@@ -61,3 +88,51 @@ class BilinearModel(nn.Module):
         train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, shuffle=False)
         val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, shuffle=False)
         return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, verbose=verbose)
+
+
+class BilinearSCM(nn.Module):
+    def __init__(self, input_dim, learning_rate=0.01, epochs=100, 
+                 batch_size=128, regularization='l1', lambda_reg=1.0):
+        super().__init__()
+        self.learning_rate = learning_rate
+        self.epochs = epochs
+        self.batch_size = batch_size
+        self.regularization = regularization
+        self.lambda_reg = lambda_reg
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.bilinear = nn.Bilinear(input_dim//2, input_dim//2, 1, bias=False)
+        
+        self.criterion = BilinearLoss(regularization=regularization, lambda_reg=lambda_reg)
+        self.optimizer = Adam(self.parameters(), lr=learning_rate)
+
+    def get_params(self):
+        params = {
+            'input_dim': self.bilinear.in1_features,  # same as in2_features
+            'learning_rate': self.learning_rate,
+            'epochs': self.epochs,
+            'batch_size': self.batch_size,
+            'regularization': self.regularization,
+            'lambda_reg': self.lambda_reg,
+            'device': str(self.device),
+        }
+        return params
+    
+    def forward(self, x):
+        mid = x.size(1) // 2
+        x1 = x[:, :mid]
+        x2 = x[:, mid:]
+        return self.bilinear(x1, x2).squeeze()
+
+    def predict(self, X):
+        self.eval()
+        X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
+        with torch.no_grad():
+            predictions = self(X).cpu().numpy()
+        return predictions
+
+    def fit(self, X_train, y_train, X_test, y_test, verbose=True):
+        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, shuffle=False)
+        val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, shuffle=False)
+        return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, verbose=verbose)
+
