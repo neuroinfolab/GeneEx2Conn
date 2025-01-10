@@ -28,6 +28,20 @@ class BaseModel:
         """Return the parameter grid for GridSearchCV."""
         return self.param_dist
 
+class LinearModel(BaseModel):
+    """Linear Regression model."""
+
+    def __init__(self):
+        super().__init__()
+        self.model = LinearRegression()
+        self.param_grid = {
+            'fit_intercept': [True, False],
+            'positive': [True, False]
+        }
+        self.param_dist = {
+            'fit_intercept': Categorical([True, False]),
+            'positive': Categorical([True, False])
+        }
 
 class RidgeModel(BaseModel):
     """Ridge Regression model with parameter grid."""
@@ -44,7 +58,6 @@ class RidgeModel(BaseModel):
             'alpha': Real(1e-6, 1e2, prior='log-uniform')  # Log-uniform to explore a wide range of alphas
             #'solver': Categorical(['auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga'])  # Different solvers to try
         }
-
 
 class PLSModel(BaseModel):
     """Partial Least Squares Regression model with parameter grid."""
@@ -139,9 +152,10 @@ class ModelBuild:
         model_mapping = {
             'pls': PLSModel,
             'ridge': RidgeModel,
+            'linear': LinearModel,
             'xgboost': XGBModel,
-            'random_forest': RandomForestModel    
-        }
+            'random_forest': RandomForestModel
+            }
         
         if model_type in model_mapping:
             return model_mapping[model_type]()

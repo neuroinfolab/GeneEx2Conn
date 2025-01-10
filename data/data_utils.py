@@ -154,6 +154,42 @@ def expand_X_symmetric_struct_summ(X, include_input=False):
 
     return expanded_X
 
+def expand_X_symmetric_spatial_null(X):
+    """
+    Expands X matrix to extract euclidean distances and structural connectivity values for each pair of regions.
+    
+    Parameters:
+    X (numpy.ndarray): Array where first 3 columns are coordinates and remaining columns contain structural connectivity matrix
+        
+    Returns:
+    numpy.ndarray: Matrix containing euclidean distances and structural connectivity values for each region pair
+    """
+    coords = X[:, :3]  # First 3 columns are coordinates
+    Y_sc = X[:, 3:]   # Remaining columns are structural connectivity
+    
+    num_regions = coords.shape[0]
+    region_combinations = list(combinations(range(num_regions), 2))
+    num_combinations = len(region_combinations)
+    
+    expanded_X = np.zeros((num_combinations * 2, 2))
+    
+    for i, (region1, region2) in enumerate(region_combinations):
+        # Calculate euclidean distance between regions
+        dist = np.linalg.norm(coords[region1] - coords[region2])
+        
+        # Get structural connectivity values
+        sc_value = Y_sc[region1, region2]
+        
+        # Store values for both directions
+        expanded_X[i * 2, 0] = dist
+        expanded_X[i * 2, 1] = sc_value
+        
+        expanded_X[i * 2 + 1, 0] = dist  
+        expanded_X[i * 2 + 1, 1] = sc_value
+
+    return expanded_X
+
+
 def expand_X_symmetric_shared(X_train1, X_train2, Y_train2):
     """
     Expands rectangular X matrix symmetrically (including shared test regions).
@@ -287,7 +323,7 @@ def expand_Y_symmetric(Y):
     return expanded_Y
 
 
-def process_cv_splits(X, Y, cv_obj, all_train=False, test_shared=False, struct_summ=False, kron=False, kron_input_dim=None):
+def process_cv_splits(X, Y, cv_obj, all_train=False, test_shared=False, spatial_null=False, struct_summ=False, kron=False, kron_input_dim=None):
     """
     Function to process cross-validation splits, expand training and test data as needed.
 
@@ -340,6 +376,11 @@ def process_cv_splits(X, Y, cv_obj, all_train=False, test_shared=False, struct_s
 
                 X_test = expand_X_symmetric_struct_summ(X_test)
                 Y_test = expand_Y_symmetric(Y_test) 
+            elif spatial_null:
+                X_train = expand_X_symmetric_spatial_null(X_train)
+                Y_train = expand_Y_symmetric(Y_train)
+                X_test = expand_X_symmetric_spatial_null(X_test)
+                Y_test = expand_Y_symmetric(Y_test)
             else:
                 X_train = expand_X_symmetric(X_train)
                 Y_train = expand_Y_symmetric(Y_train)

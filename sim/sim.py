@@ -159,13 +159,17 @@ class Simulation:
                 features.append(feature_name if processing_type is None else f"{feature_name}_{processing_type}")
 
         # create a dict to map inputted feature types to data array - more can be addded to this
-        feature_dict = {'transcriptome': self.X, 
+        # THIS IS THE NODE-WISE FEATURE DICT
+        feature_dict = {'transcriptome': self.X,
                         'transcriptome_PCA': self.X_pca,
-                        'structural':self.Y_sc,
-                        'structural_spectral_L':self.Y_sc_spectralL,
-                        'structural_spectral_A':self.Y_sc_spectralA, 
-                        'functional':self.Y_fc,
-                        'euclidean':self.coords
+                        # add PLS embedding of transcriptome here
+                        'structural': self.Y_sc,
+                        'structural_spectral_L': self.Y_sc_spectralL,
+                        'structural_spectral_A': self.Y_sc_spectralA,
+                        'functional': self.Y_fc,
+                        'euclidean': self.coords, 
+                        'structural_spatial_null': np.hstack((self.coords, self.Y_sc)), # cannot be combined with other feats
+                        'transcriptome_spatial_autocorr_null': np.hstack((self.coords, self.Y_sc, self.X)), # cannot be combined with other feats
                         }
         
         validate_inputs(features=features, feature_dict=feature_dict)
@@ -179,17 +183,27 @@ class Simulation:
                 num_latents = int(feature.split('_')[-1])
                 feature_X = feature_X[:, num_latents:] if num_latents < 0 else feature_X[:, :num_latents] # take first num_latents components if positive, last if negative
             else:
+                if feature == 'structural_spatial_null':
+                    spatial_null=True
+                elif feature == 'transcriptome_spatial_autocorr_null':
+                    transcriptome_spatial_null=True
+                else:
+                    spatial_null=False
+                    transcriptome_spatial_null=False
+    
                 feature_X = feature_dict[feature]
             
             X.append(feature_X)
         
+        print(X)
         self.X = np.hstack(X)
         print('X shape', self.X.shape)
 
         self.fold_splits = process_cv_splits(
-                          self.X,self.Y, self.cv_obj, 
+                          self.X, self.Y, self.cv_obj, 
                           self.use_shared_regions,
-                          self.test_shared_regions
+                          self.test_shared_regions, 
+                          spatial_null=spatial_null
                           )
 
                         

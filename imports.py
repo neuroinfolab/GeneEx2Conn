@@ -60,6 +60,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from sklearn.cross_decomposition import PLSCanonical
 from sklearn.cross_decomposition import PLSRegression
+from sklearn.linear_model import LinearRegression
 from sklearn.linear_model import RidgeCV
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
