@@ -338,7 +338,6 @@ class Simulation:
             print('BEST VAL SCORE', best_val_score)
             print('BEST MODEL PARAMS', best_model.get_params())
 
-            break
             # Log final evaluation metrics
             if track_wandb:
                 log_wandb_metrics(self.feature_type, self.model_type, self.connectome_target, self.cv_type, fold_idx, train_metrics, test_metrics, best_val_score, best_model, train_history, model_classes=MODEL_CLASSES)

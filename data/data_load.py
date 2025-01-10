@@ -48,7 +48,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         return data_pca
 
     def _load_ahba_data(parcellation, omit_subcortical, run_PCA):
-        """Load and process AHBA dataset in respectiv parcellation"""
+        """Load and process AHBA dataset in respective parcellation"""
         #ssl._create_default_https_context = ssl._create_unverified_context
         #genes = fetch_ahba()
         

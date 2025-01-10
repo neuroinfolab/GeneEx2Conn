@@ -24,6 +24,8 @@ class DynamicMLP(nn.Module):
             prev_dim = hidden_dim
         layers.append(nn.Linear(prev_dim, 1))
         self.model = nn.Sequential(*layers)
+        num_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        print(f"Number of learnable parameters in MLP: {num_params}")
 
         if torch.cuda.device_count() > 1: # distributed training
             dist.init_process_group(backend='nccl')

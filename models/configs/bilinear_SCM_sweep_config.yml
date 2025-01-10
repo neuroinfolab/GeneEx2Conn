@@ -4,14 +4,28 @@ metric:
   goal: minimize
 parameters:
   learning_rate:
-    values: [0.0001] # , .003] #, 0.003, 0.001, 0.01]
+    values: [0.01, 0.005, 0.001]
   batch_size:
-    values: [2048] #64, 128, 256]
+    values: [512, 1024, 2048]
   regularization:
-    values: ['l1'] #, 'l1', 'l2'
+    values: ['l1', 'l2']
   lambda_reg:
-    values: [0.01] #, 0.1, 1.0] #0.1, 0.5, 1.0, 2.0]
+    values: [0.01, 0.1, 1.0, 100]
   input_dim:
     value: !!int 0 
   epochs:
-    values: [200] # , 100, 200] #, 200]
+    values: [100, 200]
+
+# # hand tuned parameters:  (mainly for no subcortical and PCs)
+# learning_rate:
+#     values: [0.01]
+#   batch_size:
+#     values: [1024]
+#   regularization:
+#     values: ['l2']
+#   lambda_reg:
+#     values: [0.1]
+#   input_dim:
+#     value: !!int 0 
+#   epochs:
+#     values: [200] 
