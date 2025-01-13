@@ -111,6 +111,14 @@ class Simulation:
 
         # Find rows that are not all NaN - necessary for gene expression data with unsampled regions
         valid_indices = ~np.isnan(self.X).all(axis=1)
+        
+        print(f"X shape: {self.X.shape}")
+        print(f"X_pca shape: {self.X_pca.shape}")
+        print(f"Y_sc shape: {self.Y_sc.shape}")
+        print(f"Y_sc_spectralL shape: {self.Y_sc_spectralL.shape}")
+        print(f"Y_sc_spectralA shape: {self.Y_sc_spectralA.shape}")
+        print(f"Y_fc shape: {self.Y_fc.shape}")
+        print(f"Coordinates shape: {self.coords.shape}")
 
         # Subset all data using valid indices
         self.X = self.X[valid_indices]

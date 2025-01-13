@@ -7,7 +7,31 @@ def create_data_loader(X, y, batch_size, device, shuffle=False):
     y = torch.FloatTensor(y).to(device)    
     dataset = TensorDataset(X, y)
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
-    
+
+
+def _apply_pca(data, var_thresh=0.95):
+        """Apply PCA with variance threshold."""
+        # Find rows without NaNs
+        valid_rows = ~np.isnan(data).any(axis=1)
+        
+        # Fit PCA on valid rows only
+        pca = PCA()
+        data_valid = data[valid_rows]
+        data_pca_valid = pca.fit_transform(data_valid)
+        
+        # Get number of components based on variance threshold
+        cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
+        n_components = np.argmax(cumulative_variance >= var_thresh) + 1
+        print(f"Number of components for PCA: {n_components}")
+        
+        # Initialize output array with NaNs
+        data_pca = np.full((data.shape[0], n_components), np.nan)
+        
+        # Fill in transformed valid rows
+        data_pca[valid_rows] = data_pca_valid[:, :n_components]
+        
+        return data_pca
+        
 def reconstruct_connectome(Y, symmetric=True):
     """
     Reconstructs the full connectome matrix from a given input vector Y.
