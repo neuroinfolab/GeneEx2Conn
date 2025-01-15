@@ -57,7 +57,6 @@ class BilinearLowRank(nn.Module):
         self.criterion = BilinearLoss(regularization=regularization, lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate)
 
-    
     def get_params(self): # for local model saving
         params = {
             'input_dim': self.linear.in_features,
@@ -74,9 +73,9 @@ class BilinearLowRank(nn.Module):
         return params
     
     def forward(self, x): 
-        mid = x.size(1) // 2 # define split point
-        out1 = self.activation(self.linear(x[:, :mid]))
-        out2 = self.activation(self.linear(x[:, mid:]) if self.shared_weights else self.linear2(x[:, mid:]))
+        x_i, x_j = torch.chunk(x, chunks=2, dim=1)
+        out1 = self.activation(self.linear(x_i))
+        out2 = self.activation(self.linear(x_j) if self.shared_weights else self.linear2(x_j))
         return torch.sum(out1 * out2, dim=1) # dot product for paired samples
 
     def predict(self, X):
@@ -123,10 +122,8 @@ class BilinearSCM(nn.Module):
         return params
     
     def forward(self, x):
-        mid = x.size(1) // 2
-        x1 = x[:, :mid]
-        x2 = x[:, mid:]
-        return self.bilinear(x1, x2).squeeze()
+        x_i, x_j = torch.chunk(x, chunks=2, dim=1)
+        return self.bilinear(x_i, x_j).squeeze()
 
     def predict(self, X):
         self.eval()
