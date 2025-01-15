@@ -2,8 +2,11 @@
 
 from imports import *
 
+relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data'
+
+
 def _apply_pca(data, var_thresh=0.95):
-        """Apply PCA with variance threshold."""
+        """Helper to apply PCA with variance threshold."""
         # Find rows without NaNs
         valid_rows = ~np.isnan(data).any(axis=1)
         
@@ -15,7 +18,7 @@ def _apply_pca(data, var_thresh=0.95):
         # Get number of components based on variance threshold
         cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
         n_components = np.argmax(cumulative_variance >= var_thresh) + 1
-        print(f"Number of components for PCA: {n_components}")
+        print(f"Number of components for 95% variance PCA: {n_components}")
         
         # Initialize output array with NaNs
         data_pca = np.full((data.shape[0], n_components), np.nan)
@@ -25,29 +28,23 @@ def _apply_pca(data, var_thresh=0.95):
         
         return data_pca
 
-def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=True, hemisphere='both'):
-    """
-    Load transcriptome data from various datasets with optional PCA dimensionality reduction.
-    
-    Parameters:
-    -----------
-    parcellation : str, default='S100'. Options: 'S100', 'S400' (S400 is same as S456)
-        Brain parcellation scheme to use
-    gene_list : str, default='0.2'
-       Gene lists to subset from AHBA data. Options: '0.2', '1', 'brain', 'neuron', 'oligodendrocyte', 'synaptome', 'layers', 'all_abagen', 'syngo'
-    dataset : str, default='AHBA'
-        Dataset to load. Options: 'AHBA', 'GTEx', 'AHBA in GTEx', 'UTSW', 'AHBA in UTSW'
-    run_PCA : bool, default=False
-        If True, applies PCA with 95% variance threshold
-    omit_subcortical : bool, default=False
-        If True, excludes subcortical regions
-    hemisphere : str, default='both'
-        Options: 'both', 'left', 'right'    # 'inter' not implemented
 
-    Returns:
-    --------
-    np.ndarray
-        Processed gene expression data
+def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=True, hemisphere='both', sort_genes=False):
+    """
+    Load transcriptome data with optional PCA reduction.
+    
+    Args:
+        parcellation (str): Brain parcellation ('S100', 'S400'). Default: 'S100'
+        gene_list (str): Gene subset ('0.2', '1', 'brain', 'neuron', 'oligodendrocyte', 
+            'synaptome', 'layers', 'all_abagen', 'syngo'). Default: '0.2'
+        dataset (str): Source dataset ('AHBA', 'GTEx', 'AHBA in GTEx', 'UTSW', 
+            'AHBA in UTSW'). Default: 'AHBA'
+        run_PCA (bool): Apply PCA with 95% variance threshold. Default: False
+        omit_subcortical (bool): Exclude subcortical regions. Default: False
+        hemisphere (str): Brain hemisphere ('both', 'left', 'right'). Default: 'both'
+        sort_genes (bool): Sort genes based on reference genome order. Default: False
+    Returns
+        np.ndarray: Processed gene expression data
     """
     if dataset == 'AHBA':
         # Choose parcellation
@@ -76,9 +73,21 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
                         set(abagen.fetch_gene_group('oligodendrocyte')),
                         set(abagen.fetch_gene_group('synaptome')),
                         set(abagen.fetch_gene_group('layers')))
-        
-        genes_data = np.array(genes_data[[gene for gene in genes_list if gene in genes_data.columns]])
-    
+
+       
+        if sort_genes: # this may drop some genes if the gene list symbol does not directly match to the gene_id of the reference genome (ususally drops <5% of genes)
+            human_refgenome = pd.read_csv(relative_data_path + '/human_refgenome/human_refgenome_ordered.csv')
+            ordered_genes = human_refgenome['gene_id'].tolist()
+            gene_order_dict = {gene: idx for idx, gene in enumerate(ordered_genes)}
+
+            # Filter and sort genes based on reference genome order
+            valid_genes = [gene for gene in genes_list if gene in gene_order_dict and gene in genes_data.columns]
+            valid_genes.sort(key=lambda x: gene_order_dict[x])
+            genes_data = np.array(genes_data[valid_genes])
+        else:
+            valid_genes = [gene for gene in genes_list if gene in genes_data.columns]
+            genes_data = np.array(genes_data[valid_genes])
+
         # Apply PCA if specified
         if run_PCA:
             genes_data = _apply_pca(genes_data)
@@ -101,23 +110,23 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
 
         return genes_data
     
+    '''
     # Dataset paths configuration
-    relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)
     dataset_configs = {
         'GTEx': {
-            'path': '/GeneEx2Conn_data/region_map_pickles/RxG_data_gtex_mean_gtex_ahba_space.pkl',
+            'path': '/region_map_pickles/RxG_data_gtex_mean_gtex_ahba_space.pkl',
             'transform': lambda x: np.array(x)
         },
         'AHBA in GTEx': {
-            'path': '/GeneEx2Conn_data/region_map_pickles/RxG_data_ahba_mean_gtex_ahba_space.pkl',
+            'path': '/region_map_pickles/RxG_data_ahba_mean_gtex_ahba_space.pkl',
             'transform': lambda x: np.array(x)
         },
         'UTSW': {
-            'path': '/GeneEx2Conn_data/region_map_pickles/RxG_data_utsmc_mean_ahba_utsmc_space.pkl',
+            'path': '/region_map_pickles/RxG_data_utsmc_mean_ahba_utsmc_space.pkl',
             'transform': lambda x: np.array(np.log1p(x))
         },
         'AHBA in UTSW': {
-            'path': '/GeneEx2Conn_data/region_map_pickles/RxG_data_ahba_mean_ahba_utsmc_space.pkl',
+            'path': '/region_map_pickles/RxG_data_ahba_mean_ahba_utsmc_space.pkl',
             'transform': lambda x: np.array(x)
         }
     }
@@ -127,40 +136,34 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         with open(relative_data_path + config['path'], 'rb') as f:
             data = pickle.load(f)
             return config['transform'](data)
-
     raise ValueError(f"Unknown dataset: {dataset}")
+    '''
 
 def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', measure='FC', spectral=None, hemisphere='both'):
     """
-    Load and process connectome data from various datasets with optional spectral decomposition.
+    Load and process connectome data with optional spectral decomposition.
     
-    Parameters:
-    -----------
-    parcellation : str, default='S100'. Options: 'S100', 'S456'
-        Brain parcellation scheme to use
-    dataset : str, default='AHBA'
-        Dataset to load. Options: 'AHBA', 'GTEx', 'UTSW'
-    omit_subcortical : bool, default=True
-        If True, excludes subcortical regions
-    measure : str, default='FC'
-        Type of connectivity measure. Options: 'FC' (functional), 'SC' (structural)
-    spectral : str or None, default=None
-        Type of spectral decomposition. Options: 'L' (Laplacian), 'A' (Adjacency), None
+    Args:
+        parcellation (str): Brain parcellation ('S100', 'S456'). Default: 'S100'
+        dataset (str): Dataset to load ('AHBA', 'GTEx', 'UTSW'). Default: 'AHBA'
+        omit_subcortical (bool): Exclude subcortical regions. Default: True
+        measure (str): Connectivity type ('FC', 'SC'). Default: 'FC'
+        spectral (str): Decomposition type ('L', 'A', None). Default: None
     
     Returns:
-    --------
-    np.ndarray
-        Processed connectome data
-    """    
+        np.ndarray: Processed connectome data
+    """
     if dataset == 'AHBA':
         # Load relevant data and corresponding region labels from parcellation
         if parcellation == 'S100':
             region_labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in pd.read_csv('./data/enigma/schaef114_regions.txt', header=None).values.flatten().tolist()]
             if measure == 'FC':
                 matrix, _ = load_fc_as_one(parcellation='schaefer_100')
+                matrix = (matrix - matrix.min()) / (matrix.max() - matrix.min()) # a few values are slightly negative and some above 1 so scale into [0,1] range
             elif measure == 'SC':
                 matrix, _ = load_sc_as_one(parcellation='schaefer_100')
-        elif parcellation == 'S400':
+                matrix[matrix < 0] = 0 # a handful of values are slightly negative so set to 0
+        elif parcellation == 'S400' or parcellation == 'S456':
             region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t').iterrows()]
             if measure == 'FC':
                 matrix = np.array(pd.read_csv('./data/UKBB/UKBB_S456_functional_conn.csv'))
@@ -196,40 +199,33 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
         
         return matrix
 
+    '''
     replication_dataset_paths = {
-        'GTEx': '/GeneEx2Conn_data/region_map_pickles/HCP_Connectome_GTEX_Regions.pkl',
-        'UTSW': '/GeneEx2Conn_data/region_map_pickles/HCP_Connectome_UTSMC_Regions.pkl'} 
-    relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)
+        'GTEx': '/region_map_pickles/HCP_Connectome_GTEX_Regions.pkl',
+        'UTSW': '/region_map_pickles/HCP_Connectome_UTSMC_Regions.pkl'} 
     # Load other datasets
     if dataset in replication_dataset_paths:
         with open(relative_data_path + replication_dataset_paths[dataset], 'rb') as f:
             return np.array(pickle.load(f))
-            
     raise ValueError(f"Unknown dataset: {dataset}")
-
+    '''
 
 def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
     """
-    Return x, y, z coordinates of parcellation.
-    
-    Parameters:
-    -----------
-    parcellation : str, default='S100'
-        Brain parcellation scheme to use
-    omit_subcortical : bool, default=True
-        If True, excludes subcortical regions
-    hemisphere : str, default='both'
-        Options: 'both', 'left', 'right'
-    """
-    relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir)        
+    Get MNI coordinates for brain regions in specified parcellation.
 
+    Args:
+        parcellation (str): Parcellation scheme ('S100' or 'S400'). Default: 'S100'
+        omit_subcortical (bool): Exclude subcortical regions. Default: True
+        hemisphere (str): 'both', 'left', or 'right'. Default: 'both'
+    """
     if parcellation == 'S100':
         region_labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in pd.read_csv('./data/enigma/schaef114_regions.txt', header=None).values.flatten().tolist()]
-        hcp_schaef = pd.read_csv(relative_data_path + '/GeneEx2Conn_data/atlas_info/schaef114.csv')
+        hcp_schaef = pd.read_csv(relative_data_path + '/atlas_info/schaef114.csv')
         coordinates = hcp_schaef[['mni_x', 'mni_y', 'mni_z']].values
     elif parcellation == 'S400':
         region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t').iterrows()]
-        UKBB_S456_atlas_info_path = relative_data_path + '/GeneEx2Conn_data/atlas_info/atlas-4S456Parcels_dseg_reformatted.csv'
+        UKBB_S456_atlas_info_path = relative_data_path + '/atlas_info/atlas-4S456Parcels_dseg_reformatted.csv'
         UKBB_S456_atlas_info = pd.read_csv(UKBB_S456_atlas_info_path)
         # Store MNI coordinates from atlas info as list of [x,y,z] coordinates
         mni_coords = [[x, y, z] for x, y, z in zip(UKBB_S456_atlas_info['mni_x'], 
@@ -238,8 +234,7 @@ def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
         coordinates = np.array(mni_coords)
                 
     if omit_subcortical:
-        # Retain only cortical regions by rounding down to nearest hundred
-        n = (coordinates.shape[0] // 100) * 100
+        n = (coordinates.shape[0] // 100) * 100 # Hacky way to retain only cortical regions by rounding down to nearest hundred
         coordinates = coordinates[:n, :]
         region_labels = region_labels[:n]
 
@@ -250,5 +245,3 @@ def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
         coordinates = coordinates[rh_indices, :]
     
     return coordinates
-
-    

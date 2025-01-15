@@ -2,7 +2,7 @@
 
 from imports import *
 
-def create_data_loader(X, y, batch_size, device, shuffle=False):
+def create_data_loader(X, y, batch_size, device, shuffle=True):
     X = torch.FloatTensor(X).to(device)
     y = torch.FloatTensor(y).to(device)    
     dataset = TensorDataset(X, y)

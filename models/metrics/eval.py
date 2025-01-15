@@ -85,8 +85,6 @@ class Metrics:
         self.Y_pred = getattr(Y_pred, 'get', lambda: Y_pred)()    
         self.Y_true_flat = self.Y_true.flatten()
         self.Y_pred_flat = self.Y_pred.flatten()
-
-    
         self.square = square
         self.compute_metrics()
 
@@ -106,19 +104,19 @@ class Metrics:
 
             # Visualize true and predicted connectomes
             plt.figure(figsize=(16, 4))
-            
+
             plt.subplot(141)
-            plt.imshow(Y_true_connectome, cmap='viridis', vmin=0, vmax=1)
+            plt.imshow(Y_true_connectome, cmap='viridis', vmin=Y_true_connectome.min(), vmax=Y_true_connectome.max())
             plt.colorbar(shrink=0.5)
             plt.title('True Connectome')
             
             plt.subplot(142) 
-            plt.imshow(Y_pred_connectome_asymmetric, cmap='viridis', vmin=0, vmax=1)
+            plt.imshow(Y_pred_connectome_asymmetric, cmap='viridis', vmin=Y_true_connectome.min(), vmax=Y_true_connectome.max())
             plt.colorbar(shrink=0.5)
             plt.title('Predicted Connectome (asymmetric)')
 
             plt.subplot(143) 
-            plt.imshow(Y_pred_connectome, cmap='viridis', vmin=0, vmax=1)
+            plt.imshow(Y_pred_connectome, cmap='viridis', vmin=Y_true_connectome.min(), vmax=Y_true_connectome.max())
             plt.colorbar(shrink=0.5)
             plt.title('Predicted Connectome (symmetric)')
             

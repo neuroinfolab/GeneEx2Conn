@@ -29,6 +29,7 @@ def train_epoch(model, train_loader, optimizer, criterion, device):
     model.train()
     total_train_loss = 0
     train_pearson_values = []
+    
     for batch_X, batch_y in train_loader:
         optimizer.zero_grad()
         predictions = model(batch_X).squeeze()

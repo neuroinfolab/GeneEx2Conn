@@ -58,6 +58,6 @@ class DynamicMLP(nn.Module):
         return predictions
 
     def fit(self, X_train, y_train, X_test, y_test, verbose=True):
-        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, shuffle=False)
-        val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, shuffle=False)
+        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, shuffle=True)
+        val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, shuffle=True)
         return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, verbose=verbose)
