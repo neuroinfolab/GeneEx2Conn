@@ -3,6 +3,7 @@ metric:
   name: mean_val_loss
   goal: minimize
 
+# bilinear layer
 parameters: # best params so far for both hems (continue tuning lr, batch size, epochs)
   input_dim:
       value: !!int 0
@@ -27,3 +28,30 @@ parameters: # best params so far for both hems (continue tuning lr, batch size, 
     values: [128]
   epochs:
     values: [500] #, 150, 200]
+
+
+# mlp decoder
+# parameters:
+#   input_dim:
+#       value: !!int 0
+#   encoder_hidden_dim:
+#     values: [128]
+#   encoder_output_dim:
+#     values: [32]
+#   deep_hidden_dims:
+#     values: 
+#     - [32]
+#   use_bilinear:
+#     values: [True]
+#   dropout_rate:
+#     values: [0.2]
+#   learning_rate:
+#     values: [0.0001]
+#   weight_decay:
+#     values: [0.0] #, 0.0001, 0.001, 0.01]
+#   lambda_reg:
+#     values: [0.001] #0.01]
+#   batch_size:
+#     values: [128]
+#   epochs:
+#     values: [200] #, 150, 200]

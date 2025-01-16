@@ -29,7 +29,7 @@ def _apply_pca(data, var_thresh=0.95):
         return data_pca
 
 
-def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=True, hemisphere='both', sort_genes=False):
+def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=True, hemisphere='both', sort_genes=True):
     """
     Load transcriptome data with optional PCA reduction.
     

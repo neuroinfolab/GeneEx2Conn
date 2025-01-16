@@ -86,6 +86,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 from torch.optim import Adam
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torchmetrics
 from models.metrics.eval import pearson_numpy, pearson_cupy
 from torchmetrics import PearsonCorrCoef

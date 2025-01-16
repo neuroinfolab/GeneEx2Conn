@@ -16,16 +16,17 @@ metric:
 #   epochs:
 #     values: [100, 200]
 
-parameters:  # (mainly for no subcortical and PCs)
+# (mainly for no subcortical and PCs)
+parameters: 
   learning_rate:
-      values: [0.01]
-    batch_size:
-      values: [1024]
-    regularization:
-      values: ['l2']
-    lambda_reg:
-      values: [0.1]
-    input_dim:
-      value: !!int 0 
-    epochs:
-      values: [300] 
+    values: [0.001] # 0.01
+  batch_size:
+    values: [512] # 1024
+  regularization:
+    values: ['l1']
+  lambda_reg:
+    values: [0.001]
+  input_dim:
+    value: !!int 0 
+  epochs:
+    values: [500] 

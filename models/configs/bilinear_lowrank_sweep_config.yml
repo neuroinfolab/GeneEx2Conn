@@ -32,18 +32,18 @@ parameters:
   activation:
     values: ['none'] 
   learning_rate:
-    values: [0.001]
+    values: [0.0003] # .001
   batch_size:
     values: [128] # [128] 
   regularization:
     values: ['l2']
   lambda_reg:
-    values: [0.1] 
+    values: [0.01] 
   shared_weights:
-    values: [False] 
+    values: [True] 
   input_dim:
     value: !!int 0 
   reduced_dim:
     values: [5] 
   epochs:
-    values: [100] 
+    values: [500] # 300

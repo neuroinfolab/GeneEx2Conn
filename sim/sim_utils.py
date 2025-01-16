@@ -136,7 +136,9 @@ def validate_inputs(
     
     # Validate model type if provided
     if model_type is not None:
-        valid_model_types = {'linear', 'ridge', 'pls', 'xgboost', 'dynamic_mlp', 'random_forest', 'bilinear_lowrank', 'bilinear_SCM', 'shared_mlp_encoder'}
+        valid_model_types = {'linear', 'ridge', 'pls', 'xgboost', 'dynamic_mlp', 'random_forest', 
+                             'bilinear_lowrank', 'bilinear_SCM', 
+                             'shared_mlp_encoder', 'shared_transformer'}
         if model_type not in valid_model_types:
             raise ValueError(f"Invalid model_type: {model_type}. Must be one of {valid_model_types}")
     
@@ -352,11 +354,10 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
     Returns:
         float: Mean validation loss across inner folds
     """
-    random_run_id = random.randint(1, 1000) # # Create unique run identifier
     feature_str = "+".join(str(k) if v is None else f"{k}_{v}"
                          for feat in feature_type 
                          for k,v in feat.items())
-    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{outer_fold_idx}_innerCV"
+    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{outer_fold_idx}_innerCV"  # add in parcellation, hemisphere, subcortex
 
     run = wandb.init(
         project="gx2conn",
@@ -440,7 +441,7 @@ def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold
     feature_str = "+".join(str(k) if v is None else f"{k}_{v}" 
                         for feat in feature_type 
                         for k,v in feat.items())
-    run_name = f"{model_type}_{feature_str}_pred{connectome_target}_{cv_type}_fold{fold_idx}_final_eval"
+    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{fold_idx}_final_eval" # add in parcellation, hemisphere, subcortex, gene list
 
     # Initialize a new, standalone W&B run for final evaluation results
     final_eval_run = wandb.init(

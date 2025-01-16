@@ -2,7 +2,7 @@
 
 from imports import *
 
-def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, verbose=True):
+def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, scheduler=None, verbose=True):
     train_history = {"train_loss": [], "val_loss": [], "train_pearson": [], "val_pearson": []}
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -12,7 +12,7 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, v
         train_history["train_pearson"].append(train_metrics["pearson"])
         
         if val_loader:
-            val_metrics = evaluate(model, val_loader, criterion, device)
+            val_metrics = evaluate(model, val_loader, criterion, device, scheduler)
             train_history["val_loss"].append(val_metrics["loss"])
             train_history["val_pearson"].append(val_metrics["pearson"])
             
@@ -23,7 +23,6 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, v
             print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_metrics['loss']:.4f}")
 
     return train_history
-
 
 def train_epoch(model, train_loader, optimizer, criterion, device):
     model.train()
@@ -44,13 +43,13 @@ def train_epoch(model, train_loader, optimizer, criterion, device):
         pearson = PearsonCorrCoef().to(device)    
         train_pearson_values.append(pearson(predictions, batch_y).item())
     
+    mean_train_loss = total_train_loss / len(train_loader)
     return {
-        "loss": total_train_loss / len(train_loader),
+        "loss": mean_train_loss,
         "pearson": np.mean(train_pearson_values)
     }
 
-
-def evaluate(model, val_loader, criterion, device):
+def evaluate(model, val_loader, criterion, device, scheduler=None):
     model.eval()
     total_val_loss = 0
     val_pearson_values = []
@@ -66,7 +65,11 @@ def evaluate(model, val_loader, criterion, device):
             pearson = PearsonCorrCoef().to(device)
             val_pearson_values.append(pearson(predictions, batch_y).item())
     
+    mean_val_loss = total_val_loss / len(val_loader)
+    #if scheduler is not None:
+    #    scheduler.step(mean_val_loss)
+
     return {
-        "loss": total_val_loss / len(val_loader),
+        "loss": mean_val_loss,
         "pearson": np.mean(val_pearson_values)
     }

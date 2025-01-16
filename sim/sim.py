@@ -41,12 +41,13 @@ importlib.reload(models.base_models)
 # custom models
 from models.dynamic_mlp import DynamicMLP
 from models.bilinear import BilinearLowRank, BilinearSCM
-from models.shared_encoder_model import SharedMLPEncoderModel
+from models.shared_encoder_model import SharedMLPEncoderModel, SharedSelfAttentionModel
 MODEL_CLASSES = {
     'dynamic_mlp': DynamicMLP,
     'bilinear_lowrank': BilinearLowRank,
     'bilinear_SCM': BilinearSCM,
-    'shared_mlp_encoder': SharedMLPEncoderModel
+    'shared_mlp_encoder': SharedMLPEncoderModel,
+    'shared_transformer': SharedSelfAttentionModel
     # Add other deep learning models here as they're implemented
     # 'transformer_nn': TransformerNN
 }
@@ -353,7 +354,6 @@ class Simulation:
             print("TEST METRICS:", test_metrics)
             print('BEST VAL SCORE', best_val_score)
             print('BEST MODEL PARAMS', best_model.get_params())
-            break
             
             # Log final evaluation metrics
             if track_wandb:
