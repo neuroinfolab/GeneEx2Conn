@@ -4,28 +4,36 @@ from imports import *
 from data.data_utils import create_data_loader
 from models.train_val import train_model
 
-
 class SelfAttentionEncoder(nn.Module):
-    def __init__(self, input_dim, output_dim, nhead=4, num_layers=4):
+    def __init__(self, input_dim, token_encoder_dim, output_dim, nhead=4, num_layers=4):
         """
         A self-attention encoder
         
         Args:
-            input_dim (int): Number of input features (genes).
-            output_dim (int): Output dimensionality after attention.
             nhead (int): Number of attention heads.
             num_layers (int): Number of transformer encoder layers.
         """
         super(SelfAttentionEncoder, self).__init__()
 
+        # Create separate linear layers for each input feature
+        # Each layer maps a scalar to token_encoder_dim dimensions
+
+        # Input projection: Map scalar gene expression values to `token_encoder_dim`
+        self.input_projection = nn.Linear(1, token_encoder_dim)
+
         # Self-attention encoder layer
         self.encoder_layer = nn.TransformerEncoderLayer(
-            d_model=input_dim, nhead=nhead
+            d_model=token_encoder_dim, 
+            nhead=nhead,
+            #dim_feedforward=2048,  # Default feedforward dimension
+            #dropout=0.1,  # Regularization
+            batch_first=True
         )
         self.transformer = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)
         
         # Linear layer to project the output of the attention mechanism to desired output size
-        self.fc = nn.Linear(input_dim, output_dim)
+        self.fc = nn.Linear(token_encoder_dim, output_dim)
+
 
     def forward(self, x):
         """
@@ -38,14 +46,25 @@ class SelfAttentionEncoder(nn.Module):
             torch.Tensor: Output after applying attention.
         """
         # Apply self-attention (input x is expected to have shape [batch_size, seq_length, input_dim])
+        #print('forward step x shape', x.shape)
+        # Reshape input to [batch_size, seq_length, 1] (scalar input per gene)
+        x = x.unsqueeze(-1)  # Shape: [batch_size, seq_length, 1]
+        #print('forward step x shape reshaped', x.shape)
+
+        x = self.input_projection(x)
+        #print('forward step x shape after input projection', x.shape)
+
         x = self.transformer(x)
-        
+        #print('forward step x shape after transformer', x.shape)
+
         # Output through the final fully connected layer
-        x = self.fc(x)
+        x = self.fc(x).squeeze()
+        #print('forward step x shape after fc', x.shape)
+
         return x
 
 class SharedSelfAttentionModel(nn.Module):
-    def __init__(self, input_dim, encoder_output_dim=128, nhead=4, num_layers=4, deep_hidden_dims=[128], 
+    def __init__(self, input_dim, token_encoder_dim=32, encoder_output_dim=16, nhead=4, num_layers=4, deep_hidden_dims=[128], 
                  dropout_rate=0.2, learning_rate=0.001, weight_decay=0.0, lambda_reg=1.0, 
                  batch_size=256, epochs=100):
         """
@@ -66,10 +85,14 @@ class SharedSelfAttentionModel(nn.Module):
         super().__init__()
 
         # Store parameters
-        self.input_dim = input_dim
-        self.encoder_output_dim = encoder_output_dim
+        self.input_dim = input_dim // 2
+
+        self.token_encoder_dim = token_encoder_dim # vector length to project each token to
+        self.encoder_output_dim = encoder_output_dim # vector length of processed token
+
         self.nhead = nhead
         self.num_layers = num_layers
+        
         self.deep_hidden_dims = deep_hidden_dims
         self.dropout_rate = dropout_rate
         self.lambda_reg = lambda_reg
@@ -80,14 +103,15 @@ class SharedSelfAttentionModel(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Create self-attention encoder
-        self.encoder = SelfAttentionEncoder(input_dim=input_dim // 2, 
+        self.encoder = SelfAttentionEncoder(input_dim=self.input_dim, # change this
+                                            token_encoder_dim=token_encoder_dim,
                                             output_dim=encoder_output_dim, 
                                             nhead=nhead, 
                                             num_layers=num_layers)
 
         # Deep layers for concatenated outputs
         deep_layers = []
-        prev_dim = encoder_output_dim * 2  # Concatenated outputs of encoder
+        prev_dim = self.input_dim * 2  # Concatenated outputs of encoder
         for hidden_dim in deep_hidden_dims:
             deep_layers.extend([
                 nn.Linear(prev_dim, hidden_dim),
@@ -98,7 +122,13 @@ class SharedSelfAttentionModel(nn.Module):
             prev_dim = hidden_dim
         self.deep_layers = nn.Sequential(*deep_layers)
         self.output_layer = nn.Linear(prev_dim, 1)
-
+        
+        # Wrap the model with DataParallel if multiple GPUs are available
+        if torch.cuda.device_count() > 1:
+            self.encoder = nn.DataParallel(self.encoder)
+            self.deep_layers = nn.DataParallel(self.deep_layers)
+            self.output_layer = nn.DataParallel(self.output_layer)
+        
         # Optimizer and loss function setup
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss() # SparseMLPEncoderLoss(base_loss=nn.MSELoss(), lambda_reg=lambda_reg)
@@ -267,7 +297,14 @@ class SharedMLPEncoderModel(nn.Module):
                 prev_dim = hidden_dim
             self.deep_layers = nn.Sequential(*deep_layers)
             self.output_layer = nn.Linear(prev_dim, 1)  # Final output layer
-
+        
+        # Wrap the model with DataParallel if multiple GPUs are available
+        if torch.cuda.device_count() > 1:
+            self.encoder = nn.DataParallel(self.encoder)
+            if not self.use_bilinear:
+                self.deep_layers = nn.DataParallel(self.deep_layers)
+                self.output_layer = nn.DataParallel(self.output_layer)
+        
         self.criterion = SparseMLPEncoderLoss(base_loss=nn.MSELoss(), lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
 

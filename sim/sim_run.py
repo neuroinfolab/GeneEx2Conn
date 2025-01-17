@@ -104,7 +104,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     return
 
 
-def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target='FC', feature_interactions=None, use_shared_regions=False, test_shared_regions=False, omit_subcortical=False, parcellation='S100', gene_list='0.2', hemisphere='both', resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse', 5), save_model_json=False, track_wandb=False):
+def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target='FC', feature_interactions=None, use_shared_regions=False, test_shared_regions=False, omit_subcortical=False, parcellation='S100', gene_list='0.2', hemisphere='both', resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse', 5), save_model_json=False, track_wandb=False, skip_cv=False):
     """
     Runs a single simulation for a given feature type and model configuration.
 
@@ -208,7 +208,8 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
                     gene_list=gene_list,
                     hemisphere=hemisphere,
                     connectome_target=connectome_target,
-                    save_model_json=save_model_json
+                    save_model_json=save_model_json,
+                    skip_cv=skip_cv
                 )
     
     sim.run_sim(search_method, track_wandb)

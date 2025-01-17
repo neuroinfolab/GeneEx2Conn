@@ -7,14 +7,14 @@ parameters:
   input_dim:
       value: !!int 0
   encoder_output_dim:
-    values: [64] #[128, 256, 512]
+    values: [128] #[128, 256, 512]
   nhead: # make sure this is a multiple of input_dim
-    values: [1] # , 4, 8]
+    values: [2] # , 4, 8]
   num_layers:
     values: [2] # , 4, 6]
   deep_hidden_dims:
     values:
-    - [64]
+    - [128]
     # - [512, 256]
     # - [512, 256, 128]
   dropout_rate:
@@ -28,7 +28,7 @@ parameters:
   batch_size:
     values: [256]
   epochs:
-    values: [100]
+    values: [50]
 
 # method: bayes
 # metric:

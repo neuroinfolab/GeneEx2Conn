@@ -336,7 +336,7 @@ def find_best_params(grid_search_cv_results):
     return best_params
 
 
-def train_sweep(config, model_type, feature_type, connectome_target, cv_type, outer_fold_idx, inner_fold_splits, device, sweep_id, model_classes):
+def train_sweep(config, model_type, feature_type, connectome_target, cv_type, outer_fold_idx, inner_fold_splits, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list):
     """
     Training function for W&B sweeps for deep learningmodels.
     
@@ -357,13 +357,13 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
     feature_str = "+".join(str(k) if v is None else f"{k}_{v}"
                          for feat in feature_type 
                          for k,v in feat.items())
-    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{outer_fold_idx}_innerCV"  # add in parcellation, hemisphere, subcortex
+    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{outer_fold_idx}_innerCV" 
 
     run = wandb.init(
         project="gx2conn",
         name=run_name,
         group=f"sweep_{sweep_id}",
-        tags=["inner cross validation", f"fold{outer_fold_idx}", f"model_{model_type}"],
+        tags=["inner cross validation", f"fold{outer_fold_idx}", f"model_{model_type}", f"parcellation_{parcellation}", f"hemisphere_{hemisphere}", f"omit_subcortical_{omit_subcortical}", f"gene_list_{gene_list}"],
         reinit=True
     )
 
@@ -421,7 +421,7 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
     return mean_metrics['mean_val_loss']
 
 
-def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold_idx, train_metrics, test_metrics, best_val_score, best_model, train_history, model_classes):
+def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold_idx, train_metrics, test_metrics, best_val_score, best_model, train_history, model_classes, parcellation, hemisphere, omit_subcortical, gene_list):
     """
     Log metrics to Weights & Biases for tracking experiments.
     
@@ -447,7 +447,7 @@ def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold
     final_eval_run = wandb.init(
         project="gx2conn",
         name=run_name,
-        tags=[f'cv_type_{cv_type}', f'outerfold_{fold_idx}',  f'model_type_{model_type}', f'feature_type_{feature_str}', f'target_{connectome_target}'],
+        tags=[f'cv_type_{cv_type}', f'outerfold_{fold_idx}',  f'model_type_{model_type}', f'feature_type_{feature_str}', f'target_{connectome_target}', f'parcellation_{parcellation}', f'hemisphere_{hemisphere}', f'omit_subcortical_{omit_subcortical}', f'gene_list_{gene_list}'],
         reinit=True
     )
 

@@ -74,7 +74,7 @@ importlib.reload(sim.sim_utils)
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, feature_interactions=None, resolution=1.0,random_seed=42,
                  omit_subcortical=False, parcellation='S100', gene_list='0.2', hemisphere='both',
-                 use_shared_regions=False, test_shared_regions=False, connectome_target='FC', save_model_json=False):        
+                 use_shared_regions=False, test_shared_regions=False, connectome_target='FC', save_model_json=False, skip_cv=False):        
         """
         Initialization of simulation parameters
         """
@@ -96,6 +96,7 @@ class Simulation:
         self.use_shared_regions = use_shared_regions
         self.test_shared_regions = test_shared_regions
         self.connectome_target = connectome_target.upper()
+        self.skip_cv = skip_cv
         self.save_model_json = save_model_json
         self.results = []
 
@@ -224,44 +225,66 @@ class Simulation:
         
         # Load sweep config
         sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-        sweep_config = load_sweep_config(sweep_config_path, input_dim=inner_fold_splits[0][0].shape[1]) # take num features from a fold
+        input_dim = inner_fold_splits[0][0].shape[1]
+        sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim) # take num features from a fold
         
         device = torch.device("cuda")
 
-        def train_sweep_wrapper(config=None):
-            return train_sweep(
-                config=config,
-                model_type=self.model_type,
-                feature_type=self.feature_type,
-                connectome_target=self.connectome_target,
-                cv_type=self.cv_type,
-                outer_fold_idx=outer_fold_idx,
-                inner_fold_splits=inner_fold_splits,
-                device=device,
-                sweep_id=sweep_id,
-                model_classes=MODEL_CLASSES
-            )
-        
-        wandb.login()
-        # Initialize sweep
-        sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
+        if not self.skip_cv: 
+            def train_sweep_wrapper(config=None):
+                return train_sweep(
+                    config=config,
+                    model_type=self.model_type,
+                    feature_type=self.feature_type,
+                    connectome_target=self.connectome_target,
+                    cv_type=self.cv_type,
+                    outer_fold_idx=outer_fold_idx,
+                    inner_fold_splits=inner_fold_splits,
+                    device=device,
+                    sweep_id=sweep_id,
+                    model_classes=MODEL_CLASSES,
+                    parcellation=self.parcellation, 
+                    hemisphere=self.hemisphere, 
+                    omit_subcortical=self.omit_subcortical, 
+                    gene_list=self.gene_list, 
+                )
+            
+            wandb.login()
+            # Initialize sweep
+            sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
 
-        # Run sweep
-        wandb.agent(sweep_id, function=train_sweep_wrapper, count=search_method[2])
+            # Run sweep
+            wandb.agent(sweep_id, function=train_sweep_wrapper, count=search_method[2])
 
-        # Get best run from sweep
-        api = wandb.Api()
-        sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn/{sweep_id}")
-        best_run = sweep.best_run()
-        wandb.teardown()
+            # Get best run from sweep
+            api = wandb.Api()
+            sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn/{sweep_id}")
+            best_run = sweep.best_run()
+            wandb.teardown()
 
-        best_val_loss = best_run.summary.mean_val_loss
-        best_config = best_run.config
-        
+            best_val_loss = best_run.summary.mean_val_loss
+            best_config = best_run.config
+        else:
+            best_config = {
+            'input_dim': input_dim,
+            'token_encoder_dim': 8,
+            'encoder_output_dim': 1,
+            'nhead': 2,
+            'num_layers': 1,
+            'deep_hidden_dims': [64],
+            'dropout_rate': 0.2,
+            'learning_rate': 0.0001,
+            'weight_decay': 0.0,
+            'lambda_reg': 0,
+            'batch_size': 256,
+            'epochs': 200
+            }
+        print('BEST CONFIG', best_config)
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]
         best_model = ModelClass(**best_config).to(device)
-                
+        best_val_loss = 0.0
+            
         return best_model, best_val_loss
 
 
@@ -355,9 +378,27 @@ class Simulation:
             print('BEST VAL SCORE', best_val_score)
             print('BEST MODEL PARAMS', best_model.get_params())
             
+            break 
+
             # Log final evaluation metrics
             if track_wandb:
-                log_wandb_metrics(self.feature_type, self.model_type, self.connectome_target, self.cv_type, fold_idx, train_metrics, test_metrics, best_val_score, best_model, train_history, model_classes=MODEL_CLASSES)
+                log_wandb_metrics(
+                    self.feature_type, 
+                    self.model_type, 
+                    self.connectome_target, 
+                    self.cv_type, 
+                    fold_idx, 
+                    train_metrics, 
+                    test_metrics, 
+                    best_val_score, 
+                    best_model, 
+                    train_history, 
+                    model_classes=MODEL_CLASSES,
+                    parcellation=self.parcellation,
+                    hemisphere=self.hemisphere,
+                    omit_subcortical=self.omit_subcortical,
+                    gene_list=self.gene_list
+                )
             
             # Extract feature importances and model JSON
             feature_importances_, model_json = extract_feature_importances(
