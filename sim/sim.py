@@ -67,9 +67,10 @@ importlib.reload(models.metrics.eval)
 
 # sim utility functions
 import sim.sim_utils
-from sim.sim_utils import bayes_search_init, grid_search_init, random_search_init, drop_test_network, find_best_params, load_sweep_config, extract_feature_importances
+from sim.sim_utils import bayes_search_init, grid_search_init, random_search_init, drop_test_network, find_best_params, load_sweep_config, load_best_parameters, extract_feature_importances
 from sim.sim_utils import bytes2human, print_system_usage, validate_inputs, train_sweep, log_wandb_metrics
 importlib.reload(sim.sim_utils)
+
 
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, feature_interactions=None, resolution=1.0,random_seed=42,
@@ -173,7 +174,7 @@ class Simulation:
                         'functional': self.Y_fc,
                         'euclidean': self.coords, 
                         'structural_spatial_null': np.hstack((self.coords, self.Y_sc)), # cannot be combined with other feats
-                        'transcriptome_spatial_autocorr_null': np.hstack((self.coords, self.Y_sc, self.X)), # cannot be combined with other feats
+                        'transcriptome_spatial_autocorr_null': np.hstack((self.coords, self.Y_sc, self.X_pca, self.X)), # cannot be combined with other feats
                         }
         
         validate_inputs(features=features, feature_dict=feature_dict)
@@ -207,7 +208,8 @@ class Simulation:
                           self.X, self.Y, self.cv_obj, 
                           self.use_shared_regions,
                           self.test_shared_regions, 
-                          spatial_null=spatial_null
+                          spatial_null=spatial_null, 
+                          transcriptome_spatial_null=transcriptome_spatial_null
                           )
 
                         
@@ -216,21 +218,20 @@ class Simulation:
         
         # Create inner CV object for X_train and Y_train
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
-        
         inner_fold_splits = process_cv_splits(
             self.X, self.Y, inner_cv_obj,
             self.use_shared_regions,
-            self.test_shared_regions
-        )
+            self.test_shared_regions)
         
         # Load sweep config
         sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')
         input_dim = inner_fold_splits[0][0].shape[1]
         sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim) # take num features from a fold
-        
         device = torch.device("cuda")
 
-        if not self.skip_cv: 
+        if self.skip_cv: 
+            best_config = load_best_parameters(sweep_config_path, input_dim=input_dim)
+        else:
             def train_sweep_wrapper(config=None):
                 return train_sweep(
                     config=config,
@@ -249,7 +250,6 @@ class Simulation:
                     gene_list=self.gene_list, 
                 )
             
-            wandb.login()
             # Initialize sweep
             sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
 
@@ -262,24 +262,11 @@ class Simulation:
             best_run = sweep.best_run()
             wandb.teardown()
 
-            best_val_loss = best_run.summary.mean_val_loss
+            best_val_loss = best_run.summary.mean_val_loss # this can be changed to another metric
             best_config = best_run.config
-        else:
-            best_config = {
-            'input_dim': input_dim,
-            'token_encoder_dim': 8,
-            'encoder_output_dim': 1,
-            'nhead': 2,
-            'num_layers': 1,
-            'deep_hidden_dims': [64],
-            'dropout_rate': 0.2,
-            'learning_rate': 0.0001,
-            'weight_decay': 0.0,
-            'lambda_reg': 0,
-            'batch_size': 256,
-            'epochs': 200
-            }
+
         print('BEST CONFIG', best_config)
+
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]
         best_model = ModelClass(**best_config).to(device)
@@ -325,8 +312,7 @@ class Simulation:
         print("Best Parameters: ", param_search.best_params_)
         print("Best Cross-Validation Score: ", param_search.best_score_)
         
-        # Display objective plots for hyperparameter search
-        # if search_type == 'bayes': _ = plot_objective(param_search.optimizer_results_[0], size=5); plt.show()
+        # if search_type == 'bayes': _ = plot_objective(param_search.optimizer_results_[0], size=5); plt.show() # Display objective plots for hyperparameter search
         
         best_model = model.get_model()
         best_model.set_params(**param_search.best_params_)
@@ -351,17 +337,15 @@ class Simulation:
             network_dict = self.cv_obj.networks
             train_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
             
-            # basic setup for GPU acceleration and wandb login
             if self.gpu_acceleration:
                 X_train, Y_train, X_test, Y_test = map(cp.array, [X_train, Y_train, X_test, Y_test])
             if search_method[0] == 'wandb' or track_wandb:
                 wandb.login()
 
             # Inner CV on current training fold
-            print('SEARCH METHOD', search_method)
-            if search_method[0] == 'wandb': # this should run for any model with a sweep config
+            if search_method[0] == 'wandb':
                 best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method)                
-                train_history = best_model.fit(X_train, Y_train, X_test, Y_test) # test passed for train-test loss tracking
+                train_history = best_model.fit(X_train, Y_train, X_test, Y_test)
             else:
                 best_model, best_val_score = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method)
                 best_model.fit(X_train, Y_train)
@@ -377,29 +361,24 @@ class Simulation:
             print("TEST METRICS:", test_metrics)
             print('BEST VAL SCORE', best_val_score)
             print('BEST MODEL PARAMS', best_model.get_params())
-            
-            break 
 
             # Log final evaluation metrics
             if track_wandb:
                 log_wandb_metrics(
-                    self.feature_type, 
-                    self.model_type, 
-                    self.connectome_target, 
-                    self.cv_type, 
-                    fold_idx, 
+                    self.feature_type, self.model_type, self.connectome_target, self.cv_type, 
+                    fold_idx,
                     train_metrics, 
                     test_metrics, 
                     best_val_score, 
                     best_model, 
                     train_history, 
                     model_classes=MODEL_CLASSES,
-                    parcellation=self.parcellation,
-                    hemisphere=self.hemisphere,
-                    omit_subcortical=self.omit_subcortical,
+                    parcellation=self.parcellation, 
+                    hemisphere=self.hemisphere, 
+                    omit_subcortical=self.omit_subcortical, 
                     gene_list=self.gene_list
                 )
-            
+
             # Extract feature importances and model JSON
             feature_importances_, model_json = extract_feature_importances(
                 self.model_type, 
@@ -421,3 +400,5 @@ class Simulation:
 
             print_system_usage() # Display CPU and RAM utilization 
             GPUtil.showUtilization() # Display GPU utilization
+
+            break

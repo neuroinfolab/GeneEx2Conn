@@ -3,47 +3,53 @@ metric:
   name: mean_val_loss
   goal: minimize
 parameters:
+  input_dim:
+    value: !!int 0
   activation:
     values: ['none'] # 'none','relu', 'sigmoid', 'softplus']
   learning_rate:
-    values: [0.003, 0.001, 0.01]
+    distribution: log_uniform_values
+    min: 0.0001
+    max: 0.01
   batch_size:
-    values: [128, 256, 512]
+    distribution: int_uniform
+    min: 64
+    max: 512
   regularization:
-    values: ['l1', 'l2']
+    distribution: categorical
+    values: ['l2'] # l2 in line with literature
   lambda_reg:
-    values: [0.01, 0.1, 1.0, 10.0]
+    distribution: log_uniform_values
+    min: 0.001
+    max: 10.0
   shared_weights:
+    distribution: categorical
     values: [True, False]
+  reduced_dim:
+    distribution: int_uniform
+    min: 3
+    max: 12
+  epochs:
+    distribution: int_uniform
+    min: 100
+    max: 400
+
+best_parameters: # Best run on 100 parc
+  activation:
+    values: ['none'] 
+  learning_rate:
+    values: [0.0003] # .001
+  batch_size:
+    values: [128] # [128] 
+  regularization:
+    values: ['l2']
+  lambda_reg:
+    values: [0.01] 
+  shared_weights:
+    values: [True] 
   input_dim:
     value: !!int 0 
   reduced_dim:
-    values: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    values: [5] 
   epochs:
-    values: [100, 200]
-  # early_terminate:
-  #   type: hyperband
-  #   s: 2
-  #   eta: 3
-  #   max_iter: 10
-
-# Best run on 100 parc
-# parameters:
-#   activation:
-#     values: ['none'] 
-#   learning_rate:
-#     values: [0.0003] # .001
-#   batch_size:
-#     values: [128] # [128] 
-#   regularization:
-#     values: ['l2']
-#   lambda_reg:
-#     values: [0.01] 
-#   shared_weights:
-#     values: [True] 
-#   input_dim:
-#     value: !!int 0 
-#   reduced_dim:
-#     values: [5] 
-#   epochs:
-#     values: [500] # 300
+    values: [200] # 300

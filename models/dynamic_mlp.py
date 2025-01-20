@@ -6,7 +6,7 @@ from models.train_val import train_model
 
 
 class DynamicMLP(nn.Module):
-    def __init__(self, input_dim, hidden_dims=[128, 64], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0, batch_size=64, epochs=100):
+    def __init__(self, input_dim, hidden_dims=[256, 128], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0, batch_size=64, epochs=100):
         super().__init__()
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
@@ -32,9 +32,9 @@ class DynamicMLP(nn.Module):
             self.model = DDP(self.model)
         self.to(self.device)  # Move model to the appropriate device
         
-        self.criterion = nn.MSELoss()
+        self.criterion = nn.HuberLoss(delta=0.1) # this can be tuned to nn.MSELoss() or other
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
-        self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=10, verbose=True)
+        self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=20, verbose=True)
     
     def get_params(self): # for local model saving
         return {

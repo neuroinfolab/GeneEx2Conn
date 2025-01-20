@@ -159,12 +159,26 @@ def load_sweep_config(file_path, input_dim):
     return config
 
 
+def load_best_parameters(yaml_file_path, input_dim):
+    with open(yaml_file_path, 'r') as file:
+        config = yaml.safe_load(file)
+    
+    # Extract the best_parameters section
+    best_parameters = config.get('best_parameters', {})
+    
+    # Convert the nested structure to a flat dictionary
+    best_config = {key: value['values'][0] if isinstance(value, dict) and 'values' in value else value
+                   for key, value in best_parameters.items()}
+    
+    best_config['input_dim'] = input_dim
+    
+    return best_config
+
 def drop_test_network(cv_type, network_dict, value, idx):
         """
         Drop an entry from the dictionary based on the given value and return a new dictionary.
         Helper function for removing schaefer network from dict
         """
-
         # Create a copy of the original dictionary
         new_dict = network_dict.copy()
     
@@ -338,7 +352,7 @@ def find_best_params(grid_search_cv_results):
 
 def train_sweep(config, model_type, feature_type, connectome_target, cv_type, outer_fold_idx, inner_fold_splits, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list):
     """
-    Training function for W&B sweeps for deep learningmodels.
+    Training function for W&B sweeps for deep learning models.
     
     Args:
         config: W&B sweep configuration

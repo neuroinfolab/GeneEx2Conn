@@ -66,8 +66,8 @@ def evaluate(model, val_loader, criterion, device, scheduler=None):
             val_pearson_values.append(pearson(predictions, batch_y).item())
     
     mean_val_loss = total_val_loss / len(val_loader)
-    #if scheduler is not None:
-    #    scheduler.step(mean_val_loss)
+    if scheduler is not None:
+       scheduler.step(mean_val_loss)
 
     return {
         "loss": mean_val_loss,

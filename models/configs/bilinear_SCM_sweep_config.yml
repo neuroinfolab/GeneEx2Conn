@@ -1,32 +1,40 @@
-method: random
+method: bayes
 metric:
   name: mean_val_loss
   goal: minimize
-# parameters:
-#   learning_rate:
-#     values: [0.01, 0.005, 0.001]
-#   batch_size:
-#     values: [512, 1024, 2048]
-#   regularization:
-#     values: ['l1', 'l2']
-#   lambda_reg:
-#     values: [0.01, 0.1, 1.0, 100]
-#   input_dim:
-#     value: !!int 0 
-#   epochs:
-#     values: [100, 200]
+parameters:
+  input_dim:
+    value: !!int 0
+  learning_rate:
+    distribution: log_uniform_values
+    min: 0.0001
+    max: 0.01
+  batch_size:
+    distribution: int_uniform
+    min: 256
+    max: 2048
+  regularization:
+    distribution: categorical
+    values: ['l2'] # l2 in line with literature
+  lambda_reg:
+    distribution: log_uniform_values
+    min: 0.0001
+    max: 10.0
+  epochs:
+    distribution: int_uniform
+    min: 100
+    max: 400
 
-# (mainly for no subcortical and PCs)
-parameters: 
+best_parameters: # 100 parc no subcortical, PCs as features
+  input_dim:
+    value: !!int 0 
   learning_rate:
     values: [0.001] # 0.01
   batch_size:
     values: [512] # 1024
   regularization:
-    values: ['l1']
+    values: ['l2']
   lambda_reg:
     values: [0.001]
-  input_dim:
-    value: !!int 0 
   epochs:
-    values: [500] 
+    values: [500]

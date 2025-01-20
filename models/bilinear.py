@@ -110,7 +110,6 @@ class BilinearSCM(nn.Module):
         self.optimizer = Adam(self.parameters(), lr=learning_rate)
         self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=20, verbose=True)
 
-
     def get_params(self):
         params = {
             'input_dim': self.bilinear.in1_features,  # same as in2_features
@@ -135,6 +134,6 @@ class BilinearSCM(nn.Module):
         return predictions
 
     def fit(self, X_train, y_train, X_test, y_test, verbose=True):
-        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, shuffle=False)
-        val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, shuffle=False)
+        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, shuffle=True)
+        val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, shuffle=True)
         return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, self.scheduler, verbose=verbose)

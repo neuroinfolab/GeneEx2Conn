@@ -192,7 +192,7 @@ class SharedSelfAttentionModel(nn.Module):
 
 
 class SparseMLPEncoderLoss(nn.Module):
-    def __init__(self, base_loss=nn.MSELoss(), lambda_reg=1.0):
+    def __init__(self, base_loss=nn.MSELoss(), lambda_reg=0.1):
         """
         Custom loss function that combines a base loss with L1 regularization
         on the MLPEncoder parameters to encourage sparsity.
@@ -305,7 +305,7 @@ class SharedMLPEncoderModel(nn.Module):
                 self.deep_layers = nn.DataParallel(self.deep_layers)
                 self.output_layer = nn.DataParallel(self.output_layer)
         
-        self.criterion = SparseMLPEncoderLoss(base_loss=nn.MSELoss(), lambda_reg=lambda_reg)
+        self.criterion = SparseMLPEncoderLoss(base_loss=nn.HuberLoss(delta=0.1), lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     def forward(self, x):
