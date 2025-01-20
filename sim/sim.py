@@ -191,7 +191,8 @@ class Simulation:
                 if feature == 'structural_spatial_null':
                     spatial_null=True
                 elif feature == 'transcriptome_spatial_autocorr_null':
-                    transcriptome_spatial_null=True
+                    spatial_null=False
+                    transcriptome_spatial_null=[self.coords.shape[1], self.Y_sc.shape[1], self.X_pca.shape[1], self.X.shape[1]]
                 else:
                     spatial_null=False
                     transcriptome_spatial_null=False
@@ -203,14 +204,13 @@ class Simulation:
         print(X)
         self.X = np.hstack(X)
         print('X shape', self.X.shape)
-
+        
         self.fold_splits = process_cv_splits(
                           self.X, self.Y, self.cv_obj, 
                           self.use_shared_regions,
-                          self.test_shared_regions, 
+                          self.test_shared_regions,
                           spatial_null=spatial_null, 
-                          transcriptome_spatial_null=transcriptome_spatial_null
-                          )
+                          transcriptome_spatial_null=transcriptome_spatial_null)
 
                         
     def run_innercv_wandb(self, X_train, Y_train, X_test, Y_test,train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):

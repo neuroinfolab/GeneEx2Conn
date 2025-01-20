@@ -50,7 +50,7 @@ class RidgeModel(BaseModel):
         super().__init__()
         self.model = Ridge()
         self.param_grid = {
-            'alpha': [0, 0.001, 0.01, 0.1, 1.0, 10, 100, 1000],
+            'alpha': [0.001, 0.01, 0.1, 1.0, 10, 100, 1000],
             # 'alpha': np.logspace(-6, 2, 9)  # Explore 10^-6 to 10^2
             'solver': ['auto'] #, 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga']
         }
@@ -77,7 +77,6 @@ class PLSModel(BaseModel):
             #'tol': Real(1e-7, 1e-4, prior='log-uniform'),  # Log-uniform for tolerance
             'scale': Categorical([True, False])  # Whether to scale the data
         }
-
 
 class XGBModel(BaseModel):
     """XGBoost model with parameter grid."""
@@ -119,7 +118,6 @@ class XGBModel(BaseModel):
         }
         # consider adding this hyperparam
         # Sampling method. Used only by the GPU version of hist tree method. uniform: select random training instances uniformly. gradient_based select random training instances with higher probability when the gradient and hessian are larger. (cf. CatBoost)
-
 
 class RandomForestModel(BaseModel):
     """Random Forest model with parameter grid."""

@@ -139,7 +139,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
     raise ValueError(f"Unknown dataset: {dataset}")
     '''
 
-def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', measure='FC', spectral=None, hemisphere='both'):
+def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', measure='FC', spectral=None, hemisphere='both', include_labels=False):
     """
     Load and process connectome data with optional spectral decomposition.
     
@@ -196,6 +196,9 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
             _, eigenvectors = eig(matrix)
             k = int(matrix.shape[1])
             return eigenvectors[:, :k]
+        
+        if include_labels:
+            return matrix, region_labels, lh_indices, rh_indices
         
         return matrix
 

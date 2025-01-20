@@ -74,7 +74,6 @@ def make_symmetric(matrix):
     """
     return (matrix + matrix.T) / 2
 
-
 def expand_X_symmetric_kron(X, kron_input_dim):
     """
     Expands the X matrix symmetrically by computing the Kronecker product of 
@@ -190,6 +189,63 @@ def expand_X_symmetric_spatial_null(X):
 
     return expanded_X
 
+def expand_X_symmetric_transcriptome_spatial_null(X, feature_dims):
+    """
+    Expands X matrix to extract features for each pair of regions.
+    
+    Parameters:
+    X (numpy.ndarray): Array containing concatenated features:
+        - Coordinates
+        - Structural connectivity matrix 
+        - Gene PCA components
+        - Gene expression matrix
+    feature_dims (list): List of dimensions for each feature type [coords_dim, sc_dim, pca_dim, gene_dim]
+        
+    Returns:
+    numpy.ndarray: Matrix containing distances, connectivity values, and correlations for each region pair
+    """
+    start_idx = 0
+    coords = X[:, start_idx:start_idx + feature_dims[0]]
+    
+    start_idx += feature_dims[0]
+    Y_sc = X[:, start_idx:start_idx + feature_dims[1]]
+    
+    start_idx += feature_dims[1]
+    gene_pca = X[:, start_idx:start_idx + feature_dims[2]]
+    
+    start_idx += feature_dims[2]
+    gene_expr = X[:, start_idx:start_idx + feature_dims[3]]
+    
+    num_regions = coords.shape[0]
+    region_combinations = list(combinations(range(num_regions), 2))
+    num_combinations = len(region_combinations)
+    
+    # 4 features: distance, SC, PCA correlation, gene correlation
+    expanded_X = np.zeros((num_combinations * 2, 4))
+    
+    for i, (region1, region2) in enumerate(region_combinations):
+        # Calculate euclidean distance between regions
+        dist = np.linalg.norm(coords[region1] - coords[region2])
+        
+        # Get structural connectivity values
+        sc_value = Y_sc[region1, region2]
+        
+        # Calculate correlations
+        pca_corr = np.corrcoef(gene_pca[region1, :], gene_pca[region2, :])[0,1]
+        gene_corr = np.corrcoef(gene_expr[region1, :], gene_expr[region2, :])[0,1]
+        
+        # Store values for both directions
+        expanded_X[i * 2, 0] = dist
+        expanded_X[i * 2, 1] = sc_value
+        expanded_X[i * 2, 2] = pca_corr
+        expanded_X[i * 2, 3] = gene_corr
+        
+        expanded_X[i * 2 + 1, 0] = dist
+        expanded_X[i * 2 + 1, 1] = sc_value 
+        expanded_X[i * 2 + 1, 2] = pca_corr
+        expanded_X[i * 2 + 1, 3] = gene_corr
+
+    return expanded_X
 
 def expand_X_symmetric_shared(X_train1, X_train2, Y_train2):
     """
@@ -324,7 +380,7 @@ def expand_Y_symmetric(Y):
     return expanded_Y
 
 
-def process_cv_splits(X, Y, cv_obj, all_train=False, test_shared=False, spatial_null=False, struct_summ=False, kron=False, kron_input_dim=None):
+def process_cv_splits(X, Y, cv_obj, all_train=False, test_shared=False, spatial_null=False, transcriptome_spatial_null=None, struct_summ=False, kron=False, kron_input_dim=None):
     """
     Function to process cross-validation splits, expand training and test data as needed.
 
@@ -335,6 +391,8 @@ def process_cv_splits(X, Y, cv_obj, all_train=False, test_shared=False, spatial_
     - all_train (bool): Whether to include all training data in expansion.
     - incl_conn (bool): Whether to include connectivity profiles in the expansion.
     - test_shared (bool): Whether to include shared test data in the expansion.
+    - spatial_null (bool): Whether to return the spatial null data in the expansion
+    - transcriptome_spatial_null (list): List of the number of features of coords, Y_sc, X_pca, and X
 
     Returns:
     - list of tuples: Each tuple contains (X_train, X_test, Y_train, Y_test) for a fold.
@@ -382,6 +440,11 @@ def process_cv_splits(X, Y, cv_obj, all_train=False, test_shared=False, spatial_
                 Y_train = expand_Y_symmetric(Y_train)
                 X_test = expand_X_symmetric_spatial_null(X_test)
                 Y_test = expand_Y_symmetric(Y_test)
+            elif transcriptome_spatial_null is not None:
+                X_train = expand_X_symmetric_transcriptome_spatial_null(X_train, transcriptome_spatial_null)
+                Y_train = expand_Y_symmetric(Y_train)
+                X_test = expand_X_symmetric_transcriptome_spatial_null(X_test, transcriptome_spatial_null)
+                Y_test = expand_Y_symmetric(Y_test) 
             else:
                 X_train = expand_X_symmetric(X_train)
                 Y_train = expand_Y_symmetric(Y_train)
