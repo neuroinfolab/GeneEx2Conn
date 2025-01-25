@@ -53,6 +53,7 @@ from scipy.signal import savgol_filter
 from scipy.spatial.distance import pdist, squareform
 from scipy.io import loadmat
 import statsmodels.api as sm
+from kneed import KneeLocator
 
 # modeling
 from sklearn.model_selection import train_test_split
@@ -119,5 +120,6 @@ from enigmatoolbox.datasets import fetch_ahba
 from enigmatoolbox.datasets import load_sc, load_sc_as_one, load_fc, load_fc_as_one
 from enigmatoolbox.utils.parcellation import parcel_to_surface
 from enigmatoolbox.plotting import plot_cortical
+from enigmatoolbox.permutation_testing import rotate_parcellation
 from nilearn import plotting
 import abagen

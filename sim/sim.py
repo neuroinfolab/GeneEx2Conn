@@ -195,7 +195,7 @@ class Simulation:
                     transcriptome_spatial_null=[self.coords.shape[1], self.Y_sc.shape[1], self.X_pca.shape[1], self.X.shape[1]]
                 else:
                     spatial_null=False
-                    transcriptome_spatial_null=False
+                    transcriptome_spatial_null=None
     
                 feature_X = feature_dict[feature]
             
@@ -400,5 +400,3 @@ class Simulation:
 
             print_system_usage() # Display CPU and RAM utilization 
             GPUtil.showUtilization() # Display GPU utilization
-
-            break

@@ -50,7 +50,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         # Choose parcellation
         if parcellation == 'S100':
             region_labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in pd.read_csv('./data/enigma/schaef114_regions.txt', header=None).values.flatten().tolist()]
-            genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r1_schaefer_{parcellation[1:]}.csv")
+            genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r1_schaefer_{parcellation[1:]}.csv") # from https://github.com/saratheriver/enigma-extra/tree/master/ahba
         elif parcellation == 'S400':
             AHBA_UKBB_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data/Penn_UKBB_data/AHBA_population_MH/'
             genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
@@ -139,7 +139,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
     raise ValueError(f"Unknown dataset: {dataset}")
     '''
 
-def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', measure='FC', spectral=None, hemisphere='both', include_labels=False):
+def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', measure='FC', spectral=None, hemisphere='both', include_labels=False, diag=0):
     """
     Load and process connectome data with optional spectral decomposition.
     
@@ -170,6 +170,10 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
             elif measure == 'SC':
                 matrix = np.log1p(loadmat('./data/HCP1200/4S456_DTI_count.mat')['connectivity'])
      
+        # Add diagonal as 1 if specified (diagonal is ignored in edge-wise reconstruction)
+        if diag == 1:
+            matrix = matrix + np.eye(matrix.shape[0])
+
         # Remove subcortical if specified
         if omit_subcortical:
             n = (matrix.shape[0] // 100) * 100
