@@ -45,6 +45,7 @@ from scipy.stats import pearsonr, spearmanr
 from scipy.stats import entropy
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from sklearn.preprocessing import StandardScaler
 from scipy.stats import ttest_ind, shapiro, levene
 from sklearn.metrics import make_scorer
 from scipy.stats import randint, uniform

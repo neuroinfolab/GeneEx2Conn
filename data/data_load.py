@@ -173,6 +173,8 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
         # Add diagonal as 1 if specified (diagonal is ignored in edge-wise reconstruction)
         if diag == 1:
             matrix = matrix + np.eye(matrix.shape[0])
+        elif diag == 0:
+            np.fill_diagonal(matrix, 0)
 
         # Remove subcortical if specified
         if omit_subcortical:

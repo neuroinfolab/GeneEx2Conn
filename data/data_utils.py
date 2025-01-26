@@ -336,7 +336,7 @@ def expand_shared_matrices(X_train, X_train2, Y_train2, Y_train_feats1=np.nan, Y
 
 def expand_X_symmetric(X):
     """
-    Expands the X matrix symmetrically by combining featuresfrom pairs of regions.
+    Expands the X matrix symmetrically by combining features from pairs of regions.
 
     Parameters:
     X (numpy.ndarray): Input matrix of gene expressions.
