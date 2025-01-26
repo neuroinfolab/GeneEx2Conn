@@ -93,7 +93,7 @@ class BilinearLowRank(nn.Module):
 
 class BilinearSCM(nn.Module):
     def __init__(self, input_dim, learning_rate=0.01, epochs=100, 
-                 batch_size=128, regularization='l1', lambda_reg=1.0):
+                 batch_size=128, regularization='l2', lambda_reg=1.0, bias=True):
         super().__init__()
         self.learning_rate = learning_rate
         self.epochs = epochs
@@ -102,7 +102,7 @@ class BilinearSCM(nn.Module):
         self.lambda_reg = lambda_reg
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.bilinear = nn.Bilinear(input_dim//2, input_dim//2, 1, bias=True)
+        self.bilinear = nn.Bilinear(input_dim//2, input_dim//2, 1, bias=bias)
         num_params = sum(p.numel() for p in self.bilinear.parameters() if p.requires_grad)
         print(f"Number of learnable parameters in bilinear SCM layer: {num_params}")
         
@@ -133,7 +133,10 @@ class BilinearSCM(nn.Module):
             predictions = self(X).cpu().numpy()
         return predictions
 
-    def fit(self, X_train, y_train, X_test, y_test, verbose=True):
+    def fit(self, X_train, y_train, X_test=None, y_test=None, verbose=True):
         train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, shuffle=True)
-        val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, shuffle=True)
+        if X_test is not None and y_test is not None:
+            val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, shuffle=True)
+        else:
+            val_loader = None
         return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, self.scheduler, verbose=verbose)
