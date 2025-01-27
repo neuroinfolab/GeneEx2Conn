@@ -154,15 +154,16 @@ def expand_X_symmetric_struct_summ(X, include_input=False):
 
     return expanded_X
 
-def expand_X_symmetric_spatial_null(X):
+def expand_X_symmetric_spatial_null(X, include_coord=True):
     """
-    Expands X matrix to extract euclidean distances and structural connectivity values for each pair of regions.
+    Expands X matrix to extract coordinates, euclidean distances and structural connectivity values for each pair of regions.
     
     Parameters:
     X (numpy.ndarray): Array where first 3 columns are coordinates and remaining columns contain structural connectivity matrix
+    include_coord (bool): Whether to include coordinates of regions i and j in output
         
     Returns:
-    numpy.ndarray: Matrix containing euclidean distances and structural connectivity values for each region pair
+    numpy.ndarray: Matrix containing coordinates (if include_coord=True), euclidean distances and structural connectivity values for each region pair
     """
     coords = X[:, :3]  # First 3 columns are coordinates
     Y_sc = X[:, 3:]   # Remaining columns are structural connectivity
@@ -171,7 +172,10 @@ def expand_X_symmetric_spatial_null(X):
     region_combinations = list(combinations(range(num_regions), 2))
     num_combinations = len(region_combinations)
     
-    expanded_X = np.zeros((num_combinations * 2, 2))
+    if include_coord:
+        expanded_X = np.zeros((num_combinations * 2, 8))  # 3 coords i + 3 coords j + dist + sc
+    else:
+        expanded_X = np.zeros((num_combinations * 2, 2))  # just dist + sc
     
     for i, (region1, region2) in enumerate(region_combinations):
         # Calculate euclidean distance between regions
@@ -180,12 +184,24 @@ def expand_X_symmetric_spatial_null(X):
         # Get structural connectivity values
         sc_value = Y_sc[region1, region2]
         
-        # Store values for both directions
-        expanded_X[i * 2, 0] = dist
-        expanded_X[i * 2, 1] = sc_value
-        
-        expanded_X[i * 2 + 1, 0] = dist  
-        expanded_X[i * 2 + 1, 1] = sc_value
+        if include_coord:
+            # Store values for region1 -> region2
+            expanded_X[i * 2, 0:3] = coords[region1]  # coords of region i
+            expanded_X[i * 2, 3:6] = coords[region2]  # coords of region j
+            expanded_X[i * 2, 6] = dist
+            expanded_X[i * 2, 7] = sc_value
+            
+            # Store values for region2 -> region1
+            expanded_X[i * 2 + 1, 0:3] = coords[region2]  # coords of region i
+            expanded_X[i * 2 + 1, 3:6] = coords[region1]  # coords of region j
+            expanded_X[i * 2 + 1, 6] = dist
+            expanded_X[i * 2 + 1, 7] = sc_value
+        else:
+            # Store just distance and connectivity
+            expanded_X[i * 2, 0] = dist
+            expanded_X[i * 2, 1] = sc_value
+            expanded_X[i * 2 + 1, 0] = dist
+            expanded_X[i * 2 + 1, 1] = sc_value
 
     return expanded_X
 

@@ -52,7 +52,7 @@ parameters:
 best_parameters: # euclidean 
   hidden_dims:
     values:     
-    - [32, 16]
+    - [64, 32]
   learning_rate:
     values: [0.0001]  # 0.0001
   batch_size:
@@ -64,4 +64,4 @@ best_parameters: # euclidean
   input_dim:
     value: !!int 0
   epochs:
-    values: [100]
+    values: [200]
