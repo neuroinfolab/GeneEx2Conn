@@ -2,39 +2,41 @@ method: bayes
 metric:
   name: mean_val_loss
   goal: minimize
+
+### TRANSCRIPTOME PCA, 100 parc full brain
 parameters:
   input_dim:
     value: !!int 0
   learning_rate:
     distribution: log_uniform_values
-    min: 0.0001
-    max: 0.01
+    min: 0.0005
+    max: 0.005
   batch_size:
     distribution: int_uniform
     min: 256
-    max: 2048
+    max: 512
   regularization:
     distribution: categorical
     values: ['l2'] # l2 in line with literature
   lambda_reg:
     distribution: log_uniform_values
-    min: 0.0001
-    max: 10.0
+    min: 0.0005
+    max: 0.5
   epochs:
     distribution: int_uniform
-    min: 100
-    max: 400
+    min: 150
+    max: 250
 
-best_parameters: # 100 parc no subcortical, PCs as features
+best_parameters:
   input_dim:
     value: !!int 0 
   learning_rate:
     values: [0.001] # 0.01
   batch_size:
-    values: [512] # 1024
+    values: [400] # 1024
   regularization:
     values: ['l2']
   lambda_reg:
-    values: [0.001]
+    values: [0.1]
   epochs:
-    values: [500]
+    values: [200]

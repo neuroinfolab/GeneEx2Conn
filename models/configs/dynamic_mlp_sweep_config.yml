@@ -2,27 +2,75 @@ method: bayes
 metric:
   name: mean_val_loss
   goal: minimize
-parameters:
+
+### TRANSCRIPTOME, 100 parc full brain
+# parameters:
+#   input_dim:
+#     value: !!int 0
+#   hidden_dims:
+#     distribution: categorical
+#     values:
+#       - [256, 128]
+#       - [512, 256, 128]
+#   learning_rate:
+#     distribution: log_uniform_values
+#     min: 0.00005
+#     max: 0.0001
+#   batch_size:
+#     distribution: int_uniform
+#     min: 256
+#     max: 512
+#   dropout_rate:
+#     distribution: uniform
+#     min: 0.1
+#     max: 0.3
+#   weight_decay:
+#     distribution: log_uniform_values
+#     min: 0.00005
+#     max: 0.0005
+#   epochs:
+#     distribution: int_uniform
+#     min: 100
+#     max: 175
+# best_parameters:
+#   hidden_dims:
+#     values:     
+#     - [512, 256, 128]
+#   learning_rate:
+#     values: [0.0001]
+#   batch_size:
+#     values: [256]
+#   dropout_rate:
+#     values: [0.15]
+#   weight_decay:
+#     values: [0.0001]
+#   input_dim:
+#     value: !!int 0
+#   epochs:
+#     values: [150]
+
+### EUCLIDEAN, 100 parc full brain
+parameters: 
   input_dim:
     value: !!int 0
   hidden_dims:
     distribution: categorical
     values:
-      - [256, 128]
-      - [512, 256, 128]
-      - [1024, 512, 256, 128]
+      - [32, 16]
+      - [64, 32]
+      - [128, 64, 32]
   learning_rate:
     distribution: log_uniform_values
-    min: 0.0001
-    max: 0.01
+    min: 0.00005
+    max: 0.0005
   batch_size:
     distribution: int_uniform
-    min: 128
-    max: 1048
+    min: 64
+    max: 256
   dropout_rate:
     distribution: uniform
     min: 0.0
-    max: 0.5
+    max: 0.2
   weight_decay:
     distribution: log_uniform_values
     min: 0.0001
@@ -30,38 +78,20 @@ parameters:
   epochs:
     distribution: int_uniform
     min: 100
-    max: 300
-
-# best_parameters: # 100 parcellation
-#   hidden_dims:
-#     values:     
-#     - [512, 256, 128]
-#   learning_rate:
-#     values: [0.0001]  # 0.0001
-#   batch_size:
-#     values: [512] # 256
-#   dropout_rate:
-#     values: [0.2] 
-#   weight_decay:
-#     values: [0.01] # .001
-#   input_dim:
-#     value: !!int 0
-#   epochs:
-#     values: [200]
-
-best_parameters: # euclidean 
+    max: 200
+best_parameters:
+  input_dim:
+    value: !!int 0
   hidden_dims:
     values:     
     - [64, 32]
   learning_rate:
-    values: [0.0001]  # 0.0001
+    values: [0.0001]
   batch_size:
-    values: [256] # 256
+    values: [128]
   dropout_rate:
     values: [0.1]
   weight_decay:
-    values: [0.01] # .001
-  input_dim:
-    value: !!int 0
+    values: [0.01]
   epochs:
     values: [200]

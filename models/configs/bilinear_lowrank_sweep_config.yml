@@ -2,6 +2,8 @@ method: bayes
 metric:
   name: mean_val_loss
   goal: minimize
+
+### TRANSCRIPTOME, 100 parc full brain
 parameters:
   input_dim:
     value: !!int 0
@@ -9,47 +11,47 @@ parameters:
     values: ['none'] # 'none','relu', 'sigmoid', 'softplus']
   learning_rate:
     distribution: log_uniform_values
-    min: 0.0001
-    max: 0.01
+    min: 0.0005
+    max: 0.002
   batch_size:
     distribution: int_uniform
-    min: 64
-    max: 512
+    min: 128
+    max: 400
   regularization:
     distribution: categorical
-    values: ['l2'] # l2 in line with literature
+    values: ['l2']
   lambda_reg:
     distribution: log_uniform_values
-    min: 0.001
-    max: 10.0
+    min: 0.01
+    max: 0.2
   shared_weights:
     distribution: categorical
-    values: [True, False]
+    values: [True]
   reduced_dim:
     distribution: int_uniform
-    min: 3
-    max: 12
+    min: 5
+    max: 10
   epochs:
     distribution: int_uniform
     min: 100
-    max: 400
+    max: 200
 
-best_parameters: # Best run on 100 parc
+best_parameters: 
   activation:
     values: ['none'] 
   learning_rate:
-    values: [0.0003] # .001
+    values: [0.001]
   batch_size:
-    values: [128] # [128] 
+    values: [256]
   regularization:
     values: ['l2']
   lambda_reg:
-    values: [0.01] 
+    values: [0.1] 
   shared_weights:
     values: [True] 
   input_dim:
     value: !!int 0 
   reduced_dim:
-    values: [5] 
+    values: [10]
   epochs:
-    values: [200] # 300
+    values: [150]

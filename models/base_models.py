@@ -66,10 +66,10 @@ class PLSModel(BaseModel):
         super().__init__()
         self.model = PLSRegression()
         self.param_grid = {
-            'n_components': [1, 2, 3, 5], # 7, 9, 15],
+            'n_components': [1, 2, 3, 4, 5, 7, 10], # 7, 9, 15],
             'max_iter': [1000],
             'tol': [1e-07],
-            'scale': [True, False] #, False]
+            'scale': [True] #, False]
         }
         self.param_dist = {
             'n_components': Integer(1, 5),  # Integer range for number of components

@@ -21,6 +21,7 @@ import re
 import ssl
 import yaml
 from functools import partial
+import gc
 
 # plotting 
 import seaborn as sns

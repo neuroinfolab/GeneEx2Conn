@@ -190,6 +190,7 @@ class Simulation:
             else:
                 if feature == 'structural_spatial_null':
                     spatial_null=True
+                    transcriptome_spatial_null=None
                 elif feature == 'transcriptome_spatial_autocorr_null':
                     spatial_null=False
                     transcriptome_spatial_null=[self.coords.shape[1], self.Y_sc.shape[1], self.X_pca.shape[1], self.X.shape[1]]
@@ -201,7 +202,6 @@ class Simulation:
             
             X.append(feature_X)
         
-        print(X)
         self.X = np.hstack(X)
         print('X shape', self.X.shape)
         
@@ -213,7 +213,7 @@ class Simulation:
                           transcriptome_spatial_null=transcriptome_spatial_null)
 
                         
-    def run_innercv_wandb(self, X_train, Y_train, X_test, Y_test,train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
+    def run_innercv_wandb(self, input_dim,train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
         """Inner cross-validation with W&B support for deep learning models"""
         
         # Create inner CV object for X_train and Y_train
@@ -225,7 +225,7 @@ class Simulation:
         
         # Load sweep config
         sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-        input_dim = inner_fold_splits[0][0].shape[1]
+        #input_dim = inner_fold_splits[0][0].shape[1]
         sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim) # take num features from a fold
         device = torch.device("cuda")
 
@@ -248,6 +248,7 @@ class Simulation:
                     hemisphere=self.hemisphere, 
                     omit_subcortical=self.omit_subcortical, 
                     gene_list=self.gene_list, 
+                    seed=self.random_seed
                 )
             
             # Initialize sweep
@@ -258,7 +259,7 @@ class Simulation:
 
             # Get best run from sweep
             api = wandb.Api()
-            sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn/{sweep_id}")
+            sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn/{self.model_type}_{sweep_id}")
             best_run = sweep.best_run()
             wandb.teardown()
 
@@ -334,6 +335,7 @@ class Simulation:
             
             train_indices = self.cv_obj.folds[fold_idx][0]
             test_indices = self.cv_obj.folds[fold_idx][1]
+            input_dim = X_train.shape[1]
             network_dict = self.cv_obj.networks
             train_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
             
@@ -344,7 +346,7 @@ class Simulation:
 
             # Inner CV on current training fold
             if search_method[0] == 'wandb':
-                best_model, best_val_score = self.run_innercv_wandb(X_train, Y_train, X_test, Y_test, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method)                
+                best_model, best_val_score = self.run_innercv_wandb(input_dim, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method)                
                 train_history = best_model.fit(X_train, Y_train, X_test, Y_test)
             else:
                 best_model, best_val_score = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method)
@@ -376,7 +378,8 @@ class Simulation:
                     parcellation=self.parcellation, 
                     hemisphere=self.hemisphere, 
                     omit_subcortical=self.omit_subcortical, 
-                    gene_list=self.gene_list
+                    gene_list=self.gene_list,
+                    seed=self.random_seed
                 )
 
             # Extract feature importances and model JSON

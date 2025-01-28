@@ -202,7 +202,33 @@ def expand_X_symmetric_spatial_null(X, include_coord=True):
             expanded_X[i * 2, 1] = sc_value
             expanded_X[i * 2 + 1, 0] = dist
             expanded_X[i * 2 + 1, 1] = sc_value
-
+    
+    '''
+    # Post-processing
+    # Min-max scale distances
+    dist_col = expanded_X[:, 6] if include_coord else expanded_X[:, 0]
+    dist_scaled = (dist_col - dist_col.min()) / (dist_col.max() - dist_col.min())
+    
+    # Min-max scale SC values 
+    sc_col = expanded_X[:, 7] if include_coord else expanded_X[:, 1]
+    sc_scaled = (sc_col - sc_col.min()) / (sc_col.max() - sc_col.min())
+    
+    if include_coord:
+        # Standardize coordinates
+        coords_i = expanded_X[:, 0:3]
+        coords_j = expanded_X[:, 3:6]
+        coords_i_scaled = (coords_i - coords_i.mean(axis=0)) / coords_i.std(axis=0)
+        coords_j_scaled = (coords_j - coords_j.mean(axis=0)) / coords_j.std(axis=0)
+        
+        # Update expanded_X with scaled values
+        expanded_X[:, 0:3] = coords_i_scaled
+        expanded_X[:, 3:6] = coords_j_scaled
+        expanded_X[:, 6] = dist_scaled
+        expanded_X[:, 7] = sc_scaled
+    else:
+        expanded_X[:, 0] = dist_scaled
+        expanded_X[:, 1] = sc_scaled
+    '''
     return expanded_X
 
 def expand_X_symmetric_transcriptome_spatial_null(X, feature_dims):
@@ -260,7 +286,19 @@ def expand_X_symmetric_transcriptome_spatial_null(X, feature_dims):
         expanded_X[i * 2 + 1, 1] = sc_value 
         expanded_X[i * 2 + 1, 2] = pca_corr
         expanded_X[i * 2 + 1, 3] = gene_corr
-
+    
+    '''
+    # Post-processing
+    # Min-max scale distance and SC values
+    dist_min = expanded_X[:, 0].min()
+    dist_max = expanded_X[:, 0].max()
+    expanded_X[:, 0] = (expanded_X[:, 0] - dist_min) / (dist_max - dist_min)
+    
+    sc_min = expanded_X[:, 1].min() 
+    sc_max = expanded_X[:, 1].max()
+    expanded_X[:, 1] = (expanded_X[:, 1] - sc_min) / (sc_max - sc_min)
+    '''
+    
     return expanded_X
 
 def expand_X_symmetric_shared(X_train1, X_train2, Y_train2):
