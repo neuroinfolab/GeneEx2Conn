@@ -191,7 +191,7 @@ class SharedSelfAttentionModel(nn.Module):
 
 
 
-class SparseMLPEncoderLoss(nn.Module):
+class SparseEncoderLoss(nn.Module):
     def __init__(self, base_loss=nn.MSELoss(), lambda_reg=0.1):
         """
         Custom loss function that combines a base loss with L1 regularization
@@ -247,7 +247,7 @@ class MLPEncoder(nn.Module):
 
 
 class SharedMLPEncoderModel(nn.Module):
-    def __init__(self, input_dim, encoder_hidden_dim=64, encoder_output_dim=32, use_bilinear=False, deep_hidden_dims=[64], dropout_rate=0.0, learning_rate=0.01, weight_decay=0.0, lambda_reg=1.0, batch_size=256, epochs=100):
+    def __init__(self, input_dim, encoder_hidden_dim=64, encoder_output_dim=32, use_bilinear=True, deep_hidden_dims=[64], dropout_rate=0.0, learning_rate=0.01, weight_decay=0.0, lambda_reg=1.0, batch_size=256, epochs=100):
         """
         A model that uses a shared encoder and a bilinear layer for interactions.
         Args:
@@ -305,7 +305,7 @@ class SharedMLPEncoderModel(nn.Module):
                 self.deep_layers = nn.DataParallel(self.deep_layers)
                 self.output_layer = nn.DataParallel(self.output_layer)
         
-        self.criterion = SparseMLPEncoderLoss(base_loss=nn.HuberLoss(delta=0.1), lambda_reg=lambda_reg)
+        self.criterion = SparseEncoderLoss(base_loss=nn.HuberLoss(delta=0.1), lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     def forward(self, x):
@@ -345,6 +345,117 @@ class SharedMLPEncoderModel(nn.Module):
             'dropout_rate': self.dropout_rate if not self.use_bilinear else 0.0,
             'learning_rate': self.learning_rate,
             'weight_decay': self.weight_decay,
+            'lambda_reg': self.lambda_reg,
+            'batch_size': self.batch_size,
+            'epochs': self.epochs,
+            'device': str(self.device)  # Convert device to string for serialization
+        }
+        return params
+
+    def predict(self, X):
+        self.eval()
+        X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
+        with torch.no_grad():
+            predictions = self(X).cpu().numpy()
+        return predictions
+
+    def fit(self, X_train, y_train, X_test=None, y_test=None, verbose=True):
+        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, shuffle=True) # for bilinear models keeping unshuffled leads to more symmetric guess
+        val_loader = None
+        if X_test is not None and y_test is not None:
+            val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, shuffle=True)
+        return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, verbose=verbose)
+
+
+from models.bilinear import BilinearLoss
+
+class SharedLinearEncoderModel(nn.Module):
+    def __init__(self, input_dim, encoder_output_dim=32, deep_hidden_dims=[64], dropout_rate=0.0, learning_rate=0.01, weight_decay=0.0, regularization='l2', lambda_reg=0.1, batch_size=256, epochs=100):
+        """
+        A model that uses a shared encoder and a bilinear layer for interactions.
+        Args:
+            input_dim (int): Number of input features (genes).
+            encoder_output_dim (int): Number of output features from the encoder.
+            use_bilinear (bool): Whether to use a bilinear layer for interactions.
+            deep_hidden_dims (list): List of hidden layer sizes for additional processing.
+            dropout_rate (float): Dropout probability. 
+            lambda_reg (float): Regularization strength for L1 penalty.
+            learning_rate (float): Learning rate for the optimizer.
+            weight_decay (float): Weight decay for the optimizer.
+            batch_size (int): Batch size for training.
+            epochs (int): Number of epochs to train for.
+        """
+        super().__init__()
+        self.input_dim = input_dim
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.batch_size = batch_size
+        self.epochs = epochs
+        self.regularization = regularization
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.encoder_output_dim=encoder_output_dim
+        self.deep_hidden_dims=deep_hidden_dims
+        self.dropout_rate=dropout_rate
+        self.lambda_reg=lambda_reg
+
+        self.encoder = nn.Linear(input_dim//2, encoder_output_dim)
+
+        # Deep layers for concatenated outputs
+        deep_layers = []
+        prev_dim = encoder_output_dim * 2  # Concatenated outputs of encoder
+        for hidden_dim in deep_hidden_dims:
+            deep_layers.extend([
+                nn.Linear(prev_dim, hidden_dim),
+                nn.ReLU(),
+                nn.BatchNorm1d(hidden_dim),
+                nn.Dropout(dropout_rate)
+            ])
+            prev_dim = hidden_dim
+        self.deep_layers = nn.Sequential(*deep_layers)
+        self.output_layer = nn.Linear(prev_dim, 1)  # Final output layer
+        
+        # Wrap the model with DataParallel if multiple GPUs are available
+        if torch.cuda.device_count() > 1:
+            self.encoder = nn.DataParallel(self.encoder)
+            self.deep_layers = nn.DataParallel(self.deep_layers)
+            self.output_layer = nn.DataParallel(self.output_layer)
+        
+        self.criterion = BilinearLoss(regularization='l2', lambda_reg=lambda_reg) # SparseEncoderLoss(base_loss=nn.HuberLoss(delta=0.1), lambda_reg=lambda_reg)
+        self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
+
+    def forward(self, x):
+        """
+        Forward pass for the model.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape [batch_size, 2 * input_dim].
+        Returns:
+            torch.Tensor: Output predictions of shape [batch_size, 1].
+        """
+        # Split input into region i and region j
+        x_i, x_j = torch.chunk(x, chunks=2, dim=1)
+        
+        # Encode both regions using the shared encoder
+        encoded_i = self.encoder(x_i)
+        encoded_j = self.encoder(x_j)
+        
+        # Concatenate encoded outputs and pass through deep layers
+        concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
+        deep_output = self.deep_layers(concatenated_embedding)
+        output = self.output_layer(deep_output)
+        
+        return output.squeeze()
+
+    def get_params(self): # for local model saving
+        params = {
+            'input_dim': self.input_dim,  # multiply by 2 since input is split
+            'encoder_output_dim': self.encoder_output_dim,  # Use last layer for output dim
+            'deep_hidden_dims': self.deep_hidden_dims,
+            'dropout_rate': self.dropout_rate, 
+            'learning_rate': self.learning_rate,
+            'weight_decay': self.weight_decay,
+            'regularization': self.regularization,
             'lambda_reg': self.lambda_reg,
             'batch_size': self.batch_size,
             'epochs': self.epochs,

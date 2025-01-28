@@ -138,7 +138,7 @@ def validate_inputs(
     if model_type is not None:
         valid_model_types = {'linear', 'ridge', 'pls', 'xgboost', 'dynamic_mlp', 'random_forest', 
                              'bilinear_lowrank', 'bilinear_SCM', 
-                             'shared_mlp_encoder', 'shared_transformer'}
+                             'shared_mlp_encoder', 'shared_linear_encoder', 'shared_transformer'}
         if model_type not in valid_model_types:
             raise ValueError(f"Invalid model_type: {model_type}. Must be one of {valid_model_types}")
     

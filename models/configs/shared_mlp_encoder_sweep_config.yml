@@ -2,6 +2,8 @@ method: bayes
 metric:
   name: mean_val_loss
   goal: minimize
+
+### TRANSCRIPTOME, 100 parc full brain
 parameters: 
   input_dim:
     value: !!int 0
@@ -11,93 +13,61 @@ parameters:
     max: 512
   encoder_output_dim:
     distribution: int_uniform
-    min: 16
-    max: 256
+    min: 8
+    max: 32
   deep_hidden_dims:
     distribution: categorical
     values:
       - [32]
-      - [32, 16]
-      - [64, 32]
-      - [128, 64, 32]
   use_bilinear:
     distribution: categorical
-    values: [True, False]
+    values: [True]
   dropout_rate:
-    distribution: uniform
-    min: 0.0
-    max: 0.5
+    distribution: categorical
+    values: [0.0, 0.1, 0.2, 0.3]
   learning_rate:
     distribution: log_uniform_values
     min: 0.00001
     max: 0.01
   weight_decay:
-    distribution: log_uniform_values
-    min: 0.0001
-    max: 0.1
+    distribution: categorical
+    values: [0.0, 0.0001, 0.001, 0.01]
   lambda_reg:
-    distribution: log_uniform_values
-    min: 0.0001
-    max: 0.1
+    distribution: categorical
+    values: [0.0, 0.0001, 0.001, 0.01]
   batch_size:
     distribution: int_uniform
     min: 64
-    max: 512
+    max: 256
   epochs:
     distribution: int_uniform
     min: 100
-    max: 500
+    max: 200
 
-best_parameters: 
+best_parameters: # bilinear_decoder best params so far for both hems (continue tuning lr, batch size, epochs), # bilinear layer
   input_dim:
       value: !!int 0
   encoder_hidden_dim:
     values: [256]
   encoder_output_dim:
-    values: [64]
+    values: [16]
   deep_hidden_dims:
     values: 
-    - [32, 16]
+    - [32]
   use_bilinear:
     values: [True]
   dropout_rate:
-    values: [0.2]
+    values: [0.0]
   learning_rate:
     values: [0.0001]
   weight_decay:
-    values: [0.0] #, 0.0001, 0.001, 0.01]
+    values: [0.000] 
   lambda_reg:
-    values: [0.001] #0.01]
+    values: [0.000]
   batch_size:
     values: [128]
   epochs:
-    values: [300] #, 150, 200]
-
-
-# best_parameters_bilinear_decoder: # best params so far for both hems (continue tuning lr, batch size, epochs), # bilinear layer
-#   input_dim:
-#       value: !!int 0
-#   encoder_hidden_dim:
-#     values: [128]
-#   encoder_output_dim:
-#     values: [32]
-#   deep_hidden_dims:
-#     values: 
-#     - [32]
-#   use_bilinear:
-#     values: [True]
-#   dropout_rate:
-#     values: [0.2]
-#   learning_rate:
-#     values: [0.0001]
-#   weight_decay:
-#     values: [0.0] #, 0.0001, 0.001, 0.01]
-#   lambda_reg:
-#     values: [0.001] #0.01]
-#   batch_size:
-#     values: [128]
-#   epochs:
-#     values: [500] #, 150, 200]
+    values: [200] #, 150, 200]
 
 # best_parameters_mlp_decoder:
 #   input_dim:

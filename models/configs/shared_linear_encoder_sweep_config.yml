@@ -1,0 +1,64 @@
+method: bayes
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+### TRANSCRIPTOME, 100 parc full brain
+parameters: 
+  input_dim:
+    value: !!int 0
+  encoder_output_dim:
+    distribution: int_uniform
+    min: 8
+    max: 128
+  deep_hidden_dims:
+    distribution: categorical
+    values:
+      - [32, 16]
+      - [64, 32]
+      - [128, 64, 32]
+  dropout_rate:
+    distribution: categorical
+    values: [0.0, 0.1, 0.2, 0.3]
+  learning_rate:
+    distribution: log_uniform_values
+    min: 0.00001
+    max: 0.01
+  weight_decay:
+    distribution: categorical
+    values: [0.0, 0.0001, 0.001, 0.01, 0.1]
+  regularization:
+    distribution: categorical
+    values: ['l1', 'l2']
+  lambda_reg:
+    distribution: categorical
+    values: [0.0, 0.0001, 0.001, 0.01, 0.1]
+  batch_size:
+    distribution: int_uniform
+    min: 64
+    max: 256
+  epochs:
+    distribution: int_uniform
+    min: 100
+    max: 200
+
+best_parameters:
+  input_dim:
+      value: !!int 0
+  encoder_output_dim:
+    values: [16]
+  deep_hidden_dims:
+    values: 
+    - [64, 32]
+  dropout_rate:
+    values: [0.0]
+  learning_rate:
+    values: [0.0001]
+  weight_decay:
+    values: [0.000] 
+  lambda_reg:
+    values: [0.000]
+  batch_size:
+    values: [128]
+  epochs:
+    values: [20] 

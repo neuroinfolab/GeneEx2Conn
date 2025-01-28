@@ -41,12 +41,13 @@ importlib.reload(models.base_models)
 # custom models
 from models.dynamic_mlp import DynamicMLP
 from models.bilinear import BilinearLowRank, BilinearSCM
-from models.shared_encoder_model import SharedMLPEncoderModel, SharedSelfAttentionModel
+from models.shared_encoder_model import SharedMLPEncoderModel, SharedSelfAttentionModel, SharedLinearEncoderModel
 MODEL_CLASSES = {
     'dynamic_mlp': DynamicMLP,
     'bilinear_lowrank': BilinearLowRank,
     'bilinear_SCM': BilinearSCM,
     'shared_mlp_encoder': SharedMLPEncoderModel,
+    'shared_linear_encoder': SharedLinearEncoderModel,
     'shared_transformer': SharedSelfAttentionModel
     # Add other deep learning models here as they're implemented
     # 'transformer_nn': TransformerNN
