@@ -27,16 +27,16 @@ parameters:
     min: 150
     max: 250
 
-best_parameters:
+best_parameters: # 01/28 best
   input_dim:
     value: !!int 0 
   learning_rate:
-    values: [0.001] # 0.01
+    values: [0.002]
   batch_size:
-    values: [400] # 1024
+    values: [324] 
   regularization:
     values: ['l2']
   lambda_reg:
     values: [0.1]
   epochs:
-    values: [200]
+    values: [300]

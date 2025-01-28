@@ -6,46 +6,56 @@ metric:
 parameters:
   input_dim:
       value: !!int 0
-  encoder_output_dim:
-    values: [128] #[128, 256, 512]
-  nhead: # make sure this is a multiple of input_dim
-    values: [2] # , 4, 8]
-  num_layers:
-    values: [2] # , 4, 6]
-  deep_hidden_dims:
-    values:
-    - [128]
-    # - [512, 256]
-    # - [512, 256, 128]
-  dropout_rate:
-    values: [0.2]
-  learning_rate:
-    values: [0.0001]
-  weight_decay:
-    values: [0.0]
-  lambda_reg:
-    values: [0]
-  batch_size:
-    values: [256]
-  epochs:
-    values: [50]
-
-best_parameters:
-  input_dim:
-    values: !!int 0
   token_encoder_dim:
-    values: [8]
+    values: [8, 16, 32, 64]
   encoder_output_dim:
     values: [1]
   nhead:
-    values: [2]
+    values: [1, 2, 4]
+  num_layers:
+    values: [1, 2, 3]
+  deep_hidden_dims:
+    values:
+    - [256]
+    - [512, 256]
+    - [512, 256, 128]
+  dropout_rate:
+    distribution: uniform
+    min: 0.05
+    max: 0.2
+  learning_rate:
+    distribution: log_uniform_values
+    min: 1e-5
+    max: 1e-3
+  weight_decay:
+    distribution: log_uniform_values  
+    min: 1e-6
+    max: 1e-3
+  lambda_reg:
+    distribution: uniform
+    min: 0.0
+    max: 0.1
+  batch_size:
+    values: [128, 256, 512]
+  epochs:
+    values: [50, 100, 150]
+
+best_parameters:
+  input_dim:
+    value: !!int 0
+  token_encoder_dim:
+    values: [32]
+  encoder_output_dim:
+    values: [1]
+  nhead:
+    values: [1]
   num_layers:
     values: [1]
   deep_hidden_dims:
     values:
-    - [64]
+    - [512, 256]
   dropout_rate:
-    values: [0.2]
+    values: [0.1]
   learning_rate:
     values: [0.0001]
   weight_decay:
@@ -55,4 +65,4 @@ best_parameters:
   batch_size:
     values: [256]
   epochs:
-    values: [200]
+    values: [100]

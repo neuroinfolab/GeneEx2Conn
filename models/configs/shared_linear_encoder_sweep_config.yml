@@ -1,3 +1,4 @@
+name: shared_linear_encoder
 method: bayes
 metric:
   name: mean_val_loss
@@ -42,23 +43,25 @@ parameters:
     min: 100
     max: 200
 
-best_parameters:
+best_parameters: # best 01/28
   input_dim:
       value: !!int 0
   encoder_output_dim:
-    values: [16]
+    values: [24]
   deep_hidden_dims:
     values: 
     - [64, 32]
   dropout_rate:
-    values: [0.0]
+    values: [0.2]
   learning_rate:
     values: [0.0001]
   weight_decay:
-    values: [0.000] 
+    values: [0] 
+  regularization:
+    values: ['l2']
   lambda_reg:
-    values: [0.000]
+    values: [0.0001]
   batch_size:
     values: [128]
   epochs:
-    values: [20] 
+    values: [125]

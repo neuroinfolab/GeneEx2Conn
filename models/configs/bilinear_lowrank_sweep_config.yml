@@ -36,7 +36,7 @@ parameters:
     min: 100
     max: 200
 
-best_parameters: 
+best_parameters: # best 01/28 - should rerun bayes
   activation:
     values: ['none'] 
   learning_rate:

@@ -1,3 +1,4 @@
+name: shared_mlp_encoder
 method: bayes
 metric:
   name: mean_val_loss
@@ -44,7 +45,7 @@ parameters:
     min: 100
     max: 200
 
-best_parameters: # bilinear_decoder best params so far for both hems (continue tuning lr, batch size, epochs), # bilinear layer
+best_parameters: # best params - 01/28
   input_dim:
       value: !!int 0
   encoder_hidden_dim:
@@ -63,11 +64,11 @@ best_parameters: # bilinear_decoder best params so far for both hems (continue t
   weight_decay:
     values: [0.000] 
   lambda_reg:
-    values: [0.000]
+    values: [0.000] # keep this as an option for bayesian
   batch_size:
     values: [128]
   epochs:
-    values: [200] #, 150, 200]
+    values: [150]
 
 # best_parameters_mlp_decoder:
 #   input_dim:

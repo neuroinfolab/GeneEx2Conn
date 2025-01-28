@@ -8,30 +8,24 @@ class SelfAttentionEncoder(nn.Module):
     def __init__(self, input_dim, token_encoder_dim, output_dim, nhead=4, num_layers=4):
         """
         A self-attention encoder
-        
-        Args:
-            nhead (int): Number of attention heads.
-            num_layers (int): Number of transformer encoder layers.
         """
         super(SelfAttentionEncoder, self).__init__()
-
-        # Create separate linear layers for each input feature
-        # Each layer maps a scalar to token_encoder_dim dimensions
 
         # Input projection: Map scalar gene expression values to `token_encoder_dim`
         self.input_projection = nn.Linear(1, token_encoder_dim)
 
         # Self-attention encoder layer
         self.encoder_layer = nn.TransformerEncoderLayer(
+            batch_first=True, 
             d_model=token_encoder_dim, 
             nhead=nhead,
-            #dim_feedforward=2048,  # Default feedforward dimension
-            #dropout=0.1,  # Regularization
-            batch_first=True
+            dim_feedforward=4*token_encoder_dim,  # Default feedforward dimension 2048
+            dropout=0.1  # Regularization
+            #activation='ReLu',
         )
         self.transformer = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)
         
-        # Linear layer to project the output of the attention mechanism to desired output size
+        # Linear output layer (outside of transformer)
         self.fc = nn.Linear(token_encoder_dim, output_dim)
 
 
@@ -59,7 +53,7 @@ class SelfAttentionEncoder(nn.Module):
 
         # Output through the final fully connected layer
         x = self.fc(x).squeeze()
-        #print('forward step x shape after fc', x.shape)
+        #print('forward step x shape after linear output layer', x.shape)
 
         return x
 
@@ -186,7 +180,7 @@ class SharedSelfAttentionModel(nn.Module):
         val_loader = None
         if X_test is not None and y_test is not None:
             val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device)
-        return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, verbose)
+        return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, scheduler=None, verbose=verbose)
 
 
 

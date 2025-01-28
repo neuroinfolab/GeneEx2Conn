@@ -254,13 +254,13 @@ class Simulation:
             
             # Initialize sweep
             sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
-
+            #sweep_id = f"{self.model_type}_{sweep_id}" #  # figure out how to tag with {self.model_type}
             # Run sweep
             wandb.agent(sweep_id, function=train_sweep_wrapper, count=search_method[2])
 
             # Get best run from sweep
             api = wandb.Api()
-            sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn/{self.model_type}_{sweep_id}")
+            sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn/{sweep_id}")
             best_run = sweep.best_run()
             wandb.teardown()
 
