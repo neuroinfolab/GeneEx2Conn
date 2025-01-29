@@ -1,68 +1,68 @@
-method: random
+method: bayes
 metric:
   name: mean_val_loss
   goal: minimize
 
 parameters:
   input_dim:
-      value: !!int 0
+    value: !!int 0
   token_encoder_dim:
-    values: [8, 16, 32, 64]
+    values: [10] # tune this separately 
+  use_positional_encoding:
+    values: [True, False]
   encoder_output_dim:
     values: [1]
   nhead:
-    values: [1, 2, 4]
+    values: [2, 5]
   num_layers:
-    values: [1, 2, 3]
+    values: [1, 2, 3, 4]
   deep_hidden_dims:
     values:
-    - [256]
+    - [256, 128]
     - [512, 256]
     - [512, 256, 128]
+  transformer_dropout:
+    values: [0, 0.1, 0.2, 0.3]
   dropout_rate:
-    distribution: uniform
-    min: 0.05
-    max: 0.2
+    values: [0, 0.1, 0.2, 0.3]
   learning_rate:
-    distribution: log_uniform_values
-    min: 1e-5
-    max: 1e-3
+    values: [0.00005, 0.0001, 0.0002, 0.0005]
   weight_decay:
-    distribution: log_uniform_values  
-    min: 1e-6
-    max: 1e-3
+    values: [0, 0.0005, 0.001, 0.002]
   lambda_reg:
-    distribution: uniform
-    min: 0.0
-    max: 0.1
+    values: [0.0, 0.01, 0.05]
   batch_size:
     values: [128, 256, 512]
   epochs:
-    values: [50, 100, 150]
+    values: [50, 75, 100]
 
-best_parameters:
+best_parameters: # set params for some bayesian searching 
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [32]
+    values: [10]
+  use_positional_encoding:
+    values: [True]
   encoder_output_dim:
     values: [1]
   nhead:
-    values: [1]
+    values: [2] # maybe 5 is possible?
   num_layers:
-    values: [1]
+    values: [2] # 1, 2, 4
   deep_hidden_dims:
     values:
     - [512, 256]
+  transformer_dropout:
+    values: [0.2]
   dropout_rate:
-    values: [0.1]
+    values: [0.2]
   learning_rate:
     values: [0.0001]
   weight_decay:
-    values: [0.0]
+    values: [0.001]
   lambda_reg:
     values: [0]
   batch_size:
     values: [256]
   epochs:
-    values: [100]
+    values: [50]

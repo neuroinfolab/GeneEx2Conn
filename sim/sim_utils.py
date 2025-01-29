@@ -130,7 +130,7 @@ def validate_inputs(
     
     # Validate CV type if provided
     if cv_type is not None:
-        valid_cv_types = {'random', 'community', 'schaefer'}
+        valid_cv_types = {'random', 'community', 'schaefer', 'spatial'}
         if cv_type not in valid_cv_types:
             raise ValueError(f"Invalid cv_type: {cv_type}. Must be one of {valid_cv_types}")
     

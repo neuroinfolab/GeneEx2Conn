@@ -16,10 +16,10 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, s
             train_history["val_loss"].append(val_metrics["loss"])
             train_history["val_pearson"].append(val_metrics["pearson"])
             
-            if verbose and (epoch + 1) % 10 == 0:
+            if verbose and (epoch + 1) % 5 == 0:
                 print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_metrics['loss']:.4f}, Val Loss: {val_metrics['loss']:.4f}")
             
-        elif verbose and (epoch + 1) % 10 == 0:
+        elif verbose and (epoch + 1) % 5 == 0:
             print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_metrics['loss']:.4f}")
 
     return train_history

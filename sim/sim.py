@@ -28,7 +28,8 @@ from data.cv_split import (
     RandomCVSplit, 
     SchaeferCVSplit, 
     CommunityCVSplit, 
-    SubnetworkCVSplit
+    SubnetworkCVSplit,
+    SpatialCVSplit
 )
 import data.cv_split
 importlib.reload(data.cv_split)
@@ -150,7 +151,8 @@ class Simulation:
             self.cv_obj = SchaeferCVSplit()
         elif self.cv_type == 'community': # for comparability to SC as target the splits should be based on the functional connectome
             self.cv_obj = CommunityCVSplit(self.X, self.Y_fc, resolution=self.resolution, random_seed=self.random_seed) 
-    
+        elif self.cv_type == 'spatial':
+            self.cv_obj = SpatialCVSplit(self.X, self.Y, self.coords, num_splits=4, random_seed=self.random_seed)
 
     def expand_data(self):
         """

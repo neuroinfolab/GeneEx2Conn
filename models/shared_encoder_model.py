@@ -5,14 +5,16 @@ from data.data_utils import create_data_loader
 from models.train_val import train_model
 
 class SelfAttentionEncoder(nn.Module):
-    def __init__(self, input_dim, token_encoder_dim, output_dim, nhead=4, num_layers=4):
+    def __init__(self, input_dim, token_encoder_dim, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False):
         """
         A self-attention encoder
         """
         super(SelfAttentionEncoder, self).__init__()
 
         # Input projection: Map scalar gene expression values to `token_encoder_dim`
-        self.input_projection = nn.Linear(1, token_encoder_dim)
+       #  self.input_projection = nn.Linear(1, token_encoder_dim)
+        self.token_encoder_dim = token_encoder_dim
+        self.use_positional_encoding = use_positional_encoding
 
         # Self-attention encoder layer
         self.encoder_layer = nn.TransformerEncoderLayer(
@@ -20,8 +22,7 @@ class SelfAttentionEncoder(nn.Module):
             d_model=token_encoder_dim, 
             nhead=nhead,
             dim_feedforward=4*token_encoder_dim,  # Default feedforward dimension 2048
-            dropout=0.1  # Regularization
-            #activation='ReLu',
+            dropout=dropout,  # Regularization
         )
         self.transformer = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)
         
@@ -40,14 +41,24 @@ class SelfAttentionEncoder(nn.Module):
             torch.Tensor: Output after applying attention.
         """
         # Apply self-attention (input x is expected to have shape [batch_size, seq_length, input_dim])
+        
         #print('forward step x shape', x.shape)
         # Reshape input to [batch_size, seq_length, 1] (scalar input per gene)
         x = x.unsqueeze(-1)  # Shape: [batch_size, seq_length, 1]
-        #print('forward step x shape reshaped', x.shape)
-
-        x = self.input_projection(x)
+        
+        # alternative to chunking
+        #x = self.input_projection(x)
         #print('forward step x shape after input projection', x.shape)
 
+        # Reshape input to [batch_size, seq_length // chunk_size, chunk_size]
+        batch_size, seq_length, _ = x.size()
+        x = x.view(batch_size, seq_length // self.token_encoder_dim, self.token_encoder_dim)
+        #print('forward step x shape reshaped', x.shape)
+        
+        if self.use_positional_encoding:
+            x = self.add_positional_encoding(x)
+
+        
         x = self.transformer(x)
         #print('forward step x shape after transformer', x.shape)
 
@@ -57,9 +68,29 @@ class SelfAttentionEncoder(nn.Module):
 
         return x
 
+    def add_positional_encoding(self, x):
+        """
+        Add positional encoding to the input tensor.
+        
+        Args:
+            x (torch.Tensor): Input tensor of shape [batch_size, seq_length, token_encoder_dim].
+            
+        Returns:
+            torch.Tensor: Input tensor with positional encoding added.
+        """
+        seq_length = x.size(1)
+        position = torch.arange(seq_length, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, self.token_encoder_dim, 2).float() * (-math.log(10000.0) / self.token_encoder_dim))
+        pe = torch.zeros(seq_length, self.token_encoder_dim)
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).to(x.device)  # Add batch dimension and move to device
+
+        return x + pe
+
 class SharedSelfAttentionModel(nn.Module):
-    def __init__(self, input_dim, token_encoder_dim=32, encoder_output_dim=16, nhead=4, num_layers=4, deep_hidden_dims=[128], 
-                 dropout_rate=0.2, learning_rate=0.001, weight_decay=0.0, lambda_reg=1.0, 
+    def __init__(self, input_dim, token_encoder_dim=4, encoder_output_dim=16, nhead=4, num_layers=4, deep_hidden_dims=[128], 
+                 transformer_dropout=0.1, use_positional_encoding=False, dropout_rate=0.2, learning_rate=0.001, weight_decay=0.0, lambda_reg=1.0, 
                  batch_size=256, epochs=100):
         """
         A model using a shared self-attention encoder with positional encoding.
@@ -80,10 +111,10 @@ class SharedSelfAttentionModel(nn.Module):
 
         # Store parameters
         self.input_dim = input_dim // 2
-
-        self.token_encoder_dim = token_encoder_dim # vector length to project each token to
+        self.token_encoder_dim = token_encoder_dim # # chunk size for self-attention  OR vector length to project each token to if encoder used
         self.encoder_output_dim = encoder_output_dim # vector length of processed token
-
+        self.transformer_dropout = transformer_dropout
+        self.use_positional_encoding = use_positional_encoding
         self.nhead = nhead
         self.num_layers = num_layers
         
@@ -98,14 +129,16 @@ class SharedSelfAttentionModel(nn.Module):
 
         # Create self-attention encoder
         self.encoder = SelfAttentionEncoder(input_dim=self.input_dim, # change this
-                                            token_encoder_dim=token_encoder_dim,
-                                            output_dim=encoder_output_dim, 
-                                            nhead=nhead, 
-                                            num_layers=num_layers)
+                                            token_encoder_dim=self.token_encoder_dim,
+                                            output_dim=self.encoder_output_dim, 
+                                            nhead=self.nhead, 
+                                            num_layers=self.num_layers,
+                                            dropout=self.transformer_dropout,
+                                            use_positional_encoding=self.use_positional_encoding)
 
         # Deep layers for concatenated outputs
         deep_layers = []
-        prev_dim = self.input_dim * 2  # Concatenated outputs of encoder
+        prev_dim = self.input_dim * 2 // self.token_encoder_dim  # Concatenated outputs of encoder
         for hidden_dim in deep_hidden_dims:
             deep_layers.extend([
                 nn.Linear(prev_dim, hidden_dim),
@@ -125,7 +158,8 @@ class SharedSelfAttentionModel(nn.Module):
         
         # Optimizer and loss function setup
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
-        self.criterion = nn.MSELoss() # SparseMLPEncoderLoss(base_loss=nn.MSELoss(), lambda_reg=lambda_reg)
+        self.criterion = nn.MSELoss()
+        #self.criterion = nn.HuberLoss(delta=0.1)
 
     def forward(self, x):
         """
@@ -155,8 +189,13 @@ class SharedSelfAttentionModel(nn.Module):
         """Get parameters for saving and model tuning."""
         params = {
             'input_dim': self.input_dim,
+            'token_encoder_dim': self.token_encoder_dim,
             'encoder_output_dim': self.encoder_output_dim,
+            'use_positional_encoding': self.use_positional_encoding,
+            'nhead': self.nhead,
+            'num_layers': self.num_layers,
             'deep_hidden_dims': self.deep_hidden_dims,
+            'transformer_dropout': self.transformer_dropout,
             'dropout_rate': self.dropout_rate,
             'learning_rate': self.learning_rate,
             'weight_decay': self.weight_decay,
@@ -167,12 +206,35 @@ class SharedSelfAttentionModel(nn.Module):
         return params
 
     def predict(self, X):
-        """Make predictions."""
+        """Make predictions in memory-efficient batches."""
         self.eval()
-        X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
+        X = torch.as_tensor(X, dtype=torch.float32)
+        predictions = []
+        
+        # Create dataloader for batched prediction
+        predict_loader = DataLoader(
+            TensorDataset(X),
+            batch_size=self.batch_size,
+            shuffle=False,
+            pin_memory=True  # More efficient GPU memory transfer
+        )
         with torch.no_grad():
-            predictions = self(X)
-        return predictions.cpu().numpy()
+            for batch in predict_loader:
+                # Move batch to device and make prediction
+                batch = batch[0].to(self.device, non_blocking=True)
+                batch_preds = self(batch)
+                # Move predictions back to CPU and store
+                predictions.append(batch_preds.cpu().numpy())
+            torch.cuda.empty_cache()  # Clear unused memory on the GPU
+    
+        return np.concatenate(predictions, axis=0)
+
+    # def predict(self, X):
+    #     self.eval()
+    #     X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
+    #     with torch.no_grad():
+    #         predictions = self(X).cpu().numpy()
+    #     return predictions
 
     def fit(self, X_train, y_train, X_test=None, y_test=None, verbose=True):
         """Train the model."""
