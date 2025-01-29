@@ -1,6 +1,50 @@
 # Gene2Conn/cv_split/cv_split.py
 
 from imports import *
+from mpl_toolkits.mplot3d import Axes3D
+
+def visualize_splits_3d(splits, coords, title_prefix="CV Split"):
+    """
+    General helper function to visualize train/test splits in 3D space.
+    
+    Parameters:
+    -----------
+    splits : iterator
+        Iterator yielding (train_indices, test_indices) tuples
+    coords : array-like, shape (n_samples, 3)
+        3D coordinates for each region/point
+    title_prefix : str, optional
+        Prefix for the plot title to indicate split type
+        
+    Returns:
+    --------
+    None
+        Displays matplotlib plots for each fold
+    """
+    for fold_idx, (train_indices, test_indices) in enumerate(splits, 1):
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_subplot(111, projection='3d')
+        
+        # Plot training points
+        ax.scatter(coords[train_indices, 0], 
+                  coords[train_indices, 1], 
+                  coords[train_indices, 2], 
+                  c='blue', label='Train', alpha=0.6)
+        
+        # Plot test points
+        ax.scatter(coords[test_indices, 0], 
+                  coords[test_indices, 1], 
+                  coords[test_indices, 2], 
+                  c='orange', label='Test', alpha=0.6)
+        
+        # Add labels and title
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_title(f'Fold {fold_idx} - {title_prefix} Visualization')
+        ax.legend()
+        
+        plt.show()
 
 class RandomCVSplit:
     """
@@ -56,6 +100,10 @@ class RandomCVSplit:
     def display_splits(self):
         for train_index, test_index in self.get_splits():
             print("TRAIN:", train_index, "TEST:", test_index)
+
+    def visualize_splits_3d(self, coords):
+        """Display each fold's train/test split in 3D space."""
+        visualize_splits_3d(self.split(), coords, "Random Split")
 
 
 class SchaeferCVSplit(BaseCrossValidator):
@@ -136,7 +184,7 @@ class SchaeferCVSplit(BaseCrossValidator):
             
             print("HELD OUT NETWORK:", held_out_network)
             print("TRAIN:", train_indices, "TEST:", test_indices)
-
+            
 
 class CommunityCVSplit(BaseCrossValidator):
     """
@@ -224,6 +272,10 @@ class CommunityCVSplit(BaseCrossValidator):
 
         plt.title('Reordered Connectivity Matrix by Community Structure')
         plt.show()
+
+    def visualize_splits_3d(self, coords):
+        """Display each fold's train/test split in 3D space."""
+        visualize_splits_3d(self.split(), coords, "Community Split")
 
 
 class SpatialCVSplit(BaseCrossValidator):
@@ -348,37 +400,9 @@ class SpatialCVSplit(BaseCrossValidator):
             print()
 
     def visualize_splits_3d(self):
-        """
-        Display each fold's train/test split in 3D space.
-        Train nodes are shown in blue, test nodes in orange.
-        """
-        import matplotlib.pyplot as plt
-        from mpl_toolkits.mplot3d import Axes3D
+        """Display each fold's train/test split in 3D space."""
+        visualize_splits_3d(self.split(), self.coords, "Spatial Split")
 
-        for fold_idx, (train_indices, test_indices) in enumerate(self.splits, 1):
-            fig = plt.figure(figsize=(10, 10))
-            ax = fig.add_subplot(111, projection='3d')
-            
-            # Plot training points
-            ax.scatter(self.coords[train_indices, 0], 
-                      self.coords[train_indices, 1], 
-                      self.coords[train_indices, 2], 
-                      c='blue', label='Train', alpha=0.6)
-            
-            # Plot test points
-            ax.scatter(self.coords[test_indices, 0], 
-                      self.coords[test_indices, 1], 
-                      self.coords[test_indices, 2], 
-                      c='orange', label='Test', alpha=0.6)
-            
-            # Add labels and title
-            ax.set_xlabel('X')
-            ax.set_ylabel('Y')
-            ax.set_zlabel('Z')
-            ax.set_title(f'Fold {fold_idx} - Spatial Split Visualization')
-            ax.legend()
-            
-            plt.show()
 
 class SubnetworkCVSplit(BaseCrossValidator):
     """
@@ -418,4 +442,8 @@ class SubnetworkCVSplit(BaseCrossValidator):
         """Generate indices to split data into training and testing sets."""
         for train_indices, test_indices in self.folds:
             yield train_indices, test_indices
+
+    def visualize_splits_3d(self, coords):
+        """Display each fold's train/test split in 3D space."""
+        visualize_splits_3d(self.split(), coords, "Subnetwork Split")
 

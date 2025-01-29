@@ -10,14 +10,12 @@ importlib.reload(data.data_load)
 
 # data utils
 from data.data_utils import (
-    reconstruct_connectome,
-    reconstruct_upper_triangle,
-    make_symmetric,
     expand_X_symmetric,
     expand_Y_symmetric,
     expand_X_symmetric_shared,
     expand_shared_matrices,
     process_cv_splits, 
+    process_cv_splits_coords, 
     expanded_inner_folds_combined_plus_indices,
 )
 import data.data_utils
@@ -215,6 +213,8 @@ class Simulation:
                           spatial_null=spatial_null, 
                           transcriptome_spatial_null=transcriptome_spatial_null)
 
+        self.fold_splits_coords = process_cv_splits_coords(self.X, self.Y, self.coords, self.cv_obj)
+
                         
     def run_innercv_wandb(self, input_dim,train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
         """Inner cross-validation with W&B support for deep learning models"""
@@ -331,7 +331,7 @@ class Simulation:
         self.load_data()
         self.select_cv()
         self.expand_data()
-
+        
         # Outer CV
         for fold_idx, (X_train, X_test, Y_train, Y_test) in enumerate(self.fold_splits):
             print('\n', f'Test fold num: {fold_idx+1}', f'X_train shape: {X_train.shape}', f'Y_train shape: {Y_train.shape}', f'X_test shape: {X_test.shape}', f'Y_test shape: {Y_test.shape}')
@@ -392,7 +392,7 @@ class Simulation:
                 self.save_model_json
             )
 
-            # Save results to pickle file
+            # Save results to pickle file - consider removing this
             self.results.append({
                 'model_parameters': best_model.get_params(),
                 'train_metrics': train_metrics,
@@ -406,3 +406,5 @@ class Simulation:
 
             print_system_usage() # Display CPU and RAM utilization 
             GPUtil.showUtilization() # Display GPU utilization
+
+            

@@ -89,8 +89,8 @@ class SelfAttentionEncoder(nn.Module):
         return x + pe
 
 class SharedSelfAttentionModel(nn.Module):
-    def __init__(self, input_dim, token_encoder_dim=4, encoder_output_dim=16, nhead=4, num_layers=4, deep_hidden_dims=[128], 
-                 transformer_dropout=0.1, use_positional_encoding=False, dropout_rate=0.2, learning_rate=0.001, weight_decay=0.0, lambda_reg=1.0, 
+    def __init__(self, input_dim, token_encoder_dim=10, encoder_output_dim=1, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
+                 use_positional_encoding=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, lambda_reg=0.0, 
                  batch_size=256, epochs=100):
         """
         A model using a shared self-attention encoder with positional encoding.
@@ -159,7 +159,6 @@ class SharedSelfAttentionModel(nn.Module):
         # Optimizer and loss function setup
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss()
-        #self.criterion = nn.HuberLoss(delta=0.1)
 
     def forward(self, x):
         """
@@ -214,7 +213,7 @@ class SharedSelfAttentionModel(nn.Module):
         # Create dataloader for batched prediction
         predict_loader = DataLoader(
             TensorDataset(X),
-            batch_size=self.batch_size,
+            batch_size=self.batch_size // 2, # reduce batch size by double to avoid memory issues
             shuffle=False,
             pin_memory=True  # More efficient GPU memory transfer
         )
@@ -228,13 +227,6 @@ class SharedSelfAttentionModel(nn.Module):
             torch.cuda.empty_cache()  # Clear unused memory on the GPU
     
         return np.concatenate(predictions, axis=0)
-
-    # def predict(self, X):
-    #     self.eval()
-    #     X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
-    #     with torch.no_grad():
-    #         predictions = self(X).cpu().numpy()
-    #     return predictions
 
     def fit(self, X_train, y_train, X_test=None, y_test=None, verbose=True):
         """Train the model."""

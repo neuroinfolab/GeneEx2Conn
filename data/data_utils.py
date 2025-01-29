@@ -511,6 +511,44 @@ def process_cv_splits(X, Y, cv_obj, all_train=False, test_shared=False, spatial_
 
     return results
 
+def process_cv_splits_coords(X, Y, coords, cv_obj):
+    """
+    Process coordinates through CV splits to match region pairs in process_cv_splits.
+    Each row in output contains coordinates for both regions in a pair: ([x1,y1,z1], [x2,y2,z2])
+
+    Parameters:
+    coords (numpy.ndarray): Array of coordinates for each region
+    cv_obj: Cross-validation object containing fold indices
+
+    Returns:
+    list: List of tuples containing (coords_train, coords_test) for each fold
+    """
+    results = []
+    
+    for fold_idx, (train_index, test_index) in enumerate(cv_obj.split(X, Y)):
+        # Split coordinates into train and test sets
+        coords_train = coords[train_index]
+        coords_test = coords[test_index]
+
+        # Expand coordinates symmetrically
+        coords_train = expand_X_symmetric(coords_train)
+        coords_test = expand_X_symmetric(coords_test)
+
+        # Handle shared regions case
+        if hasattr(cv_obj, 'shared_regions') and cv_obj.shared_regions:
+            coords_train2 = coords[test_index]
+            coords_train2 = expand_X_symmetric(coords_train2)
+
+            if not cv_obj.test_shared:
+                coords_train = np.concatenate((coords_train, coords_train2))
+            else:
+                coords_test = np.concatenate((coords_test, coords_train2))
+
+        results.append((coords_train, coords_test))
+
+    return results
+
+
 
 def expanded_inner_folds_combined_plus_indices(inner_fold_splits):
     """

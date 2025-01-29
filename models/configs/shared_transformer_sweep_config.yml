@@ -7,34 +7,34 @@ parameters:
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [10] # tune this separately 
+    values: [20, 40] # tune this separately 
   use_positional_encoding:
     values: [True, False]
   encoder_output_dim:
     values: [1]
   nhead:
-    values: [2, 5]
+    values: [1, 2] #, 5]
   num_layers:
-    values: [1, 2, 3, 4]
+    values: [1, 2] # , 3, 4]
   deep_hidden_dims:
     values:
     - [256, 128]
-    - [512, 256]
-    - [512, 256, 128]
+    # - [512, 256]
+    #- [512, 256, 128]
   transformer_dropout:
-    values: [0, 0.1, 0.2, 0.3]
+    values: [0, 0.2] #[0, 0.1, 0.2, 0.3]
   dropout_rate:
-    values: [0, 0.1, 0.2, 0.3]
+    values: [0, 0.2] #0.1, 0.2, 0.3]
   learning_rate:
-    values: [0.00005, 0.0001, 0.0002, 0.0005]
+    values: [.0001] #[0.00005, 0.0001, 0.0002, 0.0005]
   weight_decay:
-    values: [0, 0.0005, 0.001, 0.002]
+    values: [.001] # [0, 0.0005, 0.001, 0.002]
   lambda_reg:
-    values: [0.0, 0.01, 0.05]
+    values: [0] # [0.0, 0.01, 0.05]
   batch_size:
-    values: [128, 256, 512]
+    values: [256] # [128, 256, 512]
   epochs:
-    values: [50, 75, 100]
+    values: [30, 60, 100] #, 75]
 
 best_parameters: # set params for some bayesian searching 
   input_dim:
