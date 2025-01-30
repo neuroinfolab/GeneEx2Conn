@@ -5,66 +5,51 @@ from data.data_utils import create_data_loader
 from models.train_val import train_model
 
 class SelfAttentionEncoder(nn.Module):
-    def __init__(self, input_dim, token_encoder_dim, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False):
+    def __init__(self, input_dim, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False):
         """
         A self-attention encoder
         """
         super(SelfAttentionEncoder, self).__init__()
-
-        # Input projection: Map scalar gene expression values to `token_encoder_dim`
-       #  self.input_projection = nn.Linear(1, token_encoder_dim)
+        
+        self.d_model = d_model
         self.token_encoder_dim = token_encoder_dim
         self.use_positional_encoding = use_positional_encoding
 
-        # Self-attention encoder layer
+        self.input_projection = nn.Linear(token_encoder_dim, d_model) # up project to d_model
+
         self.encoder_layer = nn.TransformerEncoderLayer(
             batch_first=True, 
-            d_model=token_encoder_dim, 
+            d_model=d_model, 
             nhead=nhead,
-            dim_feedforward=4*token_encoder_dim,  # Default feedforward dimension 2048
-            dropout=dropout,  # Regularization
+            dim_feedforward=4*d_model,
+            dropout=dropout
         )
         self.transformer = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)
-        
-        # Linear output layer (outside of transformer)
-        self.fc = nn.Linear(token_encoder_dim, output_dim)
 
+        self.fc = nn.Linear(d_model, output_dim) # Linear output layer (outside of transformer)
 
     def forward(self, x):
         """
         Forward pass for the self-attention encoder.
-        
         Args:
             x (torch.Tensor): Input tensor of shape [batch_size, seq_length, input_dim].
-            
         Returns:
             torch.Tensor: Output after applying attention.
         """
-        # Apply self-attention (input x is expected to have shape [batch_size, seq_length, input_dim])
-        
-        #print('forward step x shape', x.shape)
-        # Reshape input to [batch_size, seq_length, 1] (scalar input per gene)
-        x = x.unsqueeze(-1)  # Shape: [batch_size, seq_length, 1]
-        
-        # alternative to chunking
-        #x = self.input_projection(x)
-        #print('forward step x shape after input projection', x.shape)
-
-        # Reshape input to [batch_size, seq_length // chunk_size, chunk_size]
-        batch_size, seq_length, _ = x.size()
+        batch_size, seq_length = x.size()
         x = x.view(batch_size, seq_length // self.token_encoder_dim, self.token_encoder_dim)
-        #print('forward step x shape reshaped', x.shape)
-        
-        if self.use_positional_encoding:
-            x = self.add_positional_encoding(x)
 
+        x = self.input_projection(x)
+        
+        if self.use_positional_encoding: # need to update this with input projection 
+            x = self.add_positional_encoding(x)
         
         x = self.transformer(x)
-        #print('forward step x shape after transformer', x.shape)
-
-        # Output through the final fully connected layer
+        
         x = self.fc(x).squeeze()
-        #print('forward step x shape after linear output layer', x.shape)
+        #print('x shape after transformer and linear layer', x.shape)
+        x = x.view(x.size(0), -1) # Flatten to [batch_size, seq_length * encoder_output_dim]
+        #print('x shape flattened', x.shape)
 
         return x
 
@@ -89,9 +74,9 @@ class SelfAttentionEncoder(nn.Module):
         return x + pe
 
 class SharedSelfAttentionModel(nn.Module):
-    def __init__(self, input_dim, token_encoder_dim=10, encoder_output_dim=1, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
+    def __init__(self, input_dim, token_encoder_dim=10, d_model=128, encoder_output_dim=1, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
                  use_positional_encoding=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, lambda_reg=0.0, 
-                 batch_size=256, epochs=100):
+                 batch_size=128, epochs=100):
         """
         A model using a shared self-attention encoder with positional encoding.
         
@@ -117,6 +102,7 @@ class SharedSelfAttentionModel(nn.Module):
         self.use_positional_encoding = use_positional_encoding
         self.nhead = nhead
         self.num_layers = num_layers
+        self.d_model = d_model
         
         self.deep_hidden_dims = deep_hidden_dims
         self.dropout_rate = dropout_rate
@@ -130,6 +116,7 @@ class SharedSelfAttentionModel(nn.Module):
         # Create self-attention encoder
         self.encoder = SelfAttentionEncoder(input_dim=self.input_dim, # change this
                                             token_encoder_dim=self.token_encoder_dim,
+                                            d_model=self.d_model,
                                             output_dim=self.encoder_output_dim, 
                                             nhead=self.nhead, 
                                             num_layers=self.num_layers,
@@ -137,8 +124,10 @@ class SharedSelfAttentionModel(nn.Module):
                                             use_positional_encoding=self.use_positional_encoding)
 
         # Deep layers for concatenated outputs
+        prev_dim = self.input_dim * 2 # // self.token_encoder_dim * self.encoder_output_dim # Concatenated outputs of encoder
+        # concatenated encoder output
+
         deep_layers = []
-        prev_dim = self.input_dim * 2 // self.token_encoder_dim  # Concatenated outputs of encoder
         for hidden_dim in deep_hidden_dims:
             deep_layers.extend([
                 nn.Linear(prev_dim, hidden_dim),
@@ -189,6 +178,7 @@ class SharedSelfAttentionModel(nn.Module):
         params = {
             'input_dim': self.input_dim,
             'token_encoder_dim': self.token_encoder_dim,
+            'd_model': self.d_model,
             'encoder_output_dim': self.encoder_output_dim,
             'use_positional_encoding': self.use_positional_encoding,
             'nhead': self.nhead,

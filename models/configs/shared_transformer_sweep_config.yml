@@ -8,6 +8,8 @@ parameters:
     value: !!int 0
   token_encoder_dim:
     values: [20, 40] # tune this separately 
+  d_model:
+    values: [128, 256]
   use_positional_encoding:
     values: [True, False]
   encoder_output_dim:
@@ -34,17 +36,19 @@ parameters:
   batch_size:
     values: [256] # [128, 256, 512]
   epochs:
-    values: [30, 60, 100] #, 75]
+    values: [30] #, 60, 100] #, 75]
 
 best_parameters: # set params for some bayesian searching 
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [10]
+    values: [20]
+  d_model:
+    values: [128]
   use_positional_encoding:
-    values: [True]
+    values: [False]
   encoder_output_dim:
-    values: [1]
+    values: [20]
   nhead:
     values: [2] # maybe 5 is possible?
   num_layers:
@@ -57,12 +61,12 @@ best_parameters: # set params for some bayesian searching
   dropout_rate:
     values: [0.2]
   learning_rate:
-    values: [0.0001]
+    values: [0.00009]
   weight_decay:
-    values: [0.001]
+    values: [0.0001]
   lambda_reg:
     values: [0]
   batch_size:
-    values: [256]
+    values: [128]
   epochs:
     values: [50]

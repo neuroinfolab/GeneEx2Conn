@@ -377,7 +377,7 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
         project="gx2conn",
         name=run_name,
         group=f"sweep_{sweep_id}",
-        tags=["inner cross validation", f"fold{outer_fold_idx}", f"model_{model_type}", f"split_{cv_type}{seed}", f"parcellation_{parcellation}", f"hemisphere_{hemisphere}", f"omit_subcortical_{omit_subcortical}", f"gene_list_{gene_list}"],
+        tags=["inner cross validation", f'cv_type_{cv_type}', f"fold{outer_fold_idx}", f"model_{model_type}", f"split_{cv_type}{seed}", f'feature_type_{feature_str}', f'target_{connectome_target}', f"parcellation_{parcellation}",  f"hemisphere_{hemisphere}", f"omit_subcortical_{omit_subcortical}", f"gene_list_{gene_list}"],
         reinit=True
     )
 
@@ -399,7 +399,6 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
         
         # Initialize model dynamically based on sweep config
         model = ModelClass(**sweep_config).to(device)
-        wandb.watch(model, log='all')
 
         # Train model
         history = model.fit(X_train, y_train, X_val, y_val)
@@ -466,7 +465,7 @@ def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold
     )
 
     if model_type in model_classes:
-        # wandb.watch(best_model, log='all')
+        wandb.watch(best_model, log='all')
         for epoch, (train_loss, val_loss, train_pearson, val_pearson) in enumerate(zip(train_history['train_loss'], train_history['val_loss'], train_history['train_pearson'], train_history['val_pearson'])):
             wandb.log({'train_mse_loss': train_loss, 'train_pearson': train_pearson, 'test_mse_loss': val_loss, 'test_pearson': val_pearson})
 
