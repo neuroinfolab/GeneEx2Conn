@@ -29,7 +29,7 @@ def _apply_pca(data, var_thresh=0.95):
         return data_pca
 
 
-def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=True, hemisphere='both', sort_genes=True):
+def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=True, hemisphere='both', sort_genes=True, return_valid_genes=False):
     """
     Load transcriptome data with optional PCA reduction.
     
@@ -108,6 +108,10 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             genes_data = genes_data[rh_indices, :]
             region_labels = rh_labels
 
+        if return_valid_genes:
+            print("ordered valid genes", valid_genes)
+            return genes_data, valid_genes
+        
         return genes_data
     
     '''
