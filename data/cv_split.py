@@ -110,6 +110,12 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
     None
         Displays matplotlib plots for each fold
     """
+    save_gif = False # True 
+    # gif_path = "cv_split_random10_gene.gif" 
+    # Store figures if saving GIF
+    if save_gif:
+        figures = []
+    
     # Get gene expression colors if X is provided
     expression_values, gene_used = None, None
     if X is not None and (valid_genes is not None or gene_name is not None):
@@ -233,7 +239,22 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
         # Remove tight_layout and use figure adjustments instead
         plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95)
         
-        plt.show()
+        if save_gif:
+            # Convert figure to image
+            fig.canvas.draw()
+            image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')
+            image = image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            figures.append(image)
+            plt.close()
+        else:
+            plt.show()
+         
+    
+    if save_gif:
+        # Save as GIF
+        import imageio
+        imageio.mimsave(gif_path, figures, fps=1) #, duration=10)  # 1.5 seconds per frame
+        print(f"GIF saved to {gif_path}")
 
 def visualize_3d(X, Y, coords, edge_threshold=0.5, valid_genes=None, gene_name=None):
     """
