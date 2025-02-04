@@ -5,6 +5,7 @@ metric:
   goal: minimize
 
 ### TRANSCRIPTOME, 100 parc full brain
+# BAYES
 parameters: 
   input_dim:
     value: !!int 0
@@ -43,6 +44,30 @@ parameters:
     min: 100
     max: 200
 
+# SMALL GRID 
+input_dim:
+  value: !!int 0
+encoder_output_dim:
+  values: [8, 16, 32, 128]
+deep_hidden_dims:
+  values:
+    - [64, 32]
+dropout_rate:
+  values: [0.1, 0.3]
+learning_rate:
+  values: [0.0001, 0.0005]
+weight_decay:
+  values: [0.0, .001, 0.0001]
+regularization:
+  values: ['l2']
+lambda_reg:
+  values: [0, 0.0001]
+batch_size:
+  values: [128]
+epochs:
+  values: [100]
+
+# BEST
 best_parameters: # best 01/28
   input_dim:
       value: !!int 0

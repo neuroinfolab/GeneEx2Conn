@@ -6,7 +6,6 @@ from imports import *
 # data load
 from data.data_load import load_transcriptome, load_connectome
 import data.data_load
-importlib.reload(data.data_load)
 
 # data utils
 from data.data_utils import (
@@ -21,7 +20,6 @@ from data.data_utils import (
     expanded_inner_folds_combined_plus_indices,
 )
 import data.data_utils
-importlib.reload(data.data_utils)
 
 # cross-validation classes
 from data.cv_split import (
@@ -32,13 +30,8 @@ from data.cv_split import (
 )
 
 # sim utility functions
-import sim.sim_utils
-from sim.sim_utils import grid_search_init, drop_test_network, find_best_params
-importlib.reload(sim.sim_utils)
-
-import sim.sim
 from sim.sim import Simulation
-
+from sim.sim_utils import grid_search_init, drop_test_network, find_best_params
 
 def open_pickled_results(file, added_dir='', backup=False): # Specify the path to your pickle file
     """
@@ -220,3 +213,70 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
         save_sims(single_model_results, feature_type, cv_type, model_type, use_shared_regions, test_shared_regions, search_method, resolution, random_seed, connectome_target)
     
     return single_model_results
+
+
+
+def run_simulation_set(model_types,
+                      feature_types,
+                      parcellations,
+                      connectome_targets,
+                      random_seeds,
+                      cv_types=['random', 'spatial'], 
+                      inner_cv_runs=3):
+    """
+    Run a set of simulations with different combinations of parameters.
+    
+    Args:
+        model_types (list): List of model types to test (e.g. ['dynamic_mlp', 'shared_transformer'])
+        feature_types (list): List of features to include (e.g. ['transcriptome', 'euclidean'])
+        parcellations (list): List of parcellation schemes (e.g. ['S100', 'S400'])
+        connectome_targets (list): List of connectome targets (e.g. ['FC', 'SC'])
+        random_seeds (list): List of random seeds for multiple runs
+        cv_types (list): List of cross-validation types, defaults to ['random', 'spatial']
+        inner_cv_runs (int): Number of inner cross-validation runs to perform
+    """
+    
+    for model in model_types:
+        for feat in feature_types:
+            for parc in parcellations:
+                current_hemisphere = 'both' if parc == 'S100' else 'left'
+                for target in connectome_targets:
+                    for cv in cv_types:
+                        for seed in random_seeds:
+                            if feat == 'transcriptome':
+                                feat_dict = [{'transcriptome': None}]
+                            elif feat == 'euclidean':
+                                feat_dict = [{'euclidean': None}]
+                            elif feat == 'transcriptome+euclidean':
+                                feat_dict = [
+                                    {'transcriptome': None},
+                                    {'euclidean': None}
+                                ]
+
+                            print(f"Running simulation with: {model}, {cv}, {parc}, {target}, {feat}, seed={seed}")
+                            
+                            # Run single simulation
+                            single_sim_run(
+                                cv_type=cv,
+                                random_seed=seed,
+                                model_type=model,
+                                feature_type=feat_dict,
+                                connectome_target=target,
+                                use_gpu=True,
+                                use_shared_regions=False,
+                                test_shared_regions=False,
+                                omit_subcortical=False,
+                                parcellation=parc,
+                                gene_list='0.2',
+                                hemisphere=current_hemisphere,
+                                search_method=('wandb', 'mse', inner_cv_runs),
+                                save_sim=False,
+                                track_wandb=True,
+                                skip_cv=False
+                            )
+                            
+                            # Clear GPU memory
+                            if torch.cuda.is_available():
+                                torch.cuda.empty_cache()
+                            # Clear CPU memory
+                            gc.collect()

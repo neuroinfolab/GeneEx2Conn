@@ -1,66 +1,107 @@
-method: grid
+method: random
 metric:
   name: mean_val_loss
   goal: minimize
 
-# parameters:
+### TRANSCRIPTOME
+# SMALL GRID
+parameters: 
+  input_dim:
+    value: !!int 0
+  include_coords:
+    value: !!bool False
+  token_encoder_dim:
+    values: [20, 40]
+  d_model:
+    values: [128, 256, 512]
+  encoder_output_dim:
+    values: [1, 10, 20]
+  use_positional_encoding:
+    values: [False]
+  nhead:
+    values: [2, 4] 
+  num_layers:
+    values: [2, 4]
+  deep_hidden_dims:
+    values:
+    - [512, 256]
+  transformer_dropout:
+    values: [0.0, 0.2]
+  dropout_rate:
+    values: [0.0, 0.2]
+  learning_rate:
+    values: [0.00009, 0.00001]
+  weight_decay:
+    values: [0, 0.0001]
+  lambda_reg:
+    values: [0]
+  batch_size:
+    values: [128]
+  epochs:
+    values: [50, 75]
+
+# BEST PARAMS
+# best_parameters:
 #   input_dim:
 #     value: !!int 0
+#   include_coords:
+#     value: !!bool False
 #   token_encoder_dim:
-#     values: [20, 40] # tune this separately 
+#     values: [20]
 #   d_model:
-#     values: [128, 256]
-#   use_positional_encoding:
-#     values: [True, False]
+#     values: [128]
 #   encoder_output_dim:
-#     values: [1]
+#     values: [20]
+#   use_positional_encoding:
+#     values: [False]
 #   nhead:
-#     values: [1, 2] #, 5]
+#     values: [2]
 #   num_layers:
-#     values: [1, 2] # , 3, 4]
+#     values: [2]
 #   deep_hidden_dims:
 #     values:
-#     - [256, 128]
-#     # - [512, 256]
-#     #- [512, 256, 128]
+#     - [512, 256]
 #   transformer_dropout:
-#     values: [0, 0.2] #[0, 0.1, 0.2, 0.3]
+#     values: [0.2]
 #   dropout_rate:
-#     values: [0, 0.2] #0.1, 0.2, 0.3]
+#     values: [0.2]
 #   learning_rate:
-#     values: [.0001] #[0.00005, 0.0001, 0.0002, 0.0005]
+#     values: [0.00009]
 #   weight_decay:
-#     values: [.001] # [0, 0.0005, 0.001, 0.002]
+#     values: [0.0001]
 #   lambda_reg:
-#     values: [0] # [0.0, 0.01, 0.05]
+#     values: [0]
 #   batch_size:
-#     values: [256] # [128, 256, 512]
+#     values: [128]
 #   epochs:
-#     values: [30] #, 60, 100] #, 75]
+#     values: [100]
 
-
-parameters: # set params for some bayesian searching 
+### TRANSCRIPTOME+COORDINATES ### 
+# BEST PARAMS EUCLID
+best_parameters:
   input_dim:
     value: !!int 0
+  include_coords:
+    value: !!bool False
   token_encoder_dim:
-    values: [20] # let's make this much bigger soon
+    values: [40]
   d_model:
-    values: [128]
+    values: [64] # curr best 64
   use_positional_encoding:
     values: [False]
   encoder_output_dim:
-    values: [20] # or 1
+    values: [10] # no difference for coords
   nhead:
-    values: [2] # maybe 5 is possible?
+    values: [4] 
   num_layers:
-    values: [2] # 1, 2, 4
+    values: [4]
   deep_hidden_dims:
     values:
     - [512, 256]
   transformer_dropout:
-    values: [0.2]
+    values: [0.3]
   dropout_rate:
-    values: [0.2]
+    values: [0.3]
   learning_rate:
     values: [0.0001]
   weight_decay:
@@ -70,37 +111,4 @@ parameters: # set params for some bayesian searching
   batch_size:
     values: [128]
   epochs:
-    values: [50]
-
-best_parameters: # set params for some bayesian searching 
-  input_dim:
-    value: !!int 0
-  token_encoder_dim:
-    values: [20]
-  d_model:
-    values: [128]
-  use_positional_encoding:
-    values: [False]
-  encoder_output_dim:
-    values: [10] # let's see if we can make this dynamic by making it a divisor of the output dim
-  nhead:
-    values: [4] # maybe 5 is possible?
-  num_layers:
-    values: [4] # 1, 2, 4
-  deep_hidden_dims:
-    values:
-    - [512, 256]
-  transformer_dropout:
-    values: [0.2]
-  dropout_rate:
-    values: [0.2]
-  learning_rate:
-    values: [0.0001]
-  weight_decay:
-    values: [0.0001]
-  lambda_reg:
-    values: [0]
-  batch_size:
-    values: [128]
-  epochs:
-    values: [75]
+    values: [200]

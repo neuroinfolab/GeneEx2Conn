@@ -6,7 +6,6 @@ from imports import *
 # data load
 from data.data_load import load_transcriptome, load_connectome
 import data.data_load
-importlib.reload(data.data_load)
 
 # data utils
 from data.data_utils import (
@@ -21,7 +20,6 @@ from data.data_utils import (
     expanded_inner_folds_combined_plus_indices,
 )
 import data.data_utils
-importlib.reload(data.data_utils)
 
 # cross-validation classes
 from data.cv_split import (
@@ -31,12 +29,10 @@ from data.cv_split import (
     SubnetworkCVSplit
 )
 import data.cv_split
-importlib.reload(data.cv_split)
 
 # prebuilt model classes
 from models.base_models import ModelBuild
 import models.base_models
-importlib.reload(models.base_models)
 
 # custom models
 from models.dynamic_mlp import DynamicMLP
@@ -52,7 +48,6 @@ from models.metrics.eval import (
     r2_numpy
 )
 import models.metrics.eval
-importlib.reload(models.metrics.eval)
 import yaml
 
 
@@ -149,17 +144,22 @@ def validate_inputs(
             raise ValueError(f"Invalid connectome target: {connectome_target}. Must be one of {valid_targets}")
 
 
-def load_sweep_config(file_path, input_dim):
+def load_sweep_config(file_path, input_dim, include_coords=None):
     """
     Load a sweep config file and update the input_dim parameter.
     """
     with open(file_path, 'r') as file:
         config = yaml.safe_load(file)
+    
     config['parameters']['input_dim']['value'] = input_dim
+
+    if include_coords:
+        config['parameters']['include_coords']['value'] = True
+    
     return config
 
 
-def load_best_parameters(yaml_file_path, input_dim):
+def load_best_parameters(yaml_file_path, input_dim, include_coords=None):
     with open(yaml_file_path, 'r') as file:
         config = yaml.safe_load(file)
     
@@ -170,7 +170,14 @@ def load_best_parameters(yaml_file_path, input_dim):
     best_config = {key: value['values'][0] if isinstance(value, dict) and 'values' in value else value
                    for key, value in best_parameters.items()}
     
+    # override dynamic vars
     best_config['input_dim'] = input_dim
+
+
+    if include_coords is not None:
+        print('include_coords', include_coords)
+        best_config['include_coords'] = include_coords
+    
     
     return best_config
 

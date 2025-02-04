@@ -3,7 +3,8 @@ metric:
   name: mean_val_loss
   goal: minimize
 
-### TRANSCRIPTOME, 100 parc full brain
+### TRANSCRIPTOME, 100 parc full brain ###
+# BAYES 
 parameters:
   input_dim:
     value: !!int 0
@@ -36,6 +37,27 @@ parameters:
     min: 100
     max: 200
 
+# SMALL GRID 
+input_dim:
+    value: !!int 0
+  activation:
+    values: ['none']
+  learning_rate:
+    values: [0.0005, 0.001]
+  batch_size:
+    values: [256]
+  regularization:
+    values: ['l2']
+  lambda_reg:
+    values: [0.01, 0.1]
+  shared_weights:
+    values: [True]
+  reduced_dim:
+    values: [5, 7, 10]
+  epochs:
+    values: [100, 150]
+
+# BEST
 best_parameters: # best 01/28 - should rerun bayes
   activation:
     values: ['none'] 

@@ -5,24 +5,17 @@ from data.data_utils import create_data_loader
 from models.train_val import train_model
 
 class SelfAttentionEncoder(nn.Module):
-    def __init__(self, input_dim, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False, include_coords=False, coord_dim=3):
-        """
-        A self-attention encoder
-        """
+    def __init__(self, input_dim, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False, include_coords=False):
         super(SelfAttentionEncoder, self).__init__()
         
         self.token_encoder_dim = token_encoder_dim
         self.d_model = d_model
         self.use_positional_encoding = use_positional_encoding
         self.include_coords = include_coords
-        self.coord_dim = coord_dim
 
-        self.input_projection = nn.Linear(token_encoder_dim, d_model) # up project to d_model
-        
-        if self.include_coords: # If we plan to embed coordinates as the [CLS] token
-            self.coord_to_cls = nn.Linear(coord_dim, d_model)
-        else:
-            self.coord_to_cls = None
+        # Linear projection to d_model
+        self.input_projection = nn.Linear(token_encoder_dim, d_model)
+        self.coord_to_cls = nn.Linear(3, d_model) if self.include_coords else None
 
         self.encoder_layer = nn.TransformerEncoderLayer(
             batch_first=True, 
@@ -31,45 +24,26 @@ class SelfAttentionEncoder(nn.Module):
             dim_feedforward=4*d_model,
             dropout=dropout
         )
+
         self.transformer = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)
+        self.fc = nn.Linear(d_model, output_dim) # Linear output layer (after transformer)
 
-        self.fc = nn.Linear(d_model, output_dim) # Linear output layer (outside of transformer)
-
-    def forward(self, x):
-        """
-        Forward pass for the self-attention encoder.
-        Args:
-            x (torch.Tensor): Input tensor of shape [batch_size, seq_length, input_dim].
-        Returns:
-            torch.Tensor: Output after applying attention.
-        """
-        '''
-        batch_size, seq_length = x.size()
-        x = x.view(batch_size, seq_length // self.token_encoder_dim, self.token_encoder_dim)
-
-        x = self.input_projection(x)
-        
-        if self.use_positional_encoding: # need to update this with input projection 
-            x = self.add_positional_encoding(x)
-        
-        x = self.transformer(x)
-        
-        x = self.fc(x).squeeze()
-        #print('x shape after transformer and linear layer', x.shape)
-        x = x.view(x.size(0), -1) # Flatten to [batch_size, seq_length * encoder_output_dim]
-        #print('x shape flattened', x.shape)
-
-        return x
-        '''
-
+    def forward(self, x): 
         batch_size, total_features = x.shape
-        coords = x[:, -3:]                     # (batch_size, 3)
-        gene_exp = x[:, :-3]                   # (batch_size, gene_dim)
-
-        L = gene_exp.shape[1] // self.token_encoder_dim
-        gene_exp = gene_exp.view(batch_size, L, self.token_encoder_dim)
-
+        
+        if self.include_coords:
+            coords = x[:, -3:]                     # (batch_size, 3)
+            gene_exp = x[:, :-3]                   # (batch_size, gene_dim)
+        else:
+            gene_exp = x
+        
+        L = gene_exp.shape[1] // self.token_encoder_dim # number of tokens
+        # print('L', L)
+        # print('gene_exp shape', gene_exp.shape)
+        gene_exp = gene_exp.view(batch_size, L, self.token_encoder_dim) # (batch_size, seq len, token_encoder_dim)
+        # print('gene_exp shape', gene_exp.shape)
         x_proj = self.input_projection(gene_exp)  # (batch_size, L, d_model)
+        # print('x_proj shape', x_proj.shape)
 
         if self.include_coords:
             cls_vec = self.coord_to_cls(coords).unsqueeze(1)  # (batch_size, 1, d_model)
@@ -79,14 +53,14 @@ class SelfAttentionEncoder(nn.Module):
             x_proj = self.add_positional_encoding(x_proj)
 
         x_enc = self.transformer(x_proj)
-        #print('x_enc transform shape', x_enc.shape)
+        # print('x_enc shape post transformer', x_enc.shape)
 
         if self.include_coords:
-            x_enc = x_enc[:, 0, :]
+            x_enc = x_enc[:, 0, :] # take the [CLS] token
         else:
-            x_enc = x_enc.reshape(batch_size, -1)
             x_enc = self.fc(x_enc)
-        #print('x_enc readout shape', x_enc.shape)
+            x_enc = x_enc.reshape(batch_size, -1) # flatten for downstream tasks
+        # print('x_enc shape post linear layer', x_enc.shape)
 
         return x_enc
 
@@ -105,27 +79,12 @@ class SelfAttentionEncoder(nn.Module):
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0).to(x.device)  # Add batch dimension and move to device
-
         return x + pe
 
 class SharedSelfAttentionModel(nn.Module):
-    def __init__(self, input_dim, token_encoder_dim=10, d_model=128, encoder_output_dim=1, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
+    def __init__(self, input_dim, include_coords, token_encoder_dim=10, d_model=128, encoder_output_dim=1, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
                  use_positional_encoding=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, lambda_reg=0.0, 
                  batch_size=128, epochs=100):
-        """        
-        Args:
-            input_dim (int): Number of input features (genes).
-            token_encoder_dim (int): Number of hidden units in the self-attention encoder.
-            d_model (int): Number of output features from the encoder.
-            encoder_output_dim (int): Number of output features from the encoder.
-            deep_hidden_dims (list): List of hidden layer sizes for additional processing.
-            dropout_rate (float): Dropout rate for the encoder and deep layers.
-            learning_rate (float): Learning rate for the optimizer.
-            weight_decay (float): Weight decay for the optimizer.
-            lambda_reg (float): Regularization strength for L1 penalty.
-            batch_size (int): Batch size for training.
-            epochs (int): Number of epochs for training.
-        """
         super().__init__()
 
         # Transformer parameters
@@ -133,14 +92,12 @@ class SharedSelfAttentionModel(nn.Module):
         self.token_encoder_dim = token_encoder_dim 
         self.d_model = d_model
         self.encoder_output_dim = encoder_output_dim
-        
-        self.include_coords = True
-        self.coord_dim = 3
         self.transformer_dropout = transformer_dropout
         self.use_positional_encoding = use_positional_encoding
         self.nhead = nhead
         self.num_layers = num_layers
-        
+        self.include_coords = include_coords
+
         # Deep layers parameters
         self.deep_hidden_dims = deep_hidden_dims
         self.dropout_rate = dropout_rate
@@ -151,7 +108,6 @@ class SharedSelfAttentionModel(nn.Module):
         self.epochs = epochs
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
         # Create self-attention encoder
         self.encoder = SelfAttentionEncoder(input_dim=self.input_dim, # change this
                                             token_encoder_dim=self.token_encoder_dim,
@@ -160,12 +116,11 @@ class SharedSelfAttentionModel(nn.Module):
                                             nhead=self.nhead, 
                                             num_layers=self.num_layers,
                                             include_coords=self.include_coords,
-                                            coord_dim=self.coord_dim,
                                             dropout=self.transformer_dropout,
                                             use_positional_encoding=self.use_positional_encoding)
 
         if self.include_coords: # If coords => the encoder returns shape (batch_size, d_model) per region
-            prev_dim = d_model * 2
+            prev_dim = self.d_model * 2 # Concatenated outputs of encoder CLS token only
         else:
             # Dynamically set first layer size based on transformer operation
             prev_dim = (self.input_dim // self.token_encoder_dim * self.encoder_output_dim) * 2 # Concatenated outputs of encoder
@@ -208,12 +163,18 @@ class SharedSelfAttentionModel(nn.Module):
         # Encode both regions using the self-attention encoder
         encoded_i = self.encoder(x_i)
         encoded_j = self.encoder(x_j)
+        # print('encoded_i shape', encoded_i.shape)
+        # print('encoded_j shape', encoded_j.shape)
         
         # Concatenate encoded outputs and pass through deep layers
         concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
+        # print('concatenated_embedding shape', concatenated_embedding.shape)
+
         deep_output = self.deep_layers(concatenated_embedding)
-        output = self.output_layer(deep_output)
+        # print('deep_output shape', deep_output.shape)
         
+        output = self.output_layer(deep_output)
+        # print('output shape', output.shape)
         return output.squeeze()
 
     def get_params(self):

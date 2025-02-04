@@ -1,9 +1,10 @@
-method: bayes
+method: random
 metric:
   name: mean_val_loss
   goal: minimize
 
 ### TRANSCRIPTOME, 100 parc full brain
+# BAYES
 # parameters:
 #   input_dim:
 #     value: !!int 0
@@ -33,55 +34,43 @@ metric:
 #     min: 100
 #     max: 175
 
-# best_parameters: # best 01/28
-#   hidden_dims:
-#     values:     
-#     - [512, 256, 128]
-#   learning_rate:
-#     values: [0.0001]
-#   batch_size:
-#     values: [256]
-#   dropout_rate:
-#     values: [0.15]
-#   weight_decay:
-#     values: [0.0001]
-#   input_dim:
-#     value: !!int 0
-#   epochs:
-#     values: [150]
-
-### EUCLIDEAN, 100 parc full brain
-parameters: 
+# SMALL GRID
+parameters:
   input_dim:
     value: !!int 0
   hidden_dims:
-    distribution: categorical
     values:
-      - [32, 16]
-      - [64, 32]
-      - [128, 64, 32]
+      - [512, 256, 128]
   learning_rate:
-    distribution: log_uniform_values
-    min: 0.00005
-    max: 0.0005
+    values: [0.00009, 0.0001]
   batch_size:
-    distribution: int_uniform
-    min: 64
-    max: 256
+    values: [256, 512]
   dropout_rate:
-    distribution: uniform
-    min: 0.0
-    max: 0.2
+    values: [0.1, 0.3]
   weight_decay:
-    distribution: log_uniform_values
-    min: 0.0001
-    max: 0.01
+    values: [0.0001, 0.00001, 0]
   epochs:
-    distribution: int_uniform
-    min: 100
-    max: 200
+    values: [100, 150]
 
 best_parameters: # best 01/28
+  hidden_dims:
+    values:     
+    - [512, 256, 128]
+  learning_rate:
+    values: [0.0001]
+  batch_size:
+    values: [256]
+  dropout_rate:
+    values: [0.15]
+  weight_decay:
+    values: [0.0001]
+  input_dim:
+    value: !!int 0
+  epochs:
+    values: [150]
+
+### EUCLID
+best_parameters_euclid: # best 01/28
   input_dim:
     value: !!int 0
   hidden_dims:

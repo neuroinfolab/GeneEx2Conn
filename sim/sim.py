@@ -6,7 +6,6 @@ from imports import *
 # data load
 from data.data_load import load_transcriptome, load_connectome, load_coords
 import data.data_load
-importlib.reload(data.data_load)
 
 # data utils
 from data.data_utils import (
@@ -19,7 +18,6 @@ from data.data_utils import (
     expanded_inner_folds_combined_plus_indices,
 )
 import data.data_utils
-importlib.reload(data.data_utils)
 
 # cross-validation classes
 from data.cv_split import (
@@ -30,12 +28,10 @@ from data.cv_split import (
     SpatialCVSplit
 )
 import data.cv_split
-importlib.reload(data.cv_split)
 
 # prebuilt model classes
 from models.base_models import ModelBuild
 import models.base_models
-importlib.reload(models.base_models)
 
 # custom models
 from models.dynamic_mlp import DynamicMLP
@@ -63,13 +59,10 @@ from models.metrics.eval import (
     r2_cupy
 )
 import models.metrics.eval
-importlib.reload(models.metrics.eval)
 
 # sim utility functions
-import sim.sim_utils
 from sim.sim_utils import bayes_search_init, grid_search_init, random_search_init, drop_test_network, find_best_params, load_sweep_config, load_best_parameters, extract_feature_importances
 from sim.sim_utils import bytes2human, print_system_usage, validate_inputs, train_sweep, log_wandb_metrics
-importlib.reload(sim.sim_utils)
 
 
 class Simulation:
@@ -179,7 +172,9 @@ class Simulation:
                         }
         
         validate_inputs(features=features, feature_dict=feature_dict)
-        
+        self.features = features 
+        print('features', self.features)
+
         # append feature data into a horizontal stack indexed by node
         X = []
         for feature in features:
@@ -216,7 +211,7 @@ class Simulation:
         self.fold_splits_coords = process_cv_splits_coords(self.X, self.Y, self.coords, self.cv_obj)
 
                         
-    def run_innercv_wandb(self, input_dim,train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
+    def run_innercv_wandb(self, input_dim, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
         """Inner cross-validation with W&B support for deep learning models"""
         
         # Create inner CV object for X_train and Y_train
@@ -228,12 +223,18 @@ class Simulation:
         
         # Load sweep config
         sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-        #input_dim = inner_fold_splits[0][0].shape[1]
-        sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim) # take num features from a fold
+        if self.model_type == 'shared_transformer':
+            sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, include_coords='euclidean' in self.features)
+        else:
+            sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim)
+
         device = torch.device("cuda")
 
         if self.skip_cv: 
-            best_config = load_best_parameters(sweep_config_path, input_dim=input_dim)
+            if self.model_type == 'shared_transformer':
+                best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, include_coords='euclidean' in self.features)
+            else:
+                best_config = load_best_parameters(sweep_config_path, input_dim=input_dim)
         else:
             def train_sweep_wrapper(config=None):
                 return train_sweep(
