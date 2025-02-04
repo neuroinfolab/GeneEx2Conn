@@ -1,5 +1,5 @@
 name: shared_linear_encoder
-method: bayes
+method: random
 metric:
   name: mean_val_loss
   goal: minimize

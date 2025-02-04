@@ -254,26 +254,65 @@ def run_simulation_set(model_types,
                                 ]
 
                             print(f"Running simulation with: {model}, {cv}, {parc}, {target}, {feat}, seed={seed}")
-                            
-                            # Run single simulation
-                            single_sim_run(
-                                cv_type=cv,
-                                random_seed=seed,
-                                model_type=model,
-                                feature_type=feat_dict,
-                                connectome_target=target,
-                                use_gpu=True,
-                                use_shared_regions=False,
-                                test_shared_regions=False,
-                                omit_subcortical=False,
-                                parcellation=parc,
-                                gene_list='0.2',
-                                hemisphere=current_hemisphere,
-                                search_method=('wandb', 'mse', inner_cv_runs),
-                                save_sim=False,
-                                track_wandb=True,
-                                skip_cv=False
-                            )
+                            if model == 'pls':
+                                single_sim_run(
+                                    cv_type=cv,
+                                    random_seed=seed,
+                                    model_type=model,
+                                    feature_type=feat_dict,
+                                    connectome_target=target,
+                                    use_gpu=False,
+                                    use_shared_regions=False,
+                                    test_shared_regions=False,
+                                    omit_subcortical=False,
+                                    parcellation=parc,
+                                    gene_list='0.2',
+                                    hemisphere=current_hemisphere,
+                                    search_method=('grid', 'mse', 10),
+                                    save_sim=False,
+                                    track_wandb=True,
+                                    skip_cv=False
+                                )
+                            elif model == 'xgboost':
+                                # Run single simulation
+                                single_sim_run(
+                                    cv_type=cv,
+                                    random_seed=seed,
+                                    model_type=model,
+                                    feature_type=feat_dict,
+                                    connectome_target=target,
+                                    use_gpu=True,
+                                    use_shared_regions=False,
+                                    test_shared_regions=False,
+                                    omit_subcortical=False,
+                                    parcellation=parc,
+                                    gene_list='0.2',
+                                    hemisphere=current_hemisphere,
+                                    search_method=('bayes', 'mse', 10),
+                                    save_sim=False,
+                                    track_wandb=True,
+                                    skip_cv=False
+                                )
+                            else:   
+                                # Run single simulation
+                                single_sim_run(
+                                    cv_type=cv,
+                                    random_seed=seed,
+                                    model_type=model,
+                                    feature_type=feat_dict,
+                                    connectome_target=target,
+                                    use_gpu=True,
+                                    use_shared_regions=False,
+                                    test_shared_regions=False,
+                                    omit_subcortical=False,
+                                    parcellation=parc,
+                                    gene_list='0.2',
+                                    hemisphere=current_hemisphere,
+                                    search_method=('wandb', 'mse', inner_cv_runs),
+                                    save_sim=False,
+                                    track_wandb=True,
+                                    skip_cv=False
+                                )
                             
                             # Clear GPU memory
                             if torch.cuda.is_available():

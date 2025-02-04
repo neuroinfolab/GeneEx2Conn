@@ -1,4 +1,4 @@
-method: bayes
+method: random
 metric:
   name: mean_val_loss
   goal: minimize
