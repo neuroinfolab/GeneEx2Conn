@@ -175,9 +175,14 @@ def load_best_parameters(yaml_file_path, input_dim, include_coords=None):
 
 
     if include_coords is not None:
+        best_config = None
+        best_parameters = config.get('best_parameters_euclid', {})
+        best_config = {key: value['values'][0] if isinstance(value, dict) and 'values' in value else value
+                   for key, value in best_parameters.items()}
+        best_config['input_dim'] = input_dim
+
         print('include_coords', include_coords)
         best_config['include_coords'] = include_coords
-    
     
     return best_config
 

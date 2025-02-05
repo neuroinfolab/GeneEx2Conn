@@ -51,8 +51,8 @@ parameters:
     values: [0.0001, 0.00001, 0]
   epochs:
     values: [100, 150]
-
-best_parameters: # best 01/28
+  
+best_parameters_gxp: # best 01/28
   hidden_dims:
     values:     
     - [512, 256, 128]
@@ -70,7 +70,7 @@ best_parameters: # best 01/28
     values: [150]
 
 ### EUCLID
-best_parameters_euclid: # best 01/28
+best_parameters: # best 01/28
   input_dim:
     value: !!int 0
   hidden_dims:

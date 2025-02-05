@@ -215,14 +215,14 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
     return single_model_results
 
 
-
 def run_simulation_set(model_types,
                       feature_types,
                       parcellations,
                       connectome_targets,
                       random_seeds,
                       cv_types=['random', 'spatial'], 
-                      inner_cv_runs=3):
+                      inner_cv_runs=3,
+                      skip_cv=False):
     """
     Run a set of simulations with different combinations of parameters.
     
@@ -234,6 +234,7 @@ def run_simulation_set(model_types,
         random_seeds (list): List of random seeds for multiple runs
         cv_types (list): List of cross-validation types, defaults to ['random', 'spatial']
         inner_cv_runs (int): Number of inner cross-validation runs to perform
+        skip_cv (bool): Whether to skip cross validation, defaults to False
     """
     
     for model in model_types:
@@ -271,7 +272,7 @@ def run_simulation_set(model_types,
                                     search_method=('grid', 'mse', 10),
                                     save_sim=False,
                                     track_wandb=True,
-                                    skip_cv=False
+                                    skip_cv=skip_cv
                                 )
                             elif model == 'xgboost':
                                 # Run single simulation
@@ -288,12 +289,12 @@ def run_simulation_set(model_types,
                                     parcellation=parc,
                                     gene_list='0.2',
                                     hemisphere=current_hemisphere,
-                                    search_method=('bayes', 'mse', 10),
+                                    search_method=('bayes', 'mse', 5),
                                     save_sim=False,
                                     track_wandb=True,
-                                    skip_cv=False
+                                    skip_cv=skip_cv
                                 )
-                            else:   
+                            elif model == 'shared_transformer':   
                                 # Run single simulation
                                 single_sim_run(
                                     cv_type=cv,
@@ -311,7 +312,27 @@ def run_simulation_set(model_types,
                                     search_method=('wandb', 'mse', inner_cv_runs),
                                     save_sim=False,
                                     track_wandb=True,
-                                    skip_cv=False
+                                    skip_cv=skip_cv
+                                )
+                            else: 
+                                # Run single simulation
+                                single_sim_run(
+                                    cv_type=cv,
+                                    random_seed=seed,
+                                    model_type=model,
+                                    feature_type=feat_dict,
+                                    connectome_target=target,
+                                    use_gpu=True,
+                                    use_shared_regions=False,
+                                    test_shared_regions=False,
+                                    omit_subcortical=False,
+                                    parcellation=parc,
+                                    gene_list='0.2',
+                                    hemisphere=current_hemisphere,
+                                    search_method=('wandb', 'mse', inner_cv_runs),
+                                    save_sim=False,
+                                    track_wandb=True,
+                                    skip_cv=skip_cv
                                 )
                             
                             # Clear GPU memory

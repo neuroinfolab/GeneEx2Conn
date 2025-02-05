@@ -38,47 +38,47 @@ parameters:
   batch_size:
     values: [128]
   epochs:
-    values: [50, 75, 100]
+    values: [75, 100, 125]
 
 # BEST PARAMS
-# best_parameters:
-#   input_dim:
-#     value: !!int 0
-#   include_coords:
-#     value: !!bool False
-#   token_encoder_dim:
-#     values: [20]
-#   d_model:
-#     values: [128]
-#   encoder_output_dim:
-#     values: [20]
-#   use_positional_encoding:
-#     values: [False]
-#   nhead:
-#     values: [2]
-#   num_layers:
-#     values: [2]
-#   deep_hidden_dims:
-#     values:
-#     - [512, 256]
-#   transformer_dropout:
-#     values: [0.2]
-#   dropout_rate:
-#     values: [0.2]
-#   learning_rate:
-#     values: [0.00009]
-#   weight_decay:
-#     values: [0.0001]
-#   lambda_reg:
-#     values: [0]
-#   batch_size:
-#     values: [128]
-#   epochs:
-#     values: [100]
+best_parameters:
+  input_dim:
+    value: !!int 0
+  include_coords:
+    value: !!bool False
+  token_encoder_dim:
+    values: [20]
+  d_model:
+    values: [128]
+  encoder_output_dim:
+    values: [20]
+  use_positional_encoding:
+    values: [False]
+  nhead:
+    values: [2]
+  num_layers:
+    values: [2]
+  deep_hidden_dims:
+    values:
+    - [512, 256]
+  transformer_dropout:
+    values: [0.2]
+  dropout_rate:
+    values: [0.2]
+  learning_rate:
+    values: [0.00009]
+  weight_decay:
+    values: [0.0001]
+  lambda_reg:
+    values: [0]
+  batch_size:
+    values: [128]
+  epochs:
+    values: [100]
 
 ### TRANSCRIPTOME+COORDINATES ### 
 # BEST PARAMS EUCLID
-best_parameters:
+best_parameters_euclid:
   input_dim:
     value: !!int 0
   include_coords:
