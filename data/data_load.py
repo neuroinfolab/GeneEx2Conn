@@ -50,20 +50,20 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             region_labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in pd.read_csv('./data/enigma/schaef114_regions.txt', header=None).values.flatten().tolist()]
             genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r1_schaefer_{parcellation[1:]}.csv") # from https://github.com/saratheriver/enigma-extra/tree/master/ahba
         elif parcellation == 'S400':
-            AHBA_UKBB_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data/Penn_UKBB_data/AHBA_population_MH/'
+            AHBA_UKBB_path = relative_data_path + '/Penn_UKBB_data/AHBA_population_MH/'
             genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
             genes_data = genes_data.drop('label', axis=1)
             region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t').iterrows()]
         
         # Choose gene list
         if gene_list == '0.2' or gene_list == '1':
-            genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_{parcellation[1:]}.txt", header=None)[0].tolist()
+            genes_list = pd.read_csv(f"./data/gene_lists/stable_r{gene_list}_schaefer_{parcellation[1:]}.txt", header=None)[0].tolist()
         elif gene_list in ['brain', 'neuron', 'oligodendrocyte', 'synaptome', 'layers']:
             genes_list = abagen.fetch_gene_group(gene_list)
         elif gene_list == 'richiardi2015':
-            genes_list = pd.read_csv('./data/enigma/gene_lists/richiardi2015.txt', header=None)[0].tolist()
+            genes_list = pd.read_csv('./data/gene_lists/richiardi2015.txt', header=None)[0].tolist()
         elif gene_list == 'syngo':
-            genes_list = pd.read_csv('./data/enigma/gene_lists/syngo.txt', header=None)[0].tolist()
+            genes_list = pd.read_csv('./data/gene_lists/syngo.txt', header=None)[0].tolist()
         elif gene_list == 'all_abagen':  
             genes_list = set.union(
                         set(abagen.fetch_gene_group('brain')),

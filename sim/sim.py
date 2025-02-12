@@ -33,27 +33,27 @@ from models.metrics.eval import (
     ModelEvaluator
 )
 
-from sim.sim_utils import {
+from sim.sim_utils import (
     bytes2human, 
     print_system_usage, 
     validate_inputs
-}
+)
 
-from sim.sim_utils import {
+from sim.sim_utils import (
     bayes_search_init, 
     grid_search_init, 
     random_search_init, 
     drop_test_network, 
     find_best_params,  
     extract_feature_importances
-}
+)
 
-from sim.sim_utils import {
+from sim.sim_utils import (
     train_sweep,
     load_sweep_config, 
     load_best_parameters,
     log_wandb_metrics
-}
+)
 
 
 class Simulation:
