@@ -1,6 +1,6 @@
 # GeneEx2Conn/models/bilinear.py
 
-from imports import *
+from env.imports import *
 from data.data_utils import create_data_loader
 from models.train_val import train_model
 

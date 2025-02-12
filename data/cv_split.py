@@ -1,8 +1,6 @@
-# Gene2Conn/cv_split/cv_split.py
-
-from imports import *
+from env.imports import *
 from mpl_toolkits.mplot3d import Axes3D
-from matplotlib.lines import Line2D  # Add this import
+from matplotlib.lines import Line2D
 from ipywidgets import interact
 import ipywidgets as widgets
 

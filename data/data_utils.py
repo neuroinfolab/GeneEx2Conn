@@ -1,6 +1,6 @@
 # Gene2Conn/data/data_utils.py
 
-from imports import *
+from env.imports import *
 
 def create_data_loader(X, y, batch_size, device, shuffle=True):
     # Take first batch_size samples for quick testing

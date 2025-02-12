@@ -1,6 +1,6 @@
 # Gene2Conn/models/base_models.py
 
-from imports import *
+from env.imports import *
 from skopt.space import Real, Categorical, Integer
 from sklearn.base import BaseEstimator, RegressorMixin
 import torch

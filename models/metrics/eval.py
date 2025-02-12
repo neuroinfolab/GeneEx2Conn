@@ -1,6 +1,6 @@
 # Gene2Conn/models/metrics/eval.py
 
-from imports import *
+from env.imports import *
 from data.data_utils import reconstruct_connectome
 import models.metrics.distance_FC
 from models.metrics.distance_FC import *

@@ -1,6 +1,6 @@
 # GeneEx2Conn/models/train_val.py
 
-from imports import *
+from env.imports import *
 
 def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, scheduler=None, verbose=True):
     train_history = {"train_loss": [], "val_loss": [], "train_pearson": [], "val_pearson": []}

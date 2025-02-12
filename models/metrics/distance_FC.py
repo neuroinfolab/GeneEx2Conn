@@ -1,7 +1,7 @@
 # Gene2Conn/metrics/distance_FC.py
 # source: https://github.com/makto-toruk/FC_geodesic/tree/master (Comparing Functional Connectivity Matrices: A Geometry-Aware Approach applied to Participant Identification)
 
-from imports import *
+from env.imports import *
 
 class distance_FC(object):
     def __init__(self, FC1, FC2, eig_thresh=10**(-3)):

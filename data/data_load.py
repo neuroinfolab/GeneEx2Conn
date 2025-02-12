@@ -1,6 +1,4 @@
-# Gene2Conn/data/data_load.py
-
-from imports import *
+from env.imports import *
 
 relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data'
 

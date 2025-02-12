@@ -1,7 +1,5 @@
-# GeneEx2Conn/sim/sim_run.py
-
 # imports
-from imports import * 
+from env.imports import *
 
 # data load
 from data.data_load import load_transcriptome, load_connectome

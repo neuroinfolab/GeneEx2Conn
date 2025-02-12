@@ -1,6 +1,4 @@
-# Gene2Conn/data/data_viz.py
-
-from imports import *
+from env.imports import *
 
 
 def plot_connectome(Y):

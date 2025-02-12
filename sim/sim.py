@@ -1,25 +1,7 @@
-# GeneEx2Conn/sim/sim.py
+from env.imports import *
 
-# imports
-from imports import * 
-
-# data load
 from data.data_load import load_transcriptome, load_connectome, load_coords
-import data.data_load
 
-# data utils
-from data.data_utils import (
-    expand_X_symmetric,
-    expand_Y_symmetric,
-    expand_X_symmetric_shared,
-    expand_shared_matrices,
-    process_cv_splits, 
-    process_cv_splits_coords, 
-    expanded_inner_folds_combined_plus_indices,
-)
-import data.data_utils
-
-# cross-validation classes
 from data.cv_split import (
     RandomCVSplit, 
     SchaeferCVSplit, 
@@ -27,13 +9,14 @@ from data.cv_split import (
     SubnetworkCVSplit,
     SpatialCVSplit
 )
-import data.cv_split
 
-# prebuilt model classes
+from data.data_utils import (
+    process_cv_splits, 
+    process_cv_splits_coords, 
+    expanded_inner_folds_combined_plus_indices
+)
+
 from models.base_models import ModelBuild
-import models.base_models
-
-# custom models
 from models.dynamic_mlp import DynamicMLP
 from models.bilinear import BilinearLowRank, BilinearSCM
 from models.shared_encoder_model import SharedMLPEncoderModel, SharedSelfAttentionModel, SharedLinearEncoderModel
@@ -44,25 +27,33 @@ MODEL_CLASSES = {
     'shared_mlp_encoder': SharedMLPEncoderModel,
     'shared_linear_encoder': SharedLinearEncoderModel,
     'shared_transformer': SharedSelfAttentionModel
-    # Add other deep learning models here as they're implemented
-    # 'transformer_nn': TransformerNN
 }
 
-# metric classes
 from models.metrics.eval import (
-    ModelEvaluator,
-    pearson_numpy,
-    pearson_cupy,
-    mse_numpy,
-    mse_cupy,
-    r2_numpy,
-    r2_cupy
+    ModelEvaluator
 )
-import models.metrics.eval
 
-# sim utility functions
-from sim.sim_utils import bayes_search_init, grid_search_init, random_search_init, drop_test_network, find_best_params, load_sweep_config, load_best_parameters, extract_feature_importances
-from sim.sim_utils import bytes2human, print_system_usage, validate_inputs, train_sweep, log_wandb_metrics
+from sim.sim_utils import {
+    bytes2human, 
+    print_system_usage, 
+    validate_inputs
+}
+
+from sim.sim_utils import {
+    bayes_search_init, 
+    grid_search_init, 
+    random_search_init, 
+    drop_test_network, 
+    find_best_params,  
+    extract_feature_importances
+}
+
+from sim.sim_utils import {
+    train_sweep,
+    load_sweep_config, 
+    load_best_parameters,
+    log_wandb_metrics
+}
 
 
 class Simulation:
