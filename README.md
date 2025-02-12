@@ -5,6 +5,7 @@ This repository contains code for predicting human brain connectivity (_the conn
 At a high-level, the connectome prediction problem is a small-network link prediction problem. The nodes of the network (brain regions) come from a high-dimensional feature space; $O(n^4)$ gene expression measures per region. The goal of our models is to predict edge connectivity strength between any two pairs of regions across the brain based solely on their node-wise features. This repo implements several architectures for solving the connectome prediction problem, with emphasis on encoder-based models that capture intra and inter-region genetic interactions.
 
 ## Example sim
+- Insert code for the sim
 - Insert gif of 5 fold spatial split. 
 - Insert visual of performance acc for bilinear lowrank vs transformer on single spatial fold. 
 
