@@ -208,8 +208,8 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
         ax.set_zlabel('Z (Dorsal-Ventral)', fontsize=20, labelpad=5)
         
         # Increase title font size substantially
-        plt.suptitle(f'Fold {fold_idx}, {title_prefix} Visualization', 
-                    fontsize=24, y=0.1)
+        #plt.suptitle(f'Fold {fold_idx}, {title_prefix} Visualization', 
+        #            fontsize=24, y=0.1)
         
         # Increase tick label font size
         ax.tick_params(axis='both', which='major', labelsize=12)
@@ -329,8 +329,8 @@ def visualize_3d(X, Y, coords, edge_threshold=0.5, valid_genes=None, gene_name=N
                            edgecolor='white', 
                            linewidth=0.5)
         
-        # Add colorbar for gene expression - smaller size
-        cbar = plt.colorbar(scatter, shrink=0.4)  # Add shrink parameter
+        # Add colorbar for gene expression - smaller size and positioned more left
+        cbar = plt.colorbar(scatter, shrink=0.4, pad=-0.0)  # Negative pad moves it further left
         cbar.set_label(f'{gene_used} Expression', fontsize=20)
         cbar.ax.tick_params(labelsize=18)
     else:
@@ -345,15 +345,15 @@ def visualize_3d(X, Y, coords, edge_threshold=0.5, valid_genes=None, gene_name=N
                            linewidth=0.5)
     
     # Add labels and title with increased font sizes
-    ax.set_xlabel('X (Coronal)', fontsize=20, labelpad=5)
-    ax.set_ylabel('Y (Sagittal)', fontsize=20, labelpad=5)
-    ax.set_zlabel('Z (Axial)', fontsize=20, labelpad=5)
+    ax.set_xlabel('X (Lateral)', fontsize=20, labelpad=5)
+    ax.set_ylabel('Y (Posterior-Anterior)', fontsize=20, labelpad=5)
+    ax.set_zlabel('Z (Dorsal-Ventral)', fontsize=20, labelpad=5)
     
     # Move title to bottom of plot with increased size
     # ax.set_title(title, fontsize=18, pad=0, y=0.05)
-    
+
     # Adjust tick label size
-    ax.tick_params(axis='both', which='major', labelsize=18)
+    ax.tick_params(axis='both', which='major', labelsize=12)
     
     # Create legend for edges with larger font
     if Y is not None:
