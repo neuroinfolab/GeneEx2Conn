@@ -30,6 +30,25 @@ At a high-level, the connectome prediction problem is a small-network link predi
     - sim_demo shows how to run single and multi sims
     - finetune_demo shows single sim runs with specified parameter grids
 
+## Example sim run
+```
+single_sim_run(
+              cv_type='random',
+              random_seed=42,
+              model_type='shared_transformer',
+              feature_type=[{'transcriptome': None}],
+              connectome_target='FC',
+              use_gpu=True,
+              omit_subcortical=False,
+              parcellation='S100',
+              gene_list='0.2',
+              hemisphere='both',
+              search_method=('wandb', 'mse', 3),
+              track_wandb=True,
+              skip_cv=False
+              )
+```
+
 ## Setting up Jupyter notebook on NYU HPC (Greene)
 
 To setup your Jupyter notebook on the HPC cluster, follow the instructions here [here](https://sites.google.com/nyu.edu/nyu-hpc/hpc-systems/greene/software/open-ondemand-ood-with-condasingularity?authuser=0). The key difference is that instead of setting up your own Singularity image, you can point your Jupyter config to our existing Singularity image (which contains all the necessary python packages).
