@@ -9,10 +9,10 @@ At a high-level, the connectome prediction problem is a small-network link predi
   <table style="width: 100%; border-collapse: collapse; padding: 0; margin: 0;">
     <tr>
       <td style="width: 50%; padding: 0; margin: 0;">
-        <img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/S400_LAMA1_expression.png" height="375" style="display: block; width: 100%; max-height: 375; object-fit: cover; padding: 0; margin: 0;">
+        <img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/S400_LAMA1_expression.png" style="display: block; width: 100%; max-height: 375px; height: auto; object-fit: contain; padding: 0; margin: 0;">
       </td>
       <td style="width: 50%; padding: 0; margin: 0;">
-        <img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/cv_split_s400_structural_connectivity_spatial_split_10-2.gif" height="350" style="display: block; width: 100%; max-height: 350px; object-fit: cover; padding: 0; margin: 0;">
+        <img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/cv_split_s400_structural_connectivity_spatial_split_10-2.gif" style="display: block; width: 100%; max-height: 375px; height: auto; object-fit: contain; padding: 0; margin: 0;">
       </td>
     </tr>
     <tr>
