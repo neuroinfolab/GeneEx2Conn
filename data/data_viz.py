@@ -117,7 +117,7 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
         # Generate gif path based on split type and number of splits
         n_splits = len(splits)  # Count number of splits
         gene_suffix = "_gene" if valid_genes is not None else ""
-        gif_path = f"cv_split_{title_prefix.lower()}_{n_splits}{gene_suffix}.gif"
+        gif_path = f"cv_split_{title_prefix.lower().replace(' ', '_')}_{n_splits}{gene_suffix}.gif"
         figures = []
     
     # Get gene expression colors if X is provided
