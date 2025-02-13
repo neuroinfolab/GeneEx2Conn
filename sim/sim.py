@@ -398,5 +398,3 @@ class Simulation:
 
             print_system_usage() # Display CPU and RAM utilization 
             GPUtil.showUtilization() # Display GPU utilization
-
-            

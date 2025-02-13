@@ -74,7 +74,7 @@ best_parameters:
   batch_size:
     values: [128]
   epochs:
-    values: [100]
+    values: [75]
 
 ### TRANSCRIPTOME+COORDINATES ### 
 # BEST PARAMS EUCLID
