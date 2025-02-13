@@ -1,5 +1,6 @@
 # imports
 from env.imports import *
+import inspect
 
 # metric classes
 from models.metrics.eval import (
@@ -323,6 +324,36 @@ def find_best_params(grid_search_cv_results):
     return best_params
 
 
+def extract_model_params(model):
+    """
+    Dynamically extracts hyperparameters from a PyTorch model by analyzing
+    the __init__() method of its class.
+
+    Args:
+        model (nn.Module): The PyTorch model.
+
+    Returns:
+        dict: A dictionary of hyperparameters used to initialize the model.
+    """
+    params = {}
+
+    # Get the class of the model
+    model_class = model.__class__
+
+    # Retrieve the __init__ method signature
+    init_signature = inspect.signature(model_class.__init__)
+    
+    # Get parameter names from the __init__ function (excluding self)
+    param_names = list(init_signature.parameters.keys())[1:]
+
+    # Extract stored hyperparameter values from the model
+    for param in param_names:
+        if hasattr(model, param):  # Ensure the attribute exists in self
+            params[param] = getattr(model, param)
+
+    return params
+
+
 def train_sweep(config, model_type, feature_type, connectome_target, cv_type, outer_fold_idx, inner_fold_splits, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed):
     """
     Training function for W&B sweeps for deep learning models.
@@ -443,7 +474,7 @@ def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold
             wandb.log({'train_mse_loss': train_loss, 'train_pearson': train_pearson, 'test_mse_loss': val_loss, 'test_pearson': val_pearson})
 
     wandb.log({
-        'final_train_metrics': train_metrics, 'final_test_metrics': test_metrics, 'best_val_loss': best_val_score, 'config': best_model.get_params()
+        'final_train_metrics': train_metrics, 'final_test_metrics': test_metrics, 'best_val_loss': best_val_score, 'config': best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model)
     })
     
     final_eval_run.finish()

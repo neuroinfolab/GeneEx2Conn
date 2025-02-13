@@ -1,5 +1,3 @@
-# GeneEx2Conn/models/train_val.py
-
 from env.imports import *
 
 def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, scheduler=None, verbose=True):
@@ -18,7 +16,7 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, s
             
             if verbose and (epoch + 1) % 5 == 0:
                 print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_metrics['loss']:.4f}, Val Loss: {val_metrics['loss']:.4f}")
-                print(f"Epoch {epoch+1}/{epochs}, Train Pearson: {train_metrics['pearson']:.4f}, Val Pearson: {val_metrics['pearson']:.4f}")
+                #print(f"Epoch {epoch+1}/{epochs}, Train Pearson: {train_metrics['pearson']:.4f}, Val Pearson: {val_metrics['pearson']:.4f}")
 
         elif verbose and (epoch + 1) % 5 == 0:
             print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_metrics['loss']:.4f}")
@@ -34,7 +32,7 @@ def train_epoch(model, train_loader, optimizer, criterion, device):
     for batch_X, batch_y in train_loader:
         optimizer.zero_grad()
         predictions = model(batch_X).squeeze()
-        try:
+        try: 
             loss = criterion(predictions, batch_y)
         except:
             loss = criterion(predictions, batch_y, model)
@@ -73,7 +71,7 @@ def evaluate(model, val_loader, criterion, device, scheduler=None):
     mean_val_loss = total_val_loss / len(val_loader)
     mean_val_pearson = np.mean(val_pearson_values)
 
-    if scheduler is not None:
+    if scheduler is not None: # NEED TO GET THIS TO WORK 
        scheduler.step(mean_val_loss)
 
     return {

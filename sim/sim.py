@@ -36,7 +36,8 @@ from models.metrics.eval import (
 from sim.sim_utils import (
     bytes2human, 
     print_system_usage, 
-    validate_inputs
+    validate_inputs, 
+    extract_model_params
 )
 
 from sim.sim_utils import (
@@ -357,7 +358,7 @@ class Simulation:
             print("\nTRAIN METRICS:", train_metrics)
             print("TEST METRICS:", test_metrics)
             print('BEST VAL SCORE', best_val_score)
-            print('BEST MODEL PARAMS', best_model.get_params())
+            print('BEST MODEL PARAMS', if hasattr(best_model, 'get_params') else extract_model_params(best_model))
 
             # Log final evaluation metrics
             if track_wandb:
@@ -386,7 +387,7 @@ class Simulation:
 
             # Save results to pickle file - consider removing this
             self.results.append({
-                'model_parameters': best_model.get_params(),
+                'model_parameters': if hasattr(best_model, 'get_params') else extract_model_params(best_model),
                 'train_metrics': train_metrics,
                 'best_val_score': best_val_score,
                 'test_metrics': test_metrics,

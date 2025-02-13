@@ -17,7 +17,6 @@ class BilinearLoss(nn.Module):
         if self.lambda_reg > 0:
             # Concatenate all parameters into a single tensor
             params = torch.cat([p.view(-1) for p in model.parameters() if p.requires_grad])
-            
             if self.regularization == 'l1':
                 reg_loss = torch.linalg.norm(params, ord=1)  # L1 norm
             elif self.regularization == 'l2':
@@ -57,21 +56,6 @@ class BilinearLowRank(nn.Module):
         self.criterion = BilinearLoss(regularization=regularization, lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate)
 
-    def get_params(self): # for local model saving
-        params = {
-            'input_dim': self.linear.in_features,
-            'reduced_dim': self.linear.out_features,
-            'activation': self.activation.__class__.__name__.lower(),
-            'learning_rate': self.learning_rate,
-            'epochs': self.epochs,
-            'batch_size': self.batch_size,
-            'regularization': self.regularization,
-            'lambda_reg': self.lambda_reg,
-            'shared_weights': self.shared_weights,
-            'device': str(self.device),
-        }
-        return params
-    
     def forward(self, x): 
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         out1 = self.activation(self.linear(x_i))
@@ -109,18 +93,6 @@ class BilinearSCM(nn.Module):
         self.criterion = BilinearLoss(regularization=regularization, lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate)
         self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=20, verbose=True)
-
-    def get_params(self):
-        params = {
-            'input_dim': self.bilinear.in1_features,  # same as in2_features
-            'learning_rate': self.learning_rate,
-            'epochs': self.epochs,
-            'batch_size': self.batch_size,
-            'regularization': self.regularization,
-            'lambda_reg': self.lambda_reg,
-            'device': str(self.device),
-        }
-        return params
     
     def forward(self, x):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)

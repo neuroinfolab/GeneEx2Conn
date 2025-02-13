@@ -1,5 +1,3 @@
-# GeneEx2Conn/models/shared_encoder_model.py
-
 from env.imports import *
 from data.data_utils import create_data_loader
 from models.train_val import train_model
@@ -176,27 +174,6 @@ class SharedSelfAttentionModel(nn.Module):
         output = self.output_layer(deep_output)
         # print('output shape', output.shape)
         return output.squeeze()
-
-    def get_params(self):
-        """Get parameters for saving and model tuning."""
-        params = {
-            'input_dim': self.input_dim,
-            'token_encoder_dim': self.token_encoder_dim,
-            'd_model': self.d_model,
-            'encoder_output_dim': self.encoder_output_dim,
-            'use_positional_encoding': self.use_positional_encoding,
-            'nhead': self.nhead,
-            'num_layers': self.num_layers,
-            'deep_hidden_dims': self.deep_hidden_dims,
-            'transformer_dropout': self.transformer_dropout,
-            'dropout_rate': self.dropout_rate,
-            'learning_rate': self.learning_rate,
-            'weight_decay': self.weight_decay,
-            'lambda_reg': self.lambda_reg,
-            'batch_size': self.batch_size,
-            'epochs': self.epochs
-        }
-        return params
 
     def predict(self, X):
         """Make predictions in memory-efficient batches."""
@@ -377,23 +354,6 @@ class SharedMLPEncoderModel(nn.Module):
         
         return output.squeeze()
 
-    def get_params(self): # for local model saving
-        params = {
-            'input_dim': self.input_dim,  # multiply by 2 since input is split
-            'encoder_hidden_dim': self.encoder_hidden_dim,
-            'encoder_output_dim': self.encoder_output_dim,  # Use last layer for output dim
-            'use_bilinear': self.use_bilinear,
-            'deep_hidden_dims': self.deep_hidden_dims if not self.use_bilinear else None,
-            'dropout_rate': self.dropout_rate if not self.use_bilinear else 0.0,
-            'learning_rate': self.learning_rate,
-            'weight_decay': self.weight_decay,
-            'lambda_reg': self.lambda_reg,
-            'batch_size': self.batch_size,
-            'epochs': self.epochs,
-            'device': str(self.device)  # Convert device to string for serialization
-        }
-        return params
-
     def predict(self, X):
         self.eval()
         X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
@@ -489,21 +449,6 @@ class SharedLinearEncoderModel(nn.Module):
         
         return output.squeeze()
 
-    def get_params(self): # for local model saving
-        params = {
-            'input_dim': self.input_dim,  # multiply by 2 since input is split
-            'encoder_output_dim': self.encoder_output_dim,  # Use last layer for output dim
-            'deep_hidden_dims': self.deep_hidden_dims,
-            'dropout_rate': self.dropout_rate, 
-            'learning_rate': self.learning_rate,
-            'weight_decay': self.weight_decay,
-            'regularization': self.regularization,
-            'lambda_reg': self.lambda_reg,
-            'batch_size': self.batch_size,
-            'epochs': self.epochs,
-            'device': str(self.device)  # Convert device to string for serialization
-        }
-        return params
 
     def predict(self, X):
         self.eval()
