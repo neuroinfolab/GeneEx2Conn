@@ -2,9 +2,8 @@
 This repository contains code for predicting human brain connectivity (_the connectome_) from regional gene expression (_the transcriptome_). 
 
 ## Description
-At a high-level, the connectome prediction problem is a small-network link prediction problem. The nodes of the network (brain regions) come from a high-dimensional feature space; $O(n^4)$ gene expression measures per region. The goal of our models is to predict edge connectivity strength between any pair of regions across the brain based solely on their node-wise features. This repo implements several architectures for solving the connectome prediction problem, with emphasis on encoder-based models that capture intra and inter-region genetic interactions.
+At a high-level, the connectome prediction problem is a small-network link prediction problem. The nodes of the network (brain regions) come from a high-dimensional feature space; $O(n^4)$ gene expression measures per region. The goal is to predict edge connectivity strength between any pair of regions across the brain based solely on their node-wise features. This repo implements several architectures for solving the connectome prediction problem, with emphasis on encoder-based models that capture intra and inter-region genetic interactions.
 
-## Sim
 <div style="display: flex; justify-content: center;">
   <table>
     <tr>
@@ -18,46 +17,39 @@ At a high-level, the connectome prediction problem is a small-network link predi
   </table>
 </div>
 
+## Running a sim
+The core functionality of `GeneEx2Conn` is the sim class. The sim class enables users to run detailed experiments targetting a variety of neuroscientific hypothesis. For example, a user could setup an experiment to evaluate how well linear vs non-linear models can predict links in different subnetwork in the left-hemisphere of the brain. See 'sim/sim_run.py' for details on all possible options. 
+
+Here's an example of how to run a sim:
 ```
 single_sim_run(
               cv_type='spatial',
               random_seed=42,
               model_type='shared_transformer',
-              feature_type=[{'transcriptome': None}],
-              connectome_target='SC',
               use_gpu=True,
+              feature_type=[{'transcriptome': None}], 
+              connectome_target='SC',
               omit_subcortical=False,
-              parcellation='S100',
+              parcellation='S400', 
               gene_list='0.2',
-              hemisphere='both',
+              hemisphere='left',
               search_method=('wandb', 'mse', 3),
               track_wandb=True,
               skip_cv=False
               )
 ```
 
+## Repo Overview
 
-## Repo overview 
-- ``` /sim ```
-- /data
-    - data loading and processing
-    - data expansion functions for the transcriptome and connectome
-    - custom train-test split classes (random, community, anatomical subnetworks)
-- /models
-    - base model class with parameter grids and distributions for hyperparameter search
-    - dynamic MLP class and sweep configs
-    - /metrics
-        - classes and functions for evaluating the accuracy of connectome predictions 
-- /harmonize
-    - classes and functions for loading and harmonizing gene expression datasets
-    - transcriptome_harmonization_EDA.ipynb demos harmonizer utilities
-- /notebooks
-    - notebooks demonstrating repo functionality. need to be moved to the root directory to run 
-    - data_demo shows how to load and split the data
-    - plot_demo shows the plotting modalities for outputted simulations
-    - sim_demo shows how to run single and multi sims
-    - finetune_demo shows single sim runs with specified parameter grids
-
+- **`/sim`** → Simulation class, cross-validation logic, wandb tracking  
+- **`/data`** → Data loading, preprocessing, custom train-test splits
+- **`/glass`** → Select visualizations  
+- **`/models`** → ML & DL models, hyperparameter tuning, training pipeline  
+- **`/models/metrics`** → Evaluation functions for connectome predictions 
+- **`/notebooks`** → Experiment notebooks _(move to root to run)_  
+  - **`/demos`** → Pulling data, cross-validation logic, visualization, simulation demos  
+  - Organized folders for **presentations & deadlines**
+ 
 
 ## Setting up Jupyter notebook on NYU HPC (Greene)
 
@@ -87,7 +79,7 @@ singularity exec $nv \
 This tells your Jupyter notebook to load its environment from this Singularity image. Now, when you launch your Jupyter notebook from the [OnDemand interface](https://sites.google.com/nyu.edu/nyu-hpc/hpc-systems/greene/getting-started?authuser=0#h.n3n5bitemm3g) you can select the kernel that you just defined. 
 
 ## Developer notes
-- If doing any substantial development with the repo, the assumption is that there is a '/GeneEx2Conn_data' folder one directory up from where the repo is setup. If you don't have access to this folder or if there are issues in pulling data from here, reach out to asr655 for access to this folder.
+- If doing any substantial development with the repo, the assumption is that there is a `/GeneEx2Conn_data` folder one directory up from where the repo is setup. If you don't have access to this folder or if there are issues in pulling data from here, reach out to asr655 for access to this folder.
 - To use this repo outside of NYU HPC Greene, setup a conda environment using `GeneEx2Conn_env_combined.yml` from 'env' directory. If there are missing packages delete and recreate the environment with `GeneEx2Conn_env_all.yml`. Then setup ENIGMA below. If necessary, manually install the latest version of torch for deep learning functionality, `pip3 install torch torchvision torchaudio`.
 - A few extra steps may be required to get `enigmatoolbox` working:
     - Manually install enigma: `git clone https://github.com/MICA-MNI/ENIGMA.git; cd ENIGMA; python setup.py install`
