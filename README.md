@@ -5,9 +5,26 @@ This repository contains code for predicting human brain connectivity (_the conn
 At a high-level, the connectome prediction problem is a small-network link prediction problem. The nodes of the network (brain regions) come from a high-dimensional feature space; $O(n^4)$ gene expression measures per region. The goal of our models is to predict edge connectivity strength between any pair of regions across the brain based solely on their node-wise features. This repo implements several architectures for solving the connectome prediction problem, with emphasis on encoder-based models that capture intra and inter-region genetic interactions.
 
 ## Example sim
-- Insert code for the sim
-- Insert gif of 5 fold spatial split. 
-- Insert visual of performance acc for bilinear lowrank vs transformer on single spatial fold. 
+![tnn](https://github.com/neuroinfolab/GeneEx2Conn/glass/cv_split_s400 structural connectivity spatial split_10.gif)
+
+```
+single_sim_run(
+              cv_type='spatial',
+              random_seed=42,
+              model_type='shared_transformer',
+              feature_type=[{'transcriptome': None}],
+              connectome_target='SC',
+              use_gpu=True,
+              omit_subcortical=False,
+              parcellation='S100',
+              gene_list='0.2',
+              hemisphere='both',
+              search_method=('wandb', 'mse', 3),
+              track_wandb=True,
+              skip_cv=False
+              )
+```
+
 
 ## Repo overview 
 - ``` /sim ```
@@ -30,24 +47,6 @@ At a high-level, the connectome prediction problem is a small-network link predi
     - sim_demo shows how to run single and multi sims
     - finetune_demo shows single sim runs with specified parameter grids
 
-## Example sim run
-```
-single_sim_run(
-              cv_type='random',
-              random_seed=42,
-              model_type='shared_transformer',
-              feature_type=[{'transcriptome': None}],
-              connectome_target='FC',
-              use_gpu=True,
-              omit_subcortical=False,
-              parcellation='S100',
-              gene_list='0.2',
-              hemisphere='both',
-              search_method=('wandb', 'mse', 3),
-              track_wandb=True,
-              skip_cv=False
-              )
-```
 
 ## Setting up Jupyter notebook on NYU HPC (Greene)
 
