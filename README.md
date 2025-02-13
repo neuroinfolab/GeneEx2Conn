@@ -5,15 +5,19 @@ This repository contains code for predicting human brain connectivity (_the conn
 At a high-level, the connectome prediction problem is a small-network link prediction problem. The nodes of the network (brain regions) come from a high-dimensional feature space; $O(n^4)$ gene expression measures per region. The goal of our models is to predict edge connectivity strength between any pair of regions across the brain based solely on their node-wise features. This repo implements several architectures for solving the connectome prediction problem, with emphasis on encoder-based models that capture intra and inter-region genetic interactions.
 
 ## Sim
-<div style="display: flex; justify-content: center; width: 100%;">
-  <table style="width: 100%; text-align: center;">
+<<div style="display: flex; justify-content: center; width: 100%;">
+  <table style="width: 100%; border-collapse: collapse; padding: 0; margin: 0;">
     <tr>
-      <td style="width: 50%;"><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/S400_LAMA1_expression.png" height="350" style="max-width: 100%;"></td>
-      <td style="width: 50%;"><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/cv_split_s400_structural_connectivity_spatial_split_10-2.gif" height="325" style="max-width: 100%;"></td>
+      <td style="width: 50%; padding: 0; margin: 0;">
+        <img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/S400_LAMA1_expression.png" height="350" style="display: block; width: 100%; max-height: 350px; object-fit: cover; padding: 0; margin: 0;">
+      </td>
+      <td style="width: 50%; padding: 0; margin: 0;">
+        <img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/cv_split_s400_structural_connectivity_spatial_split_10-2.gif" height="350" style="display: block; width: 100%; max-height: 350px; object-fit: cover; padding: 0; margin: 0;">
+      </td>
     </tr>
     <tr>
-      <td align="center"><strong>Normalized expression of LAMA1 across brain</strong></td>
-      <td align="center"><strong>10-fold spatial split visualization</strong></td>
+      <td align="center" style="padding: 5px; margin: 0;"><strong>Normalized expression of LAMA1 across brain</strong></td>
+      <td align="center" style="padding: 5px; margin: 0;"><strong>10-fold spatial split visualization</strong></td>
     </tr>
   </table>
 </div>
