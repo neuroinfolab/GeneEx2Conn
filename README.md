@@ -18,7 +18,7 @@ At a high-level, the connectome prediction problem is a small-network link predi
 </div>
 
 ## Running a sim
-The core functionality of `GeneEx2Conn` is the sim class. The sim class enables users to run detailed experiments targetting a variety of neuroscientific hypothesis. For example, a user could setup an experiment to evaluate how well linear vs non-linear models can predict links in different subnetwork in the left-hemisphere of the brain. See 'sim/sim_run.py' for details on all possible options. 
+The core functionality of `GeneEx2Conn` is the sim class. The sim class enables users to run detailed experiments targetting a variety of neuroscientific hypothesis. For example, a user could setup an experiment to evaluate how well linear vs non-linear models can predict connectivity in different subnetworks of the left-hemisphere. See `sim/sim_run.py` for details on all possible options. 
 
 Here's an example of how to run a sim:
 ```
