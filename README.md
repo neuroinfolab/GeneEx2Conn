@@ -4,8 +4,11 @@ This repository contains code for predicting human brain connectivity (_the conn
 ## Description
 At a high-level, the connectome prediction problem is a small-network link prediction problem. The nodes of the network (brain regions) come from a high-dimensional feature space; $O(n^4)$ gene expression measures per region. The goal of our models is to predict edge connectivity strength between any pair of regions across the brain based solely on their node-wise features. This repo implements several architectures for solving the connectome prediction problem, with emphasis on encoder-based models that capture intra and inter-region genetic interactions.
 
-## Example sim
-![tnn](https://github.com/neuroinfolab/GeneEx2Conn/glass/cv_split_s400 structural connectivity spatial split_10.gif)
+## Sim
+| ![LAMA1 Expression](https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/S400_LAMA1_expression.png) | ![CV Split GIF](https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/cv_split_s400_structural_connectivity_spatial_split_10.gif) |
+|:--:|:--:|
+| **Normalized expression of LAMA1 across brain (Schaefer 400 Parcellation)** | **10-fold Spatial Split Visualization (S400)** |
+
 
 ```
 single_sim_run(
