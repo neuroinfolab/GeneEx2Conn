@@ -8,8 +8,8 @@ At a high-level, the connectome prediction problem is a small-network link predi
 <div style="display: flex; justify-content: center;">
   <table>
     <tr>
-      <td><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/S400_LAMA1_expression.png" height="450"></td>
-      <td><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/cv_split_s400_structural_connectivity_spatial_split_10-2.gif" height="400"></td>
+      <td><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/S400_LAMA1_expression.png" height="250"></td>
+      <td><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/glass/cv_split_s400_structural_connectivity_spatial_split_10-2.gif" height="300"></td>
     </tr>
     <tr>
       <td align="center"><strong>Normalized expression of LAMA1 across brain</strong></td>
