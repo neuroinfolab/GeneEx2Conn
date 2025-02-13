@@ -3,6 +3,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.lines import Line2D
 from ipywidgets import interact
 import ipywidgets as widgets
+import imageio
 
 
 def get_gene_expression_colors(X, valid_genes=None, gene_name=None):
@@ -202,13 +203,13 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
                                     s=50, edgecolor='gray', linewidth=0.5)
         
         # Increase font sizes for axes labels
-        ax.set_xlabel('X (Coronal)', fontsize=16, labelpad=5)
-        ax.set_ylabel('Y (Sagittal)', fontsize=16, labelpad=5)
-        ax.set_zlabel('Z (Axial)', fontsize=16, labelpad=5)
+        ax.set_xlabel('X (Lateral)', fontsize=20, labelpad=5)
+        ax.set_ylabel('Y (Posterior-Anterior)', fontsize=20, labelpad=5)
+        ax.set_zlabel('Z (Dorsal-Ventral)', fontsize=20, labelpad=5)
         
         # Increase title font size substantially
         plt.suptitle(f'Fold {fold_idx}, {title_prefix} Visualization', 
-                    fontsize=18, y=0.1)
+                    fontsize=24, y=0.1)
         
         # Increase tick label font size
         ax.tick_params(axis='both', which='major', labelsize=12)
@@ -230,8 +231,8 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
         
         # Adjust legend font size and position
         ax.legend(legend_elements, legend_labels, 
-                 fontsize=16, loc='upper right',
-                 bbox_to_anchor=(0.95, 0.85))  # Move legend closer to plot
+                 fontsize=18, loc='upper right',
+                 bbox_to_anchor=(0.97, 0.85))  # Move legend closer to plot
         
         # Style adjustments
         ax.view_init(elev=20, azim=45)
@@ -251,13 +252,12 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
             plt.close()
         else:
             plt.show()
-    
+
     if save_gif and figures:  # Only try to save if we have figures
         # Create the glass directory if it doesn't exist
         os.makedirs('glass', exist_ok=True)
         # Save as GIF
-        import imageio
-        imageio.mimsave(f"glass/{gif_path}", figures, fps=0.75)
+        imageio.mimsave(f"glass/{gif_path}", figures, fps=1)
         print(f"GIF saved to glass/{gif_path}")
 
 def visualize_3d(X, Y, coords, edge_threshold=0.5, valid_genes=None, gene_name=None):
@@ -331,8 +331,8 @@ def visualize_3d(X, Y, coords, edge_threshold=0.5, valid_genes=None, gene_name=N
         
         # Add colorbar for gene expression - smaller size
         cbar = plt.colorbar(scatter, shrink=0.4)  # Add shrink parameter
-        cbar.set_label(f'{gene_used} Expression', fontsize=16)
-        cbar.ax.tick_params(labelsize=16)
+        cbar.set_label(f'{gene_used} Expression', fontsize=20)
+        cbar.ax.tick_params(labelsize=18)
     else:
         # Default solid blue coloring if no gene expression
         scatter = ax.scatter(coords[:, 0], 
@@ -345,9 +345,9 @@ def visualize_3d(X, Y, coords, edge_threshold=0.5, valid_genes=None, gene_name=N
                            linewidth=0.5)
     
     # Add labels and title with increased font sizes
-    ax.set_xlabel('X (Coronal)', fontsize=16, labelpad=5)
-    ax.set_ylabel('Y (Sagittal)', fontsize=16, labelpad=5)
-    ax.set_zlabel('Z (Axial)', fontsize=16, labelpad=5)
+    ax.set_xlabel('X (Coronal)', fontsize=20, labelpad=5)
+    ax.set_ylabel('Y (Sagittal)', fontsize=20, labelpad=5)
+    ax.set_zlabel('Z (Axial)', fontsize=20, labelpad=5)
     
     # Move title to bottom of plot with increased size
     # ax.set_title(title, fontsize=18, pad=0, y=0.05)
