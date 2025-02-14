@@ -1,0 +1,72 @@
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+# SMALL GRID - UPDATE
+parameters: 
+  input_dim:
+    value: !!int 0
+  token_encoder_dim:
+    values: [20, 40]
+  d_model:
+    values: [64, 128, 256]
+  encoder_output_dim:
+    values: [10, 20]
+  use_positional_encoding:
+    values: [False]
+  nhead:
+    values: [2, 4] 
+  num_layers:
+    values: [2, 4]
+  deep_hidden_dims:
+    values:
+    - [512, 256]
+  transformer_dropout:
+    values: [0.1, 0.2]
+  dropout_rate:
+    values: [0.1, 0.2]
+  learning_rate:
+    values: [0.00009, 0.00001, .0001]
+  weight_decay:
+    values: [0, 0.0001]
+  lambda_reg:
+    values: [0]
+  batch_size:
+    values: [128]
+  epochs:
+    values: [75, 100, 125]
+
+# BEST PARAMS EUCLID
+best_parameters:
+  input_dim:
+    value: !!int 0
+  token_encoder_dim:
+    values: [40]
+  d_model:
+    values: [64] # curr best 64
+  use_positional_encoding:
+    values: [False]
+  encoder_output_dim:
+    values: [10] # no difference for coords
+  nhead:
+    values: [4] 
+  num_layers:
+    values: [4]
+  deep_hidden_dims:
+    values:
+    - [512, 256]
+  transformer_dropout:
+    values: [0.3]
+  dropout_rate:
+    values: [0.3]
+  learning_rate:
+    values: [0.0001]
+  weight_decay:
+    values: [0.0001]
+  lambda_reg:
+    values: [0]
+  batch_size:
+    values: [128]
+  epochs:
+    values: [200]

@@ -38,7 +38,8 @@ def print_system_usage():
     print(f"Available RAM: {bytes2human(memory_info.available)}")
     print(f"Total RAM: {bytes2human(memory_info.total)}")
 
-
+# suspend function until code is more final
+'''
 def validate_inputs(
     features: list = None,
     feature_dict: dict = None,
@@ -104,9 +105,10 @@ def validate_inputs(
         valid_targets = {'FC', 'SC'}
         if connectome_target.upper() not in valid_targets:
             raise ValueError(f"Invalid connectome target: {connectome_target}. Must be one of {valid_targets}")
+'''
 
 
-def load_sweep_config(file_path, input_dim, include_coords=None):
+def load_sweep_config(file_path, input_dim):
     """
     Load a sweep config file and update the input_dim parameter.
     """
@@ -114,10 +116,6 @@ def load_sweep_config(file_path, input_dim, include_coords=None):
         config = yaml.safe_load(file)
     
     config['parameters']['input_dim']['value'] = input_dim
-
-    ### Need to update this include coords logic
-    if include_coords:
-        config['parameters']['include_coords']['value'] = True
     
     return config
 
@@ -133,18 +131,7 @@ def load_best_parameters(yaml_file_path, input_dim, include_coords=None):
     best_config = {key: value['values'][0] if isinstance(value, dict) and 'values' in value else value
                    for key, value in best_parameters.items()}
     
-    # override dynamic vars
-    best_config['input_dim'] = input_dim
-
-    if include_coords is True:
-        best_config = None
-        best_parameters = config.get('best_parameters_euclid', {})
-        best_config = {key: value['values'][0] if isinstance(value, dict) and 'values' in value else value
-                   for key, value in best_parameters.items()}
-        best_config['input_dim'] = input_dim
-        print('include_coords', include_coords)
-    elif include_coords is False:
-        best_config['include_coords'] = include_coords
+    best_config['input_dim'] = input_dim    
     
     return best_config
 

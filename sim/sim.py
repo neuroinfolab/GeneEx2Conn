@@ -19,14 +19,16 @@ from data.data_utils import (
 from models.base_models import ModelBuild
 from models.dynamic_mlp import DynamicMLP
 from models.bilinear import BilinearLowRank, BilinearSCM
-from models.shared_encoder_model import SharedMLPEncoderModel, SharedSelfAttentionModel, SharedLinearEncoderModel
+from models.shared_encoder_model import SharedMLPEncoderModel, SharedLinearEncoderModel
+from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionCLSModel
 MODEL_CLASSES = {
     'dynamic_mlp': DynamicMLP,
     'bilinear_lowrank': BilinearLowRank,
     'bilinear_SCM': BilinearSCM,
     'shared_mlp_encoder': SharedMLPEncoderModel,
     'shared_linear_encoder': SharedLinearEncoderModel,
-    'shared_transformer': SharedSelfAttentionModel
+    'shared_transformer': SharedSelfAttentionModel,
+    'shared_transformer_cls': SharedSelfAttentionCLSModel
 }
 
 from models.metrics.eval import (
@@ -36,7 +38,7 @@ from models.metrics.eval import (
 from sim.sim_utils import (
     bytes2human, 
     print_system_usage, 
-    validate_inputs, 
+    # validate_inputs, 
     extract_model_params
 )
 
@@ -64,12 +66,14 @@ class Simulation:
         """
         Initialization of simulation parameters
         """
+        
+        '''
         validate_inputs(
             cv_type=cv_type,
             model_type=model_type,
             connectome_target=connectome_target
         )
-        
+        '''
         # consider storing in a config
         self.cv_type = cv_type
         self.model_type = model_type
@@ -163,7 +167,7 @@ class Simulation:
                         'transcriptome_spatial_autocorr_null': np.hstack((self.coords, self.Y_sc, self.X_pca, self.X)), # cannot be combined with other feats
                         }
         
-        validate_inputs(features=features, feature_dict=feature_dict)
+        # validate_inputs(features=features, feature_dict=feature_dict)
         self.features = features 
         print('features', self.features)
 
@@ -212,21 +216,16 @@ class Simulation:
             self.X, self.Y, inner_cv_obj,
             self.use_shared_regions,
             self.test_shared_regions)
+            
+        device = torch.device("cuda")
         
         # Load sweep config
         sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-        if self.model_type == 'shared_transformer':
-            sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, include_coords='euclidean' in self.features)
-        else:
-            sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim)
-
-        device = torch.device("cuda")
-
+        sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim)
+        
         if self.skip_cv: 
-            if self.model_type == 'shared_transformer':
-                best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, include_coords='euclidean' in self.features)
-            else:
-                best_config = load_best_parameters(sweep_config_path, input_dim=input_dim)
+            best_config = load_best_parameters(sweep_config_path, input_dim=input_dim)
+            best_val_loss = 0.0 # no CV --> no best val loss
         else:
             def train_sweep_wrapper(config=None):
                 return train_sweep(
@@ -237,7 +236,7 @@ class Simulation:
                     cv_type=self.cv_type,
                     outer_fold_idx=outer_fold_idx,
                     inner_fold_splits=inner_fold_splits,
-                    device=device,
+                    device = device,
                     sweep_id=sweep_id,
                     model_classes=MODEL_CLASSES,
                     parcellation=self.parcellation, 
@@ -248,8 +247,10 @@ class Simulation:
                 )
             
             # Initialize sweep
-            sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
-            #sweep_id = f"{self.model_type}_{sweep_id}" #  # figure out how to tag with {self.model_type}
+            # sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
+            sweep_id = f"{self.model_type}_{sweep_id}" #  # figure out how to tag with {self.model_type}
+            print('sweep_id', sweep_id)
+
             # Run sweep
             wandb.agent(sweep_id, function=train_sweep_wrapper, count=search_method[2])
 
@@ -267,7 +268,6 @@ class Simulation:
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]
         best_model = ModelClass(**best_config).to(device)
-        best_val_loss = 0.0
             
         return best_model, best_val_loss
 
@@ -358,7 +358,7 @@ class Simulation:
             print("\nTRAIN METRICS:", train_metrics)
             print("TEST METRICS:", test_metrics)
             print('BEST VAL SCORE', best_val_score)
-            print('BEST MODEL PARAMS', if hasattr(best_model, 'get_params') else extract_model_params(best_model))
+            print('BEST MODEL HYPERPARAMS', best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model))
 
             # Log final evaluation metrics
             if track_wandb:
@@ -387,7 +387,7 @@ class Simulation:
 
             # Save results to pickle file - consider removing this
             self.results.append({
-                'model_parameters': if hasattr(best_model, 'get_params') else extract_model_params(best_model),
+                'model_parameters': best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model),
                 'train_metrics': train_metrics,
                 'best_val_score': best_val_score,
                 'test_metrics': test_metrics,
