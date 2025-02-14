@@ -138,7 +138,7 @@ class SharedSelfAttentionModel(nn.Module):
 
 
 class SelfAttentionCLSEncoder(nn.Module):
-    def __init__(self, input_dim, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False, include_coords=False):
+    def __init__(self, input_dim, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False):
         super(SelfAttentionCLSEncoder, self).__init__()
         
         self.token_encoder_dim = token_encoder_dim

@@ -13,13 +13,14 @@ from data.cv_split import (
 from data.data_utils import (
     process_cv_splits, 
     process_cv_splits_coords, 
-    expanded_inner_folds_combined_plus_indices
+    expanded_inner_folds_combined_plus_indices, 
+    set_seed
 )
 
 from models.base_models import ModelBuild
 from models.dynamic_mlp import DynamicMLP
 from models.bilinear import BilinearLowRank, BilinearSCM
-from models.shared_encoder_model import SharedMLPEncoderModel, SharedLinearEncoderModel
+from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
 from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionCLSModel
 MODEL_CLASSES = {
     'dynamic_mlp': DynamicMLP,
@@ -216,7 +217,7 @@ class Simulation:
             self.X, self.Y, inner_cv_obj,
             self.use_shared_regions,
             self.test_shared_regions)
-            
+
         device = torch.device("cuda")
         
         # Load sweep config
@@ -321,6 +322,7 @@ class Simulation:
         """
         Main simulation method
         """
+        set_seed(self.random_seed)
         self.load_data()
         self.select_cv()
         self.expand_data()

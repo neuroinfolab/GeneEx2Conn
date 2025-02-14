@@ -6,11 +6,13 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, s
 
     for epoch in range(epochs):
         train_metrics = train_epoch(model, train_loader, optimizer, criterion, device)
+
         train_history["train_loss"].append(train_metrics["loss"])
         train_history["train_pearson"].append(train_metrics["pearson"])
         
         if val_loader:
             val_metrics = evaluate(model, val_loader, criterion, device, scheduler)
+
             train_history["val_loss"].append(val_metrics["loss"])
             train_history["val_pearson"].append(val_metrics["pearson"])
             
@@ -71,8 +73,14 @@ def evaluate(model, val_loader, criterion, device, scheduler=None):
     mean_val_loss = total_val_loss / len(val_loader)
     mean_val_pearson = np.mean(val_pearson_values)
 
-    if scheduler is not None: # NEED TO GET THIS TO WORK 
-       scheduler.step(mean_val_loss)
+    if scheduler is not None:
+        prev_lr = scheduler.optimizer.param_groups[0]['lr']
+       
+        scheduler.step(mean_val_loss)
+        new_lr = scheduler.optimizer.param_groups[0]['lr']
+        
+        if new_lr < prev_lr:
+            print(f"\nLR REDUCED: {prev_lr:.6f} → {new_lr:.6f} at Val Loss: {mean_val_loss:.6f}")
 
     return {
         "loss": mean_val_loss,

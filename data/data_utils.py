@@ -4,7 +4,16 @@ def create_data_loader(X, y, batch_size, device, shuffle=True):
     X = torch.FloatTensor(X).to(device)
     y = torch.FloatTensor(y).to(device)
     dataset = TensorDataset(X, y)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0) 
+
+def set_seed(seed=42):
+    """Set seeds for reproducibility."""
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # For multi-GPU
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True  # Forces deterministic behavior
+    torch.backends.cudnn.benchmark = False     # Disables auto-tuning (non-deterministic)
 
 def reconstruct_connectome(Y, symmetric=True):
     """

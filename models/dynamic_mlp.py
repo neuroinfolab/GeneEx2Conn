@@ -6,7 +6,6 @@ from models.train_val import train_model
 class DynamicMLP(nn.Module):
     def __init__(self, input_dim, hidden_dims=[256, 128], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0, batch_size=64, epochs=100):
         super().__init__()
-        
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.batch_size = batch_size
@@ -35,8 +34,19 @@ class DynamicMLP(nn.Module):
         
         self.criterion = nn.HuberLoss(delta=0.1) # this can be tuned to nn.MSELoss() or other
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
-        self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=20, verbose=True)
-    
+
+        # Aggressive scheduler with quicker LR reduction
+        self.scheduler = ReduceLROnPlateau(
+            self.optimizer, 
+            mode='min', 
+            factor=0.3,  # Reduce LR by 70%
+            patience=3,  # Reduce LR after 3 epochs of no improvement
+            threshold=0.0005,  # Smaller threshold to detect stagnation
+            cooldown=1,  # Reduce cooldown period
+            min_lr=1e-6,  # Prevent LR from going too low
+            verbose=True
+        )
+
     def forward(self, x):
         return self.model(x).squeeze()
 
