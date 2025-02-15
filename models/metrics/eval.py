@@ -1,9 +1,8 @@
-# Gene2Conn/models/metrics/eval.py
-
 from env.imports import *
 from data.data_utils import reconstruct_connectome
 import models.metrics.distance_FC
 from models.metrics.distance_FC import *
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 
 
 # Evaluation funcs that preserve connectome properties 
@@ -79,21 +78,30 @@ def r2_cupy(y_true, y_pred):
 
 
 class Metrics:
-    def __init__(self, Y_true, Y_pred, square=False):
+    def __init__(self, Y_true, Y_pred, square=False, binarize=False):
         # convert cupy arrays to numpy arrays if necessary
         self.Y_true = getattr(Y_true, 'get', lambda: Y_true)()
         self.Y_pred = getattr(Y_pred, 'get', lambda: Y_pred)()    
         self.Y_true_flat = self.Y_true.flatten()
         self.Y_pred_flat = self.Y_pred.flatten()
         self.square = square
+        self.binarize = binarize
         self.compute_metrics()
 
     def compute_metrics(self):
-        # Compute standard metrics on flattened data
-        self.mse = mean_squared_error(self.Y_true_flat, self.Y_pred_flat)
-        self.mae = mean_absolute_error(self.Y_true_flat, self.Y_pred_flat)
-        self.r2 = r2_score(self.Y_true_flat, self.Y_pred_flat)
-        self.pearson_corr = pearsonr(self.Y_true_flat, self.Y_pred_flat)[0]
+        if self.binarize:
+            # Compute classification metrics
+            self.accuracy = accuracy_score(self.Y_true_flat, self.Y_pred_flat)
+            self.precision = precision_score(self.Y_true_flat, self.Y_pred_flat)
+            self.recall = recall_score(self.Y_true_flat, self.Y_pred_flat)
+            self.f1 = f1_score(self.Y_true_flat, self.Y_pred_flat)
+            self.auc_roc = roc_auc_score(self.Y_true_flat, self.Y_pred_flat)
+        else:
+            # Compute regression metrics
+            self.mse = mean_squared_error(self.Y_true_flat, self.Y_pred_flat)
+            self.mae = mean_absolute_error(self.Y_true_flat, self.Y_pred_flat)
+            self.r2 = r2_score(self.Y_true_flat, self.Y_pred_flat)
+            self.pearson_corr = pearsonr(self.Y_true_flat, self.Y_pred_flat)[0]
 
         # Compute geodesic distance if data is square (connectome)
         if self.square:
@@ -105,22 +113,17 @@ class Metrics:
             # Visualize true and predicted connectomes
             plt.figure(figsize=(16, 4))
 
-            plt.subplot(141)
+            plt.subplot(131)
             plt.imshow(Y_true_connectome, cmap='viridis', vmin=Y_true_connectome.min(), vmax=Y_true_connectome.max())
             plt.colorbar(shrink=0.5)
             plt.title('True Connectome')
             
-            plt.subplot(142) 
+            plt.subplot(132) 
             plt.imshow(Y_pred_connectome_asymmetric, cmap='viridis', vmin=Y_true_connectome.min(), vmax=Y_true_connectome.max())
             plt.colorbar(shrink=0.5)
-            plt.title('Predicted Connectome (asymmetric)')
+            plt.title('Predicted Connectome (non-symmetrized)')
 
-            plt.subplot(143) 
-            plt.imshow(Y_pred_connectome, cmap='viridis', vmin=Y_true_connectome.min(), vmax=Y_true_connectome.max())
-            plt.colorbar(shrink=0.5)
-            plt.title('Predicted Connectome (symmetric)')
-            
-            plt.subplot(144)
+            plt.subplot(133)
             plt.imshow(abs(Y_true_connectome - Y_pred_connectome), cmap='RdYlGn_r')
             plt.colorbar(shrink=0.5)
             plt.title('Prediction Difference')
@@ -129,14 +132,25 @@ class Metrics:
             plt.show()
     
     def get_metrics(self):
-        metrics = {
-            'mse': self.mse,
-            'mae': self.mae,
-            'r2': self.r2,
-            'pearson_corr': self.pearson_corr
-        }
+        if self.binarize:
+            metrics = {
+                'accuracy': self.accuracy,
+                'precision': self.precision,
+                'recall': self.recall,
+                'f1': self.f1,
+                'auc_roc': self.auc_roc
+            }
+        else:
+            metrics = {
+                'mse': self.mse,
+                'mae': self.mae,
+                'r2': self.r2,
+                'pearson_corr': self.pearson_corr
+            }
+
         if self.square:
             metrics['geodesic_distance'] = self.geodesic_distance
+
         return metrics
 
 
@@ -150,12 +164,14 @@ class ModelEvaluator:
         
         self.train_shared_regions = train_shared_regions
         self.test_shared_regions = test_shared_regions
+        self.binarize = len(np.unique(Y_train)) == 2 and len(np.unique(Y_test)) == 2
+        
         self.train_metrics = self.evaluate(self.X_train, self.Y_train, not self.train_shared_regions)
         self.test_metrics = self.evaluate(self.X_test, self.Y_test, not self.test_shared_regions)
 
     def evaluate(self, X, Y, square):
         Y_pred = self.model.predict(X) # this outputs a np array
-        return Metrics(Y, Y_pred, square).get_metrics()
+        return Metrics(Y, Y_pred, square, self.binarize).get_metrics()
 
     def get_train_metrics(self):
         return self.train_metrics

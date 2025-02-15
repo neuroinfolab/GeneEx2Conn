@@ -141,7 +141,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
     raise ValueError(f"Unknown dataset: {dataset}")
     '''
 
-def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', measure='FC', spectral=None, hemisphere='both', include_labels=False, diag=0):
+def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', measure='FC', spectral=None, hemisphere='both', include_labels=False, diag=0, binarize=False):
     """
     Load and process connectome data with optional spectral decomposition.
     
@@ -177,6 +177,11 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
             matrix = matrix + np.eye(matrix.shape[0])
         elif diag == 0:
             np.fill_diagonal(matrix, 0)
+
+        if binarize:
+            threshold = 0.01 if measure == 'SC' else 0.3 # 0.3 is an empirical hyperparameter for FC 
+            matrix = (matrix >= threshold).astype(int)
+            print(f'Number of 1s: {np.sum(matrix)}, Number of 0s: {np.sum(matrix==0)}, Class balance (1s): {np.mean(matrix):.3f}')
 
         # Remove subcortical if specified
         if omit_subcortical:

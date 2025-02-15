@@ -108,7 +108,7 @@ def validate_inputs(
 '''
 
 
-def load_sweep_config(file_path, input_dim):
+def load_sweep_config(file_path, input_dim, binarize):
     """
     Load a sweep config file and update the input_dim parameter.
     """
@@ -116,11 +116,12 @@ def load_sweep_config(file_path, input_dim):
         config = yaml.safe_load(file)
     
     config['parameters']['input_dim']['value'] = input_dim
-    
+    config['parameters']['binarize']['value'] = binarize
+
     return config
 
 
-def load_best_parameters(yaml_file_path, input_dim, include_coords=None):
+def load_best_parameters(yaml_file_path, input_dim, binarize):
     with open(yaml_file_path, 'r') as file:
         config = yaml.safe_load(file)
     
@@ -132,7 +133,8 @@ def load_best_parameters(yaml_file_path, input_dim, include_coords=None):
                    for key, value in best_parameters.items()}
     
     best_config['input_dim'] = input_dim    
-    
+    best_config['binarize'] = binarize
+
     return best_config
 
 def drop_test_network(cv_type, network_dict, value, idx):
@@ -341,7 +343,7 @@ def extract_model_params(model):
     return params
 
 
-def train_sweep(config, model_type, feature_type, connectome_target, cv_type, outer_fold_idx, inner_fold_splits, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed):
+def train_sweep(config, model_type, feature_type, connectome_target, cv_type, outer_fold_idx, inner_fold_splits, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize):
     """
     Training function for W&B sweeps for deep learning models.
     
@@ -368,14 +370,13 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
         project="gx2conn",
         name=run_name,
         group=f"sweep_{sweep_id}",
-        tags=["inner cross validation", f'cv_type_{cv_type}', f"fold{outer_fold_idx}", f"model_{model_type}", f"split_{cv_type}{seed}", f'feature_type_{feature_str}', f'target_{connectome_target}', f"parcellation_{parcellation}",  f"hemisphere_{hemisphere}", f"omit_subcortical_{omit_subcortical}", f"gene_list_{gene_list}"],
+        tags=["inner cross validation", f'cv_type_{cv_type}', f"fold{outer_fold_idx}", f"model_{model_type}", f"split_{cv_type}{seed}", f'feature_type_{feature_str}', f'target_{connectome_target}', f"parcellation_{parcellation}",  f"hemisphere_{hemisphere}", f"omit_subcortical_{omit_subcortical}", f"gene_list_{gene_list}", f"binarize_{binarize}"],
         reinit=True
     )
 
     sweep_config = wandb.config
     inner_fold_metrics = {
-        'train_losses': [], 'val_losses': [], 
-        'train_pearsons': [], 'val_pearsons': []
+        'train_losses': [], 'val_losses': []
     }
 
     # Get the appropriate model class
@@ -395,29 +396,22 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
         history = model.fit(X_train, y_train, X_val, y_val)
         
         # Log epoch-wise metrics
-        for epoch, metrics in enumerate(zip(history['train_loss'], history['val_loss'], 
-                                          history['train_pearson'], history['val_pearson'])):
+        for epoch, metrics in enumerate(zip(history['train_loss'], history['val_loss'])):
             wandb.log({
                 'inner_fold': fold_idx,
                 f'fold{fold_idx}_epoch': epoch,
                 f'fold{fold_idx}_train_loss': metrics[0],
-                f'fold{fold_idx}_val_loss': metrics[1],
-                f'fold{fold_idx}_train_pearson': metrics[2],
-                f'fold{fold_idx}_val_pearson': metrics[3]
+                f'fold{fold_idx}_val_loss': metrics[1]
             })
         
         # Store final metrics
         inner_fold_metrics['train_losses'].append(history['train_loss'][-1])
         inner_fold_metrics['val_losses'].append(history['val_loss'][-1])
-        inner_fold_metrics['train_pearsons'].append(history['train_pearson'][-1])
-        inner_fold_metrics['val_pearsons'].append(history['val_pearson'][-1])
 
     # Log mean metrics across folds
     mean_metrics = {
         'mean_train_loss': np.mean(inner_fold_metrics['train_losses']),
-        'mean_val_loss': np.mean(inner_fold_metrics['val_losses']),
-        'mean_train_pearson': np.mean(inner_fold_metrics['train_pearsons']),
-        'mean_val_pearson': np.mean(inner_fold_metrics['val_pearsons'])
+        'mean_val_loss': np.mean(inner_fold_metrics['val_losses'])
     }
     wandb.log(mean_metrics)
     
@@ -425,7 +419,7 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
     return mean_metrics['mean_val_loss']
 
 
-def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold_idx, train_metrics, test_metrics, best_val_score, best_model, train_history, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed):
+def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold_idx, train_metrics, test_metrics, best_val_score, best_model, train_history, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize):
     """
     Log metrics to Weights & Biases for tracking experiments.
     
@@ -451,14 +445,14 @@ def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold
     final_eval_run = wandb.init(
         project="gx2conn",
         name=run_name,
-        tags=["final_eval", f'cv_type_{cv_type}', f'outerfold_{fold_idx}',  f'model_{model_type}',  f"split_{cv_type}{seed}", f'feature_type_{feature_str}', f'target_{connectome_target}', f'parcellation_{parcellation}', f'hemisphere_{hemisphere}', f'omit_subcortical_{omit_subcortical}', f'gene_list_{gene_list}'],
+        tags=["final_eval", f'cv_type_{cv_type}', f'outerfold_{fold_idx}',  f'model_{model_type}',  f"split_{cv_type}{seed}", f'feature_type_{feature_str}', f'target_{connectome_target}', f'parcellation_{parcellation}', f'hemisphere_{hemisphere}', f'omit_subcortical_{omit_subcortical}', f'gene_list_{gene_list}', f"binarize_{binarize}"],
         reinit=True
     )
 
     if model_type in model_classes:
         wandb.watch(best_model, log='all')
-        for epoch, (train_loss, val_loss, train_pearson, val_pearson) in enumerate(zip(train_history['train_loss'], train_history['val_loss'], train_history['train_pearson'], train_history['val_pearson'])):
-            wandb.log({'train_mse_loss': train_loss, 'train_pearson': train_pearson, 'test_mse_loss': val_loss, 'test_pearson': val_pearson})
+        for epoch, (train_loss, val_loss) in enumerate(zip(train_history['train_loss'], train_history['val_loss'])):
+            wandb.log({'train_mse_loss': train_loss, 'test_mse_loss': val_loss})
 
     wandb.log({
         'final_train_metrics': train_metrics, 'final_test_metrics': test_metrics, 'best_val_loss': best_val_score, 'config': best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model)
@@ -497,6 +491,4 @@ def extract_feature_importances(model_type, best_model, save_model_json=False):
         feature_importances = best_model.coef_
         
     return feature_importances, model_json
-
-
 

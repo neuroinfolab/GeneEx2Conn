@@ -63,7 +63,7 @@ from sim.sim_utils import (
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, feature_interactions=None, resolution=1.0,random_seed=42,
                  omit_subcortical=False, parcellation='S100', gene_list='0.2', hemisphere='both',
-                 use_shared_regions=False, test_shared_regions=False, connectome_target='FC', save_model_json=False, skip_cv=False):        
+                 use_shared_regions=False, test_shared_regions=False, connectome_target='FC', binarize=False, save_model_json=False, skip_cv=False):        
         """
         Initialization of simulation parameters
         """
@@ -87,6 +87,7 @@ class Simulation:
         self.use_shared_regions = use_shared_regions
         self.test_shared_regions = test_shared_regions
         self.connectome_target = connectome_target.upper()
+        self.binarize = binarize
         self.skip_cv = skip_cv
         self.save_model_json = save_model_json
         self.results = []
@@ -99,11 +100,13 @@ class Simulation:
         self.X = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere)        
         self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA=True, hemisphere=self.hemisphere)
         self.Y_sc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None, hemisphere=self.hemisphere)
+        self.Y_sc_binary = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
         self.Y_sc_spectralL = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L', hemisphere=self.hemisphere)
         self.Y_sc_spectralA = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='A', hemisphere=self.hemisphere)
         self.Y_fc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', hemisphere=self.hemisphere)
+        self.Y_fc_binary = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', binarize=True, hemisphere=self.hemisphere)
         self.coords = load_coords(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
-
+        
         # Find rows that are not all NaN - necessary for gene expression data with unsampled regions
         valid_indices = ~np.isnan(self.X).all(axis=1)
         
@@ -111,9 +114,11 @@ class Simulation:
         self.X = self.X[valid_indices]
         self.X_pca = self.X_pca[valid_indices]
         self.Y_sc = self.Y_sc[valid_indices][:, valid_indices]
+        self.Y_sc_binary = self.Y_sc_binary[valid_indices][:, valid_indices]
         self.Y_sc_spectralL = self.Y_sc_spectralL[valid_indices]
         self.Y_sc_spectralA = self.Y_sc_spectralA[valid_indices]
         self.Y_fc = self.Y_fc[valid_indices][:, valid_indices]
+        self.Y_fc_binary = self.Y_fc_binary[valid_indices][:, valid_indices]
         self.coords = self.coords[valid_indices]
 
         print(f"X shape: {self.X.shape}")
@@ -125,7 +130,10 @@ class Simulation:
         print(f"Coordinates shape: {self.coords.shape}")
 
         # Define target connectome
-        self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
+        if self.binarize:
+            self.Y = self.Y_fc_binary if self.connectome_target == 'FC' else self.Y_sc_binary
+        else:
+            self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
         print('Y shape', self.Y.shape)
     
     
@@ -222,10 +230,10 @@ class Simulation:
         
         # Load sweep config
         sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-        sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim)
+        sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
         
         if self.skip_cv: 
-            best_config = load_best_parameters(sweep_config_path, input_dim=input_dim)
+            best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
             best_val_loss = 0.0 # no CV --> no best val loss
         else:
             def train_sweep_wrapper(config=None):
@@ -244,7 +252,8 @@ class Simulation:
                     hemisphere=self.hemisphere, 
                     omit_subcortical=self.omit_subcortical, 
                     gene_list=self.gene_list, 
-                    seed=self.random_seed
+                    seed=self.random_seed,
+                    binarize=self.binarize
                 )
             
             # Initialize sweep
@@ -377,6 +386,7 @@ class Simulation:
                     hemisphere=self.hemisphere, 
                     omit_subcortical=self.omit_subcortical, 
                     gene_list=self.gene_list,
+                    binarize=self.binarize,
                     seed=self.random_seed
                 )
 
@@ -401,3 +411,5 @@ class Simulation:
 
             print_system_usage() # Display CPU and RAM utilization 
             GPUtil.showUtilization() # Display GPU utilization
+            
+            break 

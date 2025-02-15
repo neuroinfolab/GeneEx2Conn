@@ -38,6 +38,8 @@ metric:
 parameters:
   input_dim:
     value: !!int 0
+  binarize:
+    value: !!int 0
   hidden_dims:
     values:
       - [512, 256, 128]
@@ -52,20 +54,22 @@ parameters:
   epochs:
     values: [100, 150]
   
-best_parameters: # best 01/28
+best_parameters:
+  input_dim:
+    value: !!int 0
+  binarize:
+    value: !!int 0
   hidden_dims:
     values:     
     - [512, 256, 128]
   learning_rate:
-    values: [0.0001]
+    values: [0.00005]
   batch_size:
     values: [256]
   dropout_rate:
     values: [0.15]
   weight_decay:
     values: [0.0001]
-  input_dim:
-    value: !!int 0
   epochs:
     values: [150]
 

@@ -1,10 +1,30 @@
 from env.imports import *
+from torch.utils.data import WeightedRandomSampler, DataLoader, TensorDataset
 
-def create_data_loader(X, y, batch_size, device, shuffle=True):
+def create_data_loader(X, y, batch_size, device, shuffle=True, validation=False):
     X = torch.FloatTensor(X).to(device)
     y = torch.FloatTensor(y).to(device)
     dataset = TensorDataset(X, y)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0) 
+    
+    # Handle class imbalance for binary classification, but only during training
+    if len(y.unique()) == 2 and not validation:  # Binary classification case
+        # Calculate class weights
+        class_counts = torch.bincount(y.long())
+        total_samples = len(y)
+        class_weights = total_samples / (2 * class_counts)
+        print('class weights', class_weights)
+        sample_weights = class_weights[y.long()]
+
+        # Create weighted sampler
+        sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True
+        )
+        return DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=0)
+    
+    # For validation or non-binary cases, use regular DataLoader
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0)
 
 def set_seed(seed=42):
     """Set seeds for reproducibility."""
