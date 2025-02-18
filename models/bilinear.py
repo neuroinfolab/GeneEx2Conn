@@ -6,17 +6,18 @@ from models.train_val import train_model
 
 class BilinearLoss(nn.Module):
     """MSE loss with optional L1/L2 regularization for bilinear models."""
-    def __init__(self, regularization='l1', lambda_reg=1.0):
+    def __init__(self, parameters, regularization='l1', lambda_reg=1.0):
         super().__init__()
+        self.parameters = parameters
         self.regularization = regularization
         self.lambda_reg = lambda_reg
         self.mse = nn.MSELoss()
         
-    def forward(self, predictions, targets, model):
+    def forward(self, predictions, targets):
         mse_loss = self.mse(predictions, targets)
         if self.lambda_reg > 0:
             # Concatenate all parameters into a single tensor
-            params = torch.cat([p.view(-1) for p in model.parameters() if p.requires_grad])
+            params = torch.cat([p.view(-1) for p in self.parameters if p.requires_grad])
             if self.regularization == 'l1':
                 reg_loss = torch.linalg.norm(params, ord=1)  # L1 norm
             elif self.regularization == 'l2':
@@ -53,7 +54,7 @@ class BilinearLowRank(nn.Module):
         else:  # 'none'
             self.activation = nn.Identity()
 
-        self.criterion = BilinearLoss(regularization=regularization, lambda_reg=lambda_reg)
+        self.criterion = BilinearLoss(self.parameters(), regularization=regularization, lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate)
 
     def forward(self, x): 
@@ -90,7 +91,7 @@ class BilinearSCM(nn.Module):
         num_params = sum(p.numel() for p in self.bilinear.parameters() if p.requires_grad)
         print(f"Number of learnable parameters in bilinear SCM layer: {num_params}")
         
-        self.criterion = BilinearLoss(regularization=regularization, lambda_reg=lambda_reg)
+        self.criterion = BilinearLoss(self.parameters(), regularization=regularization, lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate)
         self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=20, verbose=True)
     

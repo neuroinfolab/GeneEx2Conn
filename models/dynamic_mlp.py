@@ -24,9 +24,12 @@ class DynamicMLP(nn.Module):
             layers.append(nn.Dropout(dropout_rate))
             prev_dim = hidden_dim
         layers.append(nn.Linear(prev_dim, 1))
+
         if self.binarize:
-            layers.append(nn.Sigmoid())
-            self.criterion = nn.BCELoss()
+            # pos_weight = torch.tensor([y_train.sum() / len(y_train)]).to(self.device)  # Compute weight
+            # pos_weight = torch.tensor([1]).to(self.device)  # Compute weight
+            # self.criterion = nn.BCEWithLogitsLoss(pos_weight=1/pos_weight)
+            self.criterion = nn.BCEWithLogitsLoss()
         else: 
             self.criterion = nn.HuberLoss(delta=0.1) # this can be tuned to nn.MSELoss() or other
 
@@ -37,9 +40,9 @@ class DynamicMLP(nn.Module):
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
-            factor=0.1,  # Reduce LR by 70%
-            patience=30,  # Reduce LR after 30 epochs of no improvement
-            threshold=0.005,  # Smaller threshold to detect stagnation
+            factor=0.3,  # Reduce LR by 70%
+            patience=25,  # Reduce LR after patientce epochs of no improvement
+            threshold=0.1,  # Threshold to detect stagnation
             cooldown=1,  # Reduce cooldown period
             min_lr=1e-6,  # Prevent LR from going too low
             verbose=True
@@ -65,7 +68,6 @@ class DynamicMLP(nn.Module):
         return (predictions > 0.5).astype(int) if self.binarize else predictions
 
     def fit(self, X_train, y_train, X_test, y_test, verbose=True):
-        # loaders will automatically detect if working in binary target setting
-        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device)
-        val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, validation=True)
+        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, weight=True)
+        val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, weight=False) # skewed val loss might be due to weighted sampler
         return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, self.scheduler, verbose=verbose)

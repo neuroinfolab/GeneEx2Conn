@@ -1,18 +1,19 @@
 from env.imports import *
 from torch.utils.data import WeightedRandomSampler, DataLoader, TensorDataset
 
-def create_data_loader(X, y, batch_size, device, shuffle=True, validation=False):
+def create_data_loader(X, y, batch_size, device, shuffle=True, weight=False):
     X = torch.FloatTensor(X).to(device)
     y = torch.FloatTensor(y).to(device)
     dataset = TensorDataset(X, y)
     
     # Handle class imbalance for binary classification, but only during training
-    if len(y.unique()) == 2 and not validation:  # Binary classification case
+    if len(y.unique()) == 2 and weight:
         # Calculate class weights
         class_counts = torch.bincount(y.long())
+        print('class counts', class_counts)
         total_samples = len(y)
         class_weights = total_samples / (2 * class_counts)
-        print('class weights', class_weights)
+        print(f'Class weights - 0: {class_weights[0]:.4f}, 1: {class_weights[1]:.4f}')
         sample_weights = class_weights[y.long()]
 
         # Create weighted sampler

@@ -43,7 +43,7 @@ class SharedLinearEncoderModel(nn.Module):
             self.deep_layers = nn.DataParallel(self.deep_layers)
             self.output_layer = nn.DataParallel(self.output_layer)
         
-        self.criterion = BilinearLoss(regularization='l2', lambda_reg=lambda_reg) # SparseEncoderLoss(base_loss=nn.HuberLoss(delta=0.1), lambda_reg=lambda_reg)
+        self.criterion = BilinearLoss(self.parameters(), regularization='l2', lambda_reg=lambda_reg) # SparseEncoderLoss(base_loss=nn.HuberLoss(delta=0.1), lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     def forward(self, x):
@@ -74,8 +74,10 @@ class SharedLinearEncoderModel(nn.Module):
         if X_test is not None and y_test is not None:
             val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device)
         return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, verbose=verbose)
+
+
 class SparseEncoderLoss(nn.Module):
-    def __init__(self, base_loss=nn.MSELoss(), lambda_reg=0.1):
+    def __init__(self, encoder, base_loss=nn.MSELoss(), lambda_reg=0.1):
         """
         Custom loss function that combines a base loss with L1 regularization
         on the MLPEncoder parameters to encourage sparsity.
@@ -87,15 +89,15 @@ class SparseEncoderLoss(nn.Module):
         super().__init__()
         self.base_loss = base_loss
         self.lambda_reg = lambda_reg
+        self.encoder = encoder
 
-    def forward(self, predictions, targets, model):
+    def forward(self, predictions, targets):
         # Calculate the base loss
         loss = self.base_loss(predictions, targets)
         
-        encoder = model.encoder
         # Apply L1 regularization only to the encoder's parameters
         l1_reg = 0
-        for param in encoder.parameters():
+        for param in self.encoder.parameters():
             if param.requires_grad:
                 l1_reg += torch.sum(torch.abs(param))
         
@@ -165,7 +167,7 @@ class SharedMLPEncoderModel(nn.Module):
                 self.deep_layers = nn.DataParallel(self.deep_layers)
                 self.output_layer = nn.DataParallel(self.output_layer)
         
-        self.criterion = SparseEncoderLoss(base_loss=nn.HuberLoss(delta=0.1), lambda_reg=lambda_reg)
+        self.criterion = SparseEncoderLoss(self.encoder, base_loss=nn.HuberLoss(delta=0.1), lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     def forward(self, x):
