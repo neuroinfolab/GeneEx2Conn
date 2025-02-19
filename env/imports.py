@@ -1,4 +1,4 @@
-# Gene2Conn/imports.py
+# GLOBAL IMPORTS FILE
 
 # general imports
 import numpy as np
@@ -11,6 +11,7 @@ import os
 import pickle
 import itertools
 from itertools import combinations
+import inspect
 from collections import defaultdict
 import importlib
 import psutil
@@ -59,25 +60,25 @@ from kneed import KneeLocator
 
 # modeling
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error
-from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error, accuracy_score, log_loss
 from sklearn.cross_decomposition import PLSCanonical
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.linear_model import LinearRegression
 from sklearn.linear_model import RidgeCV
 from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import ShuffleSplit # or StratifiedShuffleSplit
+from sklearn.model_selection import ShuffleSplit
 from sklearn.model_selection import KFold
 from sklearn.utils import resample
 from sklearn.model_selection import BaseCrossValidator
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.decomposition import PCA
+from sklearn.svm import SVC
 from skopt import BayesSearchCV
+from skopt.space import Real, Categorical, Integer
 import xgboost
-from xgboost import XGBRFRegressor
-from xgboost import XGBRegressor
+from xgboost import XGBRegressor, XGBRFRegressor, XGBClassifier
 import lightgbm
 from lightgbm import LGBMRegressor
 import wandb
@@ -91,7 +92,6 @@ from torch.utils.data import TensorDataset, DataLoader
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torchmetrics
-from models.metrics.eval import pearson_numpy, pearson_cupy
 from torchmetrics import PearsonCorrCoef
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP

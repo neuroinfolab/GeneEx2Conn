@@ -17,7 +17,7 @@ from data.data_utils import (
     set_seed
 )
 
-from models.base_models import ModelBuild
+from models.base_models import ModelBuild, BaseModel
 from models.dynamic_mlp import DynamicMLP
 from models.bilinear import BilinearLowRank, BilinearSCM
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
@@ -39,7 +39,6 @@ from models.metrics.eval import (
 from sim.sim_utils import (
     bytes2human, 
     print_system_usage, 
-    # validate_inputs, 
     extract_model_params
 )
 
@@ -67,15 +66,6 @@ class Simulation:
         """
         Initialization of simulation parameters
         """
-        
-        '''
-        validate_inputs(
-            cv_type=cv_type,
-            model_type=model_type,
-            connectome_target=connectome_target
-        )
-        '''
-        # consider storing in a config
         self.cv_type = cv_type
         self.model_type = model_type
         self.gpu_acceleration = gpu_acceleration
@@ -291,18 +281,18 @@ class Simulation:
 
         inner_fold_splits = process_cv_splits(self.X, self.Y, inner_cv_obj, 
                                                 self.use_shared_regions, 
-                                                self.test_shared_regions
-                                                )
+                                                self.test_shared_regions)
 
         # Inner CV data packaged into a large matrix with indices for individual folds
         X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
-        
-        # Initialize model
-        model = ModelBuild.init_model(self.model_type, X_combined.shape[1])
+    
+        model = ModelBuild.init_model(self.model_type, self.binarize)
+
         param_grid = model.get_param_grid()
         param_dist = model.get_param_dist()
 
         search_type, metric, n_iter = search_method        
+
         if search_type == 'grid':
             param_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, metric=metric)
         elif search_type == 'random':
@@ -335,6 +325,9 @@ class Simulation:
         self.load_data()
         self.select_cv()
         self.expand_data()
+
+        if search_method[0] == 'wandb' or track_wandb:
+            wandb.login()
         
         # Outer CV
         for fold_idx, (X_train, X_test, Y_train, Y_test) in enumerate(self.fold_splits):
@@ -348,8 +341,6 @@ class Simulation:
             
             if self.gpu_acceleration:
                 X_train, Y_train, X_test, Y_test = map(cp.array, [X_train, Y_train, X_test, Y_test])
-            if search_method[0] == 'wandb' or track_wandb:
-                wandb.login()
 
             # Inner CV on current training fold
             if search_method[0] == 'wandb':
@@ -411,5 +402,5 @@ class Simulation:
 
             print_system_usage() # Display CPU and RAM utilization 
             GPUtil.showUtilization() # Display GPU utilization
-            
+
             break

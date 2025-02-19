@@ -1,6 +1,5 @@
 # imports
 from env.imports import *
-import inspect
 
 # metric classes
 from models.metrics.eval import (
@@ -9,10 +8,14 @@ from models.metrics.eval import (
     mse_cupy,
     mse_numpy,
     r2_cupy, 
-    r2_numpy
+    r2_numpy, 
+    accuracy_numpy,
+    accuracy_cupy,
+    logloss_cupy,
+    logloss_numpy
 )
 
-
+# HELPERS 
 def bytes2human(n):
     """
     Convert bytes to a human-readable format.
@@ -27,7 +30,6 @@ def bytes2human(n):
             return '%.1f%s' % (value, s)
     return "%sB" % n
 
-
 def print_system_usage():
     """
     Print the current system CPU and RAM usage.
@@ -38,76 +40,7 @@ def print_system_usage():
     print(f"Available RAM: {bytes2human(memory_info.available)}")
     print(f"Total RAM: {bytes2human(memory_info.total)}")
 
-# suspend function until code is more final
-'''
-def validate_inputs(
-    features: list = None,
-    feature_dict: dict = None,
-    cv_type: str = None,
-    model_type: str = None,
-    connectome_target: str = None,
-    **kwargs
-) -> None:
-    """
-    Flexible input validation for Gene2Conn parameters.
-    Only validates parameters that are passed in.
-    
-    Args:
-        features: List of feature names to validate
-        feature_dict: Dictionary mapping feature names to their data arrays
-        cv_type: Type of cross-validation ('random', 'community', 'schaefer')
-        model_type: Type of model 
-        connectome_target: Target connectome type ('FC', 'SC')
-        **kwargs: Additional parameters to validate as needed
-        
-    Raises:
-        ValueError: If any parameters are invalid
-    """
-    # Validate features if provided
-    if features is not None and feature_dict is not None:
-        for feature in features:
-            if 'spectral' in feature:
-                # Extract base feature type and number of components
-                feature_parts = feature.split('_')
-                feature_type = '_'.join(feature_parts[:-1])
-                try:
-                    num_latents = int(feature_parts[-1])
-                except ValueError:
-                    raise ValueError(f"Invalid spectral feature format: {feature}. Must end with integer number of components.")
-                
-                if feature_type not in feature_dict:
-                    raise ValueError(f"Unknown feature type: {feature_type}")
-                
-                # Check if requested components are within bounds
-                feature_dim = feature_dict[feature_type].shape[1]
-                if abs(num_latents) > feature_dim:
-                    raise ValueError(f"Requested {abs(num_latents)} components for {feature_type} but only {feature_dim} components available")
-            else:
-                if feature not in feature_dict:
-                    raise ValueError(f"Unknown feature type: {feature}")
-    
-    # Validate CV type if provided
-    if cv_type is not None:
-        valid_cv_types = {'random', 'community', 'schaefer', 'spatial'}
-        if cv_type not in valid_cv_types:
-            raise ValueError(f"Invalid cv_type: {cv_type}. Must be one of {valid_cv_types}")
-    
-    # Validate model type if provided
-    if model_type is not None:
-        valid_model_types = {'linear', 'ridge', 'pls', 'xgboost', 'dynamic_mlp', 'random_forest', 
-                             'bilinear_lowrank', 'bilinear_SCM', 
-                             'shared_mlp_encoder', 'shared_linear_encoder', 'shared_transformer'}
-        if model_type not in valid_model_types:
-            raise ValueError(f"Invalid model_type: {model_type}. Must be one of {valid_model_types}")
-    
-    # Validate connectome target if provided
-    if connectome_target is not None:
-        valid_targets = {'FC', 'SC'}
-        if connectome_target.upper() not in valid_targets:
-            raise ValueError(f"Invalid connectome target: {connectome_target}. Must be one of {valid_targets}")
-'''
-
-
+# CONFIG LOADING
 def load_sweep_config(file_path, input_dim, binarize):
     """
     Load a sweep config file and update the input_dim parameter.
@@ -137,6 +70,7 @@ def load_best_parameters(yaml_file_path, input_dim, binarize):
 
     return best_config
 
+# CROSS-VALIDATION
 def drop_test_network(cv_type, network_dict, value, idx):
         """
         Drop an entry from the dictionary based on the given value and return a new dictionary.
@@ -165,7 +99,7 @@ def get_scorer(metric, gpu_acceleration):
     Args:
     metric (str): The metric to use for scoring. Options: 'mse', 'pearson', 'r2'
     gpu_acceleration (bool): Whether GPU acceleration is being used
-    
+     
     Returns:
     scorer: A sklearn-compatible scorer object
     """
@@ -176,6 +110,12 @@ def get_scorer(metric, gpu_acceleration):
             return make_scorer(pearson_cupy, greater_is_better=True)
         elif metric == 'r2':
             return make_scorer(r2_cupy, greater_is_better=True)
+        elif metric == 'acc':
+            return make_scorer(accuracy_cupy, greater_is_better=True)
+        elif metric == 'logloss':
+            return make_scorer(logloss_cupy, greater_is_better=False)
+        else: 
+            return None
     else:
         if metric == 'mse':
             return 'neg_mean_squared_error'
@@ -183,9 +123,14 @@ def get_scorer(metric, gpu_acceleration):
             return make_scorer(pearson_numpy, greater_is_better=True)
         elif metric == 'r2':
             return 'r2'
-    
-    raise ValueError(f"Unsupported metric: {metric}")
+        elif metric == 'acc':
+            return make_scorer(accuracy_numpy, greater_is_better=True)
+        elif metric == 'logloss':
+            return make_scorer(logloss_numpy, greater_is_better=False)
+        else: 
+            return None
 
+    raise ValueError(f"Metric {metric} not supported")
 
 def grid_search_init(gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, metric='mse'):
     """
@@ -196,21 +141,15 @@ def grid_search_init(gpu_acceleration, model, X_combined, Y_combined, param_grid
     if gpu_acceleration:
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        grid_search = GridSearchCV(model.get_model(), 
-                                   param_grid, 
-                                   cv=train_test_indices, 
-                                   scoring=scorer, 
-                                   verbose=3,
-                                   return_train_score=True,
-                                   error_score='raise',
-                                   refit=False)
-    else:
-        grid_search = GridSearchCV(model.get_model(), 
-                                   param_grid, 
-                                   cv=train_test_indices, 
-                                   scoring=scorer, 
-                                   verbose=3, 
-                                   refit=False)
+
+    grid_search = GridSearchCV(model.get_model(),
+                             param_grid,
+                             cv=train_test_indices,
+                             scoring=scorer,
+                             verbose=3,
+                             return_train_score=True if gpu_acceleration else False,
+                             error_score='raise' if gpu_acceleration else 'raise',
+                             refit=False)
         
     return grid_search, X_combined, Y_combined
 
@@ -224,25 +163,16 @@ def random_search_init(gpu_acceleration, model, X_combined, Y_combined, param_di
     if gpu_acceleration:
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        random_search = RandomizedSearchCV(model.get_model(), 
-                                           param_distributions, 
-                                           n_iter=n_iter, 
-                                           cv=train_test_indices, 
-                                           scoring=scorer, 
-                                           verbose=3, 
-                                           refit=False,
-                                           n_jobs=1,
-                                           random_state=42)
-    else:
-        random_search = RandomizedSearchCV(model.get_model(), 
-                                           param_distributions, 
-                                           n_iter=n_iter, 
-                                           cv=train_test_indices, 
-                                           scoring=scorer, 
-                                           verbose=3, 
-                                           refit=False, 
-                                           n_jobs=-1,
-                                           random_state=42)
+    
+    random_search = RandomizedSearchCV(model.get_model(),
+                                        param_distributions,
+                                        n_iter=n_iter,
+                                        cv=train_test_indices,
+                                        scoring=scorer,
+                                        verbose=3,
+                                        refit=False,
+                                        n_jobs=1 if gpu_acceleration else -1,
+                                        random_state=42)
         
     return random_search, X_combined, Y_combined
 
@@ -254,37 +184,24 @@ def bayes_search_init(gpu_acceleration, model, X_combined, Y_combined, search_sp
     scorer = get_scorer(metric, gpu_acceleration)
 
     if gpu_acceleration:
-        print('ACCELERATING')
         X_combined = cp.array(X_combined)
         Y_combined = cp.array(Y_combined)
-        error_score = 0.0
-        bayes_search = BayesSearchCV(
-            model.get_model(),
-            search_space,
-            n_iter=n_iter, 
-            n_points=10,
-            cv=train_test_indices,
-            scoring=scorer,
-            verbose=3,
-            random_state=42,
-            refit=False, 
-            return_train_score=True, # should optimize on test score 
-            error_score=error_score,
-            optimizer_kwargs={'base_estimator': 'GP', 'acq_func': 'PI'}  # Use Expected Improvement for more exploitation
-        )
-        #print(bayes_search.optimizer_kwargs)
-    else:
-        bayes_search = BayesSearchCV(
-            model.get_model(),
-            search_space,
-            n_iter=n_iter,
-            cv=train_test_indices,
-            scoring=scorer,
-            verbose=3,
-            refit=False,
-            n_jobs=-1,
-            random_state=42
-        )
+
+    bayes_search = BayesSearchCV(
+        model.get_model(),
+        search_space,
+        n_iter=n_iter,
+        n_points=10 if gpu_acceleration else None,
+        cv=train_test_indices,
+        scoring=scorer,
+        verbose=3,
+        random_state=42,
+        refit=False,
+        return_train_score=True if gpu_acceleration else False,
+        error_score=0.0 if gpu_acceleration else 'raise',
+        n_jobs=-1 if not gpu_acceleration else None,
+        optimizer_kwargs={'base_estimator': 'GP', 'acq_func': 'PI'} if gpu_acceleration else None
+    )
         
     return bayes_search, X_combined, Y_combined
 
@@ -312,6 +229,35 @@ def find_best_params(grid_search_cv_results):
     
     return best_params
 
+# EXTRACT MODEL ATTRIBUTES
+def extract_feature_importances(model_type, best_model, save_model_json=False):
+    """
+    Extract feature importances and model JSON from trained models.
+    
+    Args:
+        model_type (str): Type of model ('pls', 'xgboost', 'ridge', etc.)
+        best_model: Trained model object
+        save_model_json (bool): Whether to save XGBoost model as JSON
+        
+    Returns:
+        tuple: (feature_importances, model_json)
+            - feature_importances: Array of feature importance values or None
+            - model_json: Model JSON string for XGBoost or None
+    """
+    model_json = None
+    feature_importances = None
+    
+    if model_type == 'pls':
+        feature_importances = best_model.x_weights_[:, 0]  # Weights for the first component
+    elif model_type == 'xgboost':
+        feature_importances = best_model.feature_importances_
+        if save_model_json:
+            booster = best_model.get_booster()
+            model_json = booster.save_raw("json").decode("utf-8")
+    elif model_type == 'ridge':
+        feature_importances = best_model.coef_
+        
+    return feature_importances, model_json
 
 def extract_model_params(model):
     """
@@ -343,6 +289,7 @@ def extract_model_params(model):
     return params
 
 
+# WANDB
 def train_sweep(config, model_type, feature_type, connectome_target, cv_type, outer_fold_idx, inner_fold_splits, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize):
     """
     Training function for W&B sweeps for deep learning models.
@@ -461,34 +408,3 @@ def log_wandb_metrics(feature_type, model_type, connectome_target, cv_type, fold
     final_eval_run.finish()
     wandb.finish()
     print("Final evaluation metrics logged successfully.")
-
-
-def extract_feature_importances(model_type, best_model, save_model_json=False):
-    """
-    Extract feature importances and model JSON from trained models.
-    
-    Args:
-        model_type (str): Type of model ('pls', 'xgboost', 'ridge', etc.)
-        best_model: Trained model object
-        save_model_json (bool): Whether to save XGBoost model as JSON
-        
-    Returns:
-        tuple: (feature_importances, model_json)
-            - feature_importances: Array of feature importance values or None
-            - model_json: Model JSON string for XGBoost or None
-    """
-    model_json = None
-    feature_importances = None
-    
-    if model_type == 'pls':
-        feature_importances = best_model.x_weights_[:, 0]  # Weights for the first component
-    elif model_type == 'xgboost':
-        feature_importances = best_model.feature_importances_
-        if save_model_json:
-            booster = best_model.get_booster()
-            model_json = booster.save_raw("json").decode("utf-8")
-    elif model_type == 'ridge':
-        feature_importances = best_model.coef_
-        
-    return feature_importances, model_json
-

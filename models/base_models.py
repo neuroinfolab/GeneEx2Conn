@@ -1,6 +1,5 @@
 from env.imports import *
-
-from skopt.space import Real, Categorical, Integer
+from sklearn.svm import SVC
 
 class BaseModel:
     """Base class for all models."""
@@ -21,8 +20,6 @@ class BaseModel:
         return self.param_dist
 
 class LinearModel(BaseModel):
-    """Linear Regression model."""
-
     def __init__(self):
         super().__init__()
         self.model = LinearRegression()
@@ -36,8 +33,6 @@ class LinearModel(BaseModel):
         }
 
 class RidgeModel(BaseModel):
-    """Ridge Regression model with parameter grid."""
-
     def __init__(self):
         super().__init__()
         self.model = Ridge()
@@ -51,8 +46,6 @@ class RidgeModel(BaseModel):
         }
 
 class PLSModel(BaseModel):
-    """Partial Least Squares Regression model with parameter grid."""
-
     def __init__(self):
         super().__init__()
         self.model = PLSRegression()
@@ -67,9 +60,7 @@ class PLSModel(BaseModel):
             'scale': Categorical([True, False])  # Whether to scale the data
         }
 
-class XGBModel(BaseModel):
-    """XGBoost model with parameter grid."""
-
+class XGBRegressorModel(BaseModel):
     def __init__(self):
         super().__init__()
         self.model = XGBRegressor()
@@ -106,9 +97,73 @@ class XGBModel(BaseModel):
             'verbosity': [0] # consider adding this hyperparam: Sampling method. Used only by the GPU version of hist tree method. uniform: select random training instances uniformly. gradient_based select random training instances with higher probability when the gradient and hessian are larger. (cf. CatBoost)
         }
 
-class RandomForestModel(BaseModel):
-    """Random Forest model with parameter grid."""
 
+class XGBClassifierModel(BaseModel):
+    def __init__(self):
+        super().__init__()
+        self.model = XGBClassifier()
+        
+        self.param_grid = {
+            'n_estimators': [50, 150, 250, 250],  # Num trees
+            'max_depth': [2, 3, 5, 7],                 # Maximum depth of each tree
+            'learning_rate': [0.01, 0.1, 0.3],         # Learning rate (shrinkage)
+            'subsample': [0.6, 0.8, 1],                # Subsample ratio of the training data
+            'colsample_bytree': [0.5, 0.8, 1],         # Subsample ratio of columns when constructing each tree
+            'gamma': [0, 0.1],                         # Minimum loss reduction required to make a split
+            'reg_lambda': [0.01, 0.1, 1],              # L2 regularization term (Ridge penalty)
+            'reg_alpha': [0.01, 0.1, 1],               # L1 regularization term (Lasso penalty)
+            'random_state': [42],                      # Seed for reproducibility
+            'min_child_weight': [1, 3, 5],             # Child weight for pruning
+            'tree_method':['gpu_hist'],                # Use the GPU
+            'device':['cuda'],                         # Use GPU predictor
+            'n_gpus':[-1],
+            'verbosity': [0],
+            'objective': ['binary:logistic'],          # For binary classification
+            'eval_metric': ['logloss'],                 # Evaluation metric for binary classification
+            # 'scale_pos_weight': [1] #, 2, 3, 4]
+        }
+        
+        self.param_dist = {
+            'learning_rate': Categorical([1e-3, 1e-2, 1e-1, 0.3]), 
+            'n_estimators': Categorical([50, 150, 250, 350]),
+            'max_depth': Categorical([2, 3, 4, 5, 6, 7]),
+            'subsample': Categorical([0.6, 0.8, 1]),
+            'colsample_bytree': Categorical([0.6, 0.8, 1]),
+            'reg_lambda': Categorical([0, 1e-4, 1e-2, 1e-1, 1]),  # L2 regularization term (Ridge penalty)
+            'reg_alpha': Categorical([0, 1e-4, 1e-2, 1e-1, 1]),   # L1 regularization term (Lasso penalty)
+            'tree_method': Categorical(['gpu_hist']),
+            'scale_pos_weight': Categorical([3, 4, 5]),
+            'device':['cuda'],
+            'n_gpus':[-1],
+            'random_state': [42],
+            'verbosity': [0],
+            'objective': ['binary:logistic'],
+            'eval_metric': ['logloss']
+        }
+
+class SVCModel(BaseModel):
+    def __init__(self):
+        super().__init__()
+        self.model = SVC()
+        
+        self.param_grid = {
+            'C': [0.1, 1, 10, 20],                # Regularization parameter
+            'kernel': ['linear'],
+            # 'rbf'           # Kernel type 
+            # 'gamma': ['scale', 'auto', 0.1, 1],    # Kernel coefficient
+            'class_weight': ['balanced'],     # Class weights
+            'random_state': [42]                    # Random seed
+        }
+        
+        self.param_dist = {
+            'C': Categorical([0.1, 1, 10]),
+            'kernel': Categorical(['linear']),
+            'gamma': Categorical(['scale', 'auto']),
+            'class_weight': Categorical(['balanced']),
+            # 'random_state': [42]
+        }
+
+class RandomForestModel(BaseModel):
     def __init__(self):
         super().__init__()
         self.model = RandomForestRegressor()
@@ -129,19 +184,24 @@ class RandomForestModel(BaseModel):
             'bootstrap': [True, False]  # Whether bootstrap samples are used when building trees
         }
 
-
 class ModelBuild:
-    """Factory class to create base regressor models based on the given sklearn-like model type."""
+    """Factory class to create base models based on the given sklearn-like model type."""
     @staticmethod
-    def init_model(model_type, input_size):
-        model_mapping = {
-            'pls': PLSModel,
-            'ridge': RidgeModel,
-            'linear': LinearModel,
-            'xgboost': XGBModel,
-            'random_forest': RandomForestModel
+    def init_model(model_type, binarize=False):
+        if binarize:
+            model_mapping = {
+                'svm': SVCModel,
+                'xgboost': XGBClassifierModel
             }
-        
+        else:
+            model_mapping = {
+                'pls': PLSModel,
+                'ridge': RidgeModel,
+                'linear': LinearModel,
+                'xgboost': XGBRegressorModel,
+                'random_forest': RandomForestModel
+            }
+
         if model_type in model_mapping:
             return model_mapping[model_type]()
         else:

@@ -67,7 +67,7 @@ best_parameters:
   batch_size:
     values: [64]
   dropout_rate:
-    values: [0.2]
+    values: [0.5]
   weight_decay:
     values: [0.0001]
   epochs:

@@ -2,8 +2,7 @@ from env.imports import *
 from data.data_utils import reconstruct_connectome
 import models.metrics.distance_FC
 from models.metrics.distance_FC import *
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
-
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, log_loss
 
 # Evaluation funcs that preserve connectome properties 
 def connectome_correlation(Y_pred, Y_ground_truth, include_diag=False, output=False):
@@ -34,7 +33,7 @@ def connectome_r2(Y_pred, Y_ground_truth, include_diag=False, output=False):
         print(np.mean(pred_r2s))
     return np.mean(pred_r2s)
 
-# Custom numpy and cupy scorers for inner-CV 
+# Custom numpy and cupy scorers for inner-CV
 def pearson_numpy(y_true, y_pred):
     """Compute Pearson correlation coefficient between true and predicted values using numpy."""
     return pearsonr(y_true, y_pred)[0]
@@ -50,13 +49,19 @@ def r2_numpy(y_true, y_pred):
     residual_ss = np.sum(np.square(y_true - y_pred))
     return 1 - (residual_ss / total_ss)
 
-# Custom cupy scorers for GPU acceleration
+def accuracy_numpy(y_true, y_pred):
+    """Compute accuracy score between true and predicted values using numpy."""
+    y_pred_labels = np.round(y_pred)  # Convert probabilities to binary labels (0 or 1)
+    return accuracy_score(y_true, y_pred_labels)
+def logloss_numpy(y_true, y_pred):
+    """Compute log loss between true and predicted values using numpy."""
+    return log_loss(y_true, y_pred)
+
 def pearson_cupy(y_true, y_pred):
     """Compute Pearson correlation coefficient between true and predicted values using cupy."""
     y_pred = cp.asarray(y_pred)
     y_true = cp.asarray(y_true).ravel()
     y_pred = y_pred.ravel()
-    
     corr_matrix = cp.corrcoef(y_true, y_pred)
     cp.cuda.Stream.null.synchronize()
     return corr_matrix[0, 1]
@@ -76,12 +81,42 @@ def r2_cupy(y_true, y_pred):
     residual_ss = cp.sum(cp.square(y_true - y_pred))
     return 1 - (residual_ss / total_ss)
 
+def accuracy_cupy(y_true, y_pred):
+    """Compute accuracy score between true and predicted values using cupy."""
+    y_pred = cp.asarray(y_pred)
+    y_true = cp.asarray(y_true)
+
+    y_pred_labels = cp.round(y_pred)  # Convert probabilities to binary labels (0 or 1)
+    accuracy = cp.mean(y_pred_labels == y_true)
+    
+    cp.cuda.Stream.null.synchronize()
+    return accuracy.item()
+
+def logloss_cupy(y_true, y_pred):
+    """Compute log loss between true and predicted values using cupy."""
+    # Convert inputs to cupy arrays
+    y_pred = cp.asarray(y_pred)
+    y_true = cp.asarray(y_true)
+    
+    # Clip predictions to avoid log(0) 
+    eps = 1e-15
+    y_pred = cp.clip(y_pred, eps, 1 - eps)
+    
+    # Calculate log loss
+    losses = -(y_true * cp.log(y_pred) + (1 - y_true) * cp.log(1 - y_pred))
+    loss = cp.mean(losses)
+    
+    cp.cuda.Stream.null.synchronize()
+    return loss.item()
+
 
 class Metrics:
     def __init__(self, Y_true, Y_pred, square=False, binarize=False):
         # convert cupy arrays to numpy arrays if necessary
         self.Y_true = getattr(Y_true, 'get', lambda: Y_true)()
-        self.Y_pred = getattr(Y_pred, 'get', lambda: Y_pred)()    
+        self.Y_pred = getattr(Y_pred, 'get', lambda: Y_pred)()
+        print(self.Y_pred)
+
         self.Y_true_flat = self.Y_true.flatten()
         self.Y_pred_flat = self.Y_pred.flatten()
         self.square = square
@@ -89,7 +124,7 @@ class Metrics:
         self.compute_metrics()
 
     def compute_metrics(self):
-        if self.binarize:
+        if self.binarize:    
             # Compute classification metrics
             self.accuracy = accuracy_score(self.Y_true_flat, self.Y_pred_flat)
             self.precision = precision_score(self.Y_true_flat, self.Y_pred_flat)
@@ -103,7 +138,7 @@ class Metrics:
             self.r2 = r2_score(self.Y_true_flat, self.Y_pred_flat)
             self.pearson_corr = pearsonr(self.Y_true_flat, self.Y_pred_flat)[0]
 
-        # Compute geodesic distance if data is square (connectome)
+        # Compute geodesic distance if test data is a square connectome
         if self.square:
             Y_pred_connectome = reconstruct_connectome(self.Y_pred, symmetric=True)
             Y_pred_connectome_asymmetric = reconstruct_connectome(self.Y_pred, symmetric=False)
