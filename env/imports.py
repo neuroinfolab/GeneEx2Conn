@@ -42,6 +42,7 @@ from nichord.combine import combine_imgs, plot_and_combine
 from nichord.coord_labeler import get_idx_to_label
 
 # stats 
+import scipy
 from scipy import stats
 from scipy.stats import pearsonr, spearmanr
 from scipy.stats import entropy

@@ -168,7 +168,7 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
         elif parcellation == 'S400' or parcellation == 'S456':
             region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t').iterrows()]
             if measure == 'FC':
-                matrix = np.array(pd.read_csv('./data/UKBB/UKBB_S456_functional_conn.csv'))
+                matrix = np.array(pd.read_csv('./data/UKBB/UKBB_S456_FC_mu.csv'))
             elif measure == 'SC':
                 matrix = np.log1p(loadmat('./data/HCP1200/4S456_DTI_count.mat')['connectivity'])
      

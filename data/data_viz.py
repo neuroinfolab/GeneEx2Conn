@@ -5,7 +5,6 @@ from ipywidgets import interact
 import ipywidgets as widgets
 import imageio
 
-
 def get_gene_expression_colors(X, valid_genes=None, gene_name=None):
     """
     Get color values based on gene expression, handling NaN values.
