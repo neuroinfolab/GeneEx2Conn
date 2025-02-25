@@ -261,3 +261,38 @@ def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
         coordinates = coordinates[rh_indices, :]
     
     return coordinates
+
+
+def load_network_labels(parcellation='S100', omit_subcortical=False, dataset='HCP',):
+    if parcellation == 'S100': 
+        schaef156_atlas_info = pd.read_csv('./data/UKBB/schaefer156_atlas_info.txt', sep='\t')
+            
+        schaef156_atlas_info.loc[schaef156_atlas_info['atlas_name'] == 'Cerebellum', 'network_label'] = 'Cerebellum'
+
+        schaef156_atlas_info.loc[(schaef156_atlas_info['network_label'].isna()) & 
+                                (schaef156_atlas_info['atlas_name'] != 'Cerebellum'), 'network_label'] = 'Subcortical'
+
+        if omit_subcortical:
+            schaef156_atlas_info = schaef156_atlas_info.iloc[:100]
+        elif dataset == 'HCP':
+            schaef156_atlas_info = schaef156_atlas_info.iloc[:114]
+        elif dataset == 'UKBB':
+            schaef156_atlas_info = schaef156_atlas_info.iloc[:156]
+        
+        labels = schaef156_atlas_info['label'].tolist()
+        network_labels = schaef156_atlas_info['network_label'].values
+    elif parcellation == 'S400':
+        schaef456_atlas_info = pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t')
+        schaef456_atlas_info.loc[schaef456_atlas_info['atlas_name'] == 'Cerebellum', 'network_label'] = 'Cerebellum'
+        schaef456_atlas_info.loc[(schaef456_atlas_info['network_label'].isna()) & 
+                                (schaef456_atlas_info['atlas_name'] != 'Cerebellum'), 'network_label'] = 'Subcortical'
+        
+        if omit_subcortical:
+            schaef456_atlas_info = schaef456_atlas_info.iloc[:400]
+        else:
+            schaef456_atlas_info = schaef456_atlas_info.iloc[:456]
+        
+        labels = schaef456_atlas_info['label'].tolist()
+        network_labels = schaef456_atlas_info['network_label'].values
+
+    return labels, network_labels

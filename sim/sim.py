@@ -1,6 +1,6 @@
 from env.imports import *
 
-from data.data_load import load_transcriptome, load_connectome, load_coords
+from data.data_load import load_transcriptome, load_connectome, load_coords, load_network_labels
 
 from data.cv_split import (
     RandomCVSplit, 
@@ -96,10 +96,11 @@ class Simulation:
         self.Y_fc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', hemisphere=self.hemisphere)
         self.Y_fc_binary = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', binarize=True, hemisphere=self.hemisphere)
         self.coords = load_coords(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
-        
+        self.labels, self.network_labels = load_network_labels(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical)
+
         # Find rows that are not all NaN - necessary for gene expression data with unsampled regions
         valid_indices = ~np.isnan(self.X).all(axis=1)
-        
+
         # Subset all data using valid indices
         self.X = self.X[valid_indices]
         self.X_pca = self.X_pca[valid_indices]
@@ -110,6 +111,9 @@ class Simulation:
         self.Y_fc = self.Y_fc[valid_indices][:, valid_indices]
         self.Y_fc_binary = self.Y_fc_binary[valid_indices][:, valid_indices]
         self.coords = self.coords[valid_indices]
+        #self.labels = self.labels[valid_indices]
+        
+        self.network_labels = self.network_labels[valid_indices]
 
         print(f"X shape: {self.X.shape}")
         print(f"X_pca shape: {self.X_pca.shape}")
@@ -332,27 +336,34 @@ class Simulation:
         # Outer CV
         for fold_idx, (X_train, X_test, Y_train, Y_test) in enumerate(self.fold_splits):
             print('\n', f'Test fold num: {fold_idx+1}', f'X_train shape: {X_train.shape}', f'Y_train shape: {Y_train.shape}', f'X_test shape: {X_test.shape}', f'Y_test shape: {Y_test.shape}')
-            
-            train_indices = self.cv_obj.folds[fold_idx][0]
-            test_indices = self.cv_obj.folds[fold_idx][1]
+                        
+            X_train_CV = self.cv_obj.folds[fold_idx][0]
+            X_test_CV = self.cv_obj.folds[fold_idx][1]
+
             input_dim = X_train.shape[1]
             network_dict = self.cv_obj.networks
-            train_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
+            train_network_dict = drop_test_network(self.cv_type, network_dict, X_test_CV, fold_idx+1)
             
+            # Generate train and test indices from network dictionaries
+            train_indices = np.concatenate([indices for indices in train_network_dict.values()])
+            test_indices = network_dict[str(fold_idx+1)]
+            print('train_indices', train_indices)
+            print('test_indices', test_indices)
+
             if self.gpu_acceleration:
                 X_train, Y_train, X_test, Y_test = map(cp.array, [X_train, Y_train, X_test, Y_test])
 
             # Inner CV on current training fold
             if search_method[0] == 'wandb':
-                best_model, best_val_score = self.run_innercv_wandb(input_dim, train_indices, test_indices, train_network_dict, fold_idx, search_method=search_method)                
+                best_model, best_val_score = self.run_innercv_wandb(input_dim, X_train_CV, X_test_CV, train_network_dict, fold_idx, search_method=search_method)                
                 train_history = best_model.fit(X_train, Y_train, X_test, Y_test)
             else:
-                best_model, best_val_score = self.run_innercv(train_indices, test_indices, train_network_dict, search_method=search_method)
+                best_model, best_val_score = self.run_innercv(X_train_CV, X_test_CV, train_network_dict, search_method=search_method)
                 best_model.fit(X_train, Y_train)
                 train_history = None
             
             # Evaluate on the test fold                
-            evaluator = ModelEvaluator(best_model, X_train, Y_train, X_test, Y_test, self.use_shared_regions, self.test_shared_regions)
+            evaluator = ModelEvaluator(best_model, self.Y, train_indices, test_indices, self.network_labels, X_train, Y_train, X_test, Y_test, self.use_shared_regions, self.test_shared_regions)
             train_metrics = evaluator.get_train_metrics()
             test_metrics = evaluator.get_test_metrics()
             

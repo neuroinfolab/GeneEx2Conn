@@ -3,6 +3,7 @@ from data.data_utils import reconstruct_connectome
 import models.metrics.distance_FC
 from models.metrics.distance_FC import *
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, log_loss
+from matplotlib.colors import ListedColormap
 
 # Evaluation funcs that preserve connectome properties 
 def connectome_correlation(Y_pred, Y_ground_truth, include_diag=False, output=False):
@@ -111,17 +112,22 @@ def logloss_cupy(y_true, y_pred):
 
 
 class Metrics:
-    def __init__(self, Y_true, Y_pred, square=False, binarize=False):
+    def __init__(self, Y, indices, Y_true, Y_pred, square=False, binarize=False, network_labels=None):
+        self.Y = Y
+        self.indices = indices
+        self.network_labels = network_labels
+
         # convert cupy arrays to numpy arrays if necessary
         self.Y_true = getattr(Y_true, 'get', lambda: Y_true)()
         self.Y_pred = getattr(Y_pred, 'get', lambda: Y_pred)()
-        print(self.Y_pred)
 
         self.Y_true_flat = self.Y_true.flatten()
         self.Y_pred_flat = self.Y_pred.flatten()
         self.square = square
         self.binarize = binarize
+
         self.compute_metrics()
+        self.visualize_predictions()
 
     def compute_metrics(self):
         if self.binarize:    
@@ -138,8 +144,8 @@ class Metrics:
             self.r2 = r2_score(self.Y_true_flat, self.Y_pred_flat)
             self.pearson_corr = pearsonr(self.Y_true_flat, self.Y_pred_flat)[0]
 
-        # Compute geodesic distance if test data is a square connectome
-        if self.square:
+    def visualize_predictions(self):
+        if self.square: # Compute geodesic distance if test data is a square connectome
             Y_pred_connectome = reconstruct_connectome(self.Y_pred, symmetric=True)
             Y_pred_connectome_asymmetric = reconstruct_connectome(self.Y_pred, symmetric=False)
             Y_true_connectome = reconstruct_connectome(self.Y_true)
@@ -159,13 +165,75 @@ class Metrics:
             plt.title('Predicted Connectome (non-symmetrized)')
 
             plt.subplot(133)
-            plt.imshow(abs(Y_true_connectome - Y_pred_connectome), cmap='RdYlGn_r')
+            plt.imshow(abs(Y_true_connectome - Y_pred_connectome_asymmetric), cmap='RdYlGn_r')
             plt.colorbar(shrink=0.5)
             plt.title('Prediction Difference')
             
             plt.tight_layout()
             plt.show()
     
+        # Create a mask showing prediction differences for training regions
+        n = int(self.Y.shape[0])  # Get dimensions of square connectome
+        split_mask = np.zeros((n, n))
+        
+        # Calculate prediction differences for region pairs
+        diff = abs(self.Y_true - self.Y_pred)
+        
+        # For each pair of regions in indices
+        for idx, (i, j) in enumerate(combinations(self.indices, 2)):
+            # Each pair appears twice in diff - once in each direction
+            # First direction: i->j is at 2*idx
+            # Second direction: j->i is at 2*idx + 1
+            split_mask[i,j] = diff[2*idx]
+            split_mask[j,i] = diff[2*idx + 1]
+                
+        plt.figure(figsize=(16, 6))
+        
+        # Plot full connectome with network labels
+        plt.subplot(121)
+        plt.imshow(self.Y, cmap='viridis')
+        plt.colorbar(shrink=0.5)
+        plt.title('Full Connectome', fontsize=14)
+        
+        if self.network_labels is not None:
+            # Create tick positions and labels
+            tick_positions = []
+            tick_labels = []
+            start_idx = 0
+            prev_label = self.network_labels[0]
+            
+            for i in range(1, len(self.network_labels)):
+                if self.network_labels[i] != prev_label:
+                    tick_positions.append((start_idx + i - 1) / 2)
+                    tick_labels.append(prev_label)
+                    start_idx = i
+                    prev_label = self.network_labels[i]
+            
+            # Add the last group
+            tick_positions.append((start_idx + len(self.network_labels) - 1) / 2)
+            tick_labels.append(prev_label)
+
+            plt.xticks(tick_positions, tick_labels, rotation=45, ha='right', fontsize=8)
+            plt.yticks(tick_positions, tick_labels, fontsize=8)
+        
+        # Plot prediction differences with network labels
+        plt.subplot(122)
+        colors = plt.cm.RdYlGn_r(np.linspace(0, 1, 256))
+        colors[0] = [0.1, 0, 0.2, 1]  # Set zero values to dark purple
+        custom_cmap = ListedColormap(colors)
+        plt.imshow(split_mask, cmap=custom_cmap, interpolation='none')
+        plt.colorbar(shrink=0.5)
+        plt.title('Prediction Differences for Training Pairs', fontsize=14)
+        
+        if self.network_labels is not None:
+            plt.xticks(tick_positions, tick_labels, rotation=45, ha='right', fontsize=8)
+            plt.yticks(tick_positions, tick_labels, fontsize=8)
+            
+        plt.tight_layout()
+        plt.show()
+
+        
+        
     def get_metrics(self):
         if self.binarize:
             metrics = {
@@ -190,23 +258,29 @@ class Metrics:
 
 
 class ModelEvaluator:
-    def __init__(self, model, X_train, Y_train, X_test, Y_test, train_shared_regions, test_shared_regions):
+    def __init__(self, model, Y, train_indices, test_indices, network_labels, X_train, Y_train, X_test, Y_test, train_shared_regions, test_shared_regions):        
+        self.Y = Y
+        self.train_indices = train_indices
+        self.test_indices = test_indices
+
         self.model = model
         self.X_train = X_train
         self.Y_train = Y_train 
         self.X_test = X_test
         self.Y_test = Y_test
-        
+        self.network_labels = network_labels
+
         self.train_shared_regions = train_shared_regions
         self.test_shared_regions = test_shared_regions
+
         self.binarize = len(np.unique(Y_train)) == 2 and len(np.unique(Y_test)) == 2
         
-        self.train_metrics = self.evaluate(self.X_train, self.Y_train, not self.train_shared_regions)
-        self.test_metrics = self.evaluate(self.X_test, self.Y_test, not self.test_shared_regions)
+        self.train_metrics = self.evaluate(X_train, Y_train, train_indices, not self.train_shared_regions)
+        self.test_metrics = self.evaluate(X_test, Y_test, test_indices, not self.test_shared_regions)
 
-    def evaluate(self, X, Y, square):
-        Y_pred = self.model.predict(X) # this outputs a np array
-        return Metrics(Y, Y_pred, square, self.binarize).get_metrics()
+    def evaluate(self, X, Y, indices, square):
+        self.Y_pred = self.model.predict(X)
+        return Metrics(self.Y, indices, Y, self.Y_pred, square, self.binarize, self.network_labels).get_metrics()
 
     def get_train_metrics(self):
         return self.train_metrics
