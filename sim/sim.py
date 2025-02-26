@@ -96,7 +96,7 @@ class Simulation:
         self.Y_fc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', hemisphere=self.hemisphere)
         self.Y_fc_binary = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', binarize=True, hemisphere=self.hemisphere)
         self.coords = load_coords(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
-        self.labels, self.network_labels = load_network_labels(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical)
+        self.labels, self.network_labels = load_network_labels(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
 
         # Find rows that are not all NaN - necessary for gene expression data with unsampled regions
         valid_indices = ~np.isnan(self.X).all(axis=1)
@@ -111,8 +111,8 @@ class Simulation:
         self.Y_fc = self.Y_fc[valid_indices][:, valid_indices]
         self.Y_fc_binary = self.Y_fc_binary[valid_indices][:, valid_indices]
         self.coords = self.coords[valid_indices]
-        #self.labels = self.labels[valid_indices]
         
+        # self.labels = self.labels[valid_indices]
         self.network_labels = self.network_labels[valid_indices]
 
         print(f"X shape: {self.X.shape}")
@@ -347,8 +347,6 @@ class Simulation:
             # Generate train and test indices from network dictionaries
             train_indices = np.concatenate([indices for indices in train_network_dict.values()])
             test_indices = network_dict[str(fold_idx+1)]
-            print('train_indices', train_indices)
-            print('test_indices', test_indices)
 
             if self.gpu_acceleration:
                 X_train, Y_train, X_test, Y_test = map(cp.array, [X_train, Y_train, X_test, Y_test])

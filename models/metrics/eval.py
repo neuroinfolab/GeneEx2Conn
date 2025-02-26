@@ -127,8 +127,11 @@ class Metrics:
         self.binarize = binarize
 
         self.compute_metrics()
-        self.visualize_predictions()
-
+        self.visualize_predictions_full()
+        self.visualize_predictions_subset()
+        if not self.binarize:
+            self.visualize_predictions_scatter()
+    
     def compute_metrics(self):
         if self.binarize:    
             # Compute classification metrics
@@ -143,8 +146,52 @@ class Metrics:
             self.mae = mean_absolute_error(self.Y_true_flat, self.Y_pred_flat)
             self.r2 = r2_score(self.Y_true_flat, self.Y_pred_flat)
             self.pearson_corr = pearsonr(self.Y_true_flat, self.Y_pred_flat)[0]
+        
+    def get_metrics(self):
+        if self.binarize:
+            metrics = {
+                'accuracy': self.accuracy,
+                'precision': self.precision,
+                'recall': self.recall,
+                'f1': self.f1,
+                'auc_roc': self.auc_roc
+            }
+        else:
+            metrics = {
+                'mse': self.mse,
+                'mae': self.mae,
+                'r2': self.r2,
+                'pearson_corr': self.pearson_corr
+            }
+        if self.square:
+            metrics['geodesic_distance'] = self.geodesic_distance
+        return metrics
+        
+    def visualize_predictions_scatter(self):
+        plt.figure(figsize=(10, 10))
+        
+        # Get min and max across both true and predicted values
+        min_val = min(self.Y_true_flat.min(), self.Y_pred_flat.min())
+        max_val = max(self.Y_true_flat.max(), self.Y_pred_flat.max())
+        
+        # Create scatter plot with smaller points
+        plt.scatter(self.Y_true_flat, self.Y_pred_flat, alpha=0.5, s=8)
+        
+        # Add line of best fit
+        z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
+        p = np.poly1d(z)
+        plt.plot(self.Y_true_flat, p(self.Y_true_flat), "r:", alpha=0.5)
+        
+        # Set equal axes ranges
+        plt.xlim(min_val, max_val)
+        plt.ylim(min_val, max_val)
+        
+        plt.xlabel('True Values')
+        plt.ylabel('Predicted Values')
+        plt.title('Scatter Plot of True vs Predicted Values')
+        plt.show()
 
-    def visualize_predictions(self):
+    def visualize_predictions_subset(self):
         if self.square: # Compute geodesic distance if test data is a square connectome
             Y_pred_connectome = reconstruct_connectome(self.Y_pred, symmetric=True)
             Y_pred_connectome_asymmetric = reconstruct_connectome(self.Y_pred, symmetric=False)
@@ -172,20 +219,20 @@ class Metrics:
             plt.tight_layout()
             plt.show()
     
-        # Create a mask showing prediction differences for training regions
+    def visualize_predictions_full(self):
         n = int(self.Y.shape[0])  # Get dimensions of square connectome
-        split_mask = np.zeros((n, n))
-        
+        if self.binarize: 
+            split_mask = np.zeros((n, n)) + 0.1
+        else: 
+            split_mask = np.zeros((n, n))
+            
         # Calculate prediction differences for region pairs
         diff = abs(self.Y_true - self.Y_pred)
         
         # For each pair of regions in indices
-        for idx, (i, j) in enumerate(combinations(self.indices, 2)):
-            # Each pair appears twice in diff - once in each direction
-            # First direction: i->j is at 2*idx
-            # Second direction: j->i is at 2*idx + 1
-            split_mask[i,j] = diff[2*idx]
-            split_mask[j,i] = diff[2*idx + 1]
+        for idx, (i, j) in enumerate(combinations(self.indices, 2)): # Each pair appears twice in diff - once in each direction
+            split_mask[i,j] = diff[2*idx]   # First direction: i->j is at 2*idx
+            split_mask[j,i] = diff[2*idx + 1]   # Second direction: j->i is at 2*idx + 1
                 
         plt.figure(figsize=(16, 6))
         
@@ -213,49 +260,36 @@ class Metrics:
             tick_positions.append((start_idx + len(self.network_labels) - 1) / 2)
             tick_labels.append(prev_label)
 
-            plt.xticks(tick_positions, tick_labels, rotation=45, ha='right', fontsize=8)
-            plt.yticks(tick_positions, tick_labels, fontsize=8)
+            plt.xticks(tick_positions, tick_labels, rotation=45, ha='right', fontsize=12)
+            plt.yticks(tick_positions, tick_labels, fontsize=12)
         
+        if self.binarize: 
+            colors = [
+                (0.0, "green"),  
+                (0.1, "#2A0A4A"), 
+                (1.0, "red"), 
+            ]
+            cmap = mcolors.LinearSegmentedColormap.from_list("custom_cmap", colors)
+        else: 
+            colors = [
+                (0.0, "#2A0A4A"),  # 0 -> dark purple
+                (0.001, "green"),   # Near zero -> green
+                (0.1, "green"),    # 0.1 -> still green
+                (0.2, "yellow"),   # 0.2 -> yellow
+                (1.0, "red"),      # 1.0 -> red
+            ]
+            cmap = mcolors.LinearSegmentedColormap.from_list("custom_cmap", colors)
+        
+
+        # Create the colormap
         # Plot prediction differences with network labels
         plt.subplot(122)
-        colors = plt.cm.RdYlGn_r(np.linspace(0, 1, 256))
-        colors[0] = [0.1, 0, 0.2, 1]  # Set zero values to dark purple
-        custom_cmap = ListedColormap(colors)
-        plt.imshow(split_mask, cmap=custom_cmap, interpolation='none')
+        plt.imshow(split_mask, cmap=cmap, interpolation='none', vmin=0, vmax=1)
         plt.colorbar(shrink=0.5)
         plt.title('Prediction Differences for Training Pairs', fontsize=14)
-        
-        if self.network_labels is not None:
-            plt.xticks(tick_positions, tick_labels, rotation=45, ha='right', fontsize=8)
-            plt.yticks(tick_positions, tick_labels, fontsize=8)
             
         plt.tight_layout()
         plt.show()
-
-        
-        
-    def get_metrics(self):
-        if self.binarize:
-            metrics = {
-                'accuracy': self.accuracy,
-                'precision': self.precision,
-                'recall': self.recall,
-                'f1': self.f1,
-                'auc_roc': self.auc_roc
-            }
-        else:
-            metrics = {
-                'mse': self.mse,
-                'mae': self.mae,
-                'r2': self.r2,
-                'pearson_corr': self.pearson_corr
-            }
-
-        if self.square:
-            metrics['geodesic_distance'] = self.geodesic_distance
-
-        return metrics
-
 
 class ModelEvaluator:
     def __init__(self, model, Y, train_indices, test_indices, network_labels, X_train, Y_train, X_test, Y_test, train_shared_regions, test_shared_regions):        

@@ -68,6 +68,6 @@ class DynamicMLP(nn.Module):
         return (predictions > 0.5).astype(int) if self.binarize else predictions
 
     def fit(self, X_train, y_train, X_test, y_test, verbose=True):
-        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, weight=True)
-        val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, weight=False) # skewed val loss might be due to weighted sampler
+        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, weight=True) # weighted sampling since many more 0s than 1s
+        val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, weight=False)
         return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, self.scheduler, verbose=verbose)

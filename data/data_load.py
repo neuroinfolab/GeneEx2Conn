@@ -165,12 +165,14 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
             elif measure == 'SC':
                 matrix, _ = load_sc_as_one(parcellation='schaefer_100')
                 matrix[matrix < 0] = 0 # a handful of values are slightly negative so set to 0
+                matrix = matrix / matrix.max()
         elif parcellation == 'S400' or parcellation == 'S456':
             region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t').iterrows()]
             if measure == 'FC':
                 matrix = np.array(pd.read_csv('./data/UKBB/UKBB_S456_FC_mu.csv'))
             elif measure == 'SC':
                 matrix = np.log1p(loadmat('./data/HCP1200/4S456_DTI_count.mat')['connectivity'])
+                matrix = matrix / matrix.max()
      
         # Add diagonal as 1 if specified (diagonal is ignored in edge-wise reconstruction)
         if diag == 1:
@@ -250,7 +252,7 @@ def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
         coordinates = np.array(mni_coords)
                 
     if omit_subcortical:
-        n = (coordinates.shape[0] // 100) * 100 # Hacky way to retain only cortical regions by rounding down to nearest hundred
+        n = (coordinates.shape[0] // 100) * 100 # retain only cortical regions by rounding down to nearest hundred
         coordinates = coordinates[:n, :]
         region_labels = region_labels[:n]
 
@@ -262,8 +264,16 @@ def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
     
     return coordinates
 
+def load_network_labels(parcellation='S100', omit_subcortical=False, dataset='HCP', hemisphere='both'):
+    """
+    Load network labels for a given parcellation and dataset.
 
-def load_network_labels(parcellation='S100', omit_subcortical=False, dataset='HCP',):
+    Args:
+        parcellation (str): Parcellation scheme ('S100' or 'S400'). Default: 'S100'
+        omit_subcortical (bool): Exclude subcortical regions. Default: False
+        dataset (str): Dataset to load ('HCP', 'UKBB'). Default: 'HCP'
+        hemisphere (str): Brain hemisphere ('both', 'left', 'right'). Default: 'both'
+    """
     if parcellation == 'S100': 
         schaef156_atlas_info = pd.read_csv('./data/UKBB/schaefer156_atlas_info.txt', sep='\t')
             
@@ -281,6 +291,7 @@ def load_network_labels(parcellation='S100', omit_subcortical=False, dataset='HC
         
         labels = schaef156_atlas_info['label'].tolist()
         network_labels = schaef156_atlas_info['network_label'].values
+
     elif parcellation == 'S400':
         schaef456_atlas_info = pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t')
         schaef456_atlas_info.loc[schaef456_atlas_info['atlas_name'] == 'Cerebellum', 'network_label'] = 'Cerebellum'
@@ -294,5 +305,19 @@ def load_network_labels(parcellation='S100', omit_subcortical=False, dataset='HC
         
         labels = schaef456_atlas_info['label'].tolist()
         network_labels = schaef456_atlas_info['network_label'].values
+
+    # Add hemisphere prefix to labels
+    labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in labels]
+
+    # Subset based on hemisphere
+    lh_indices = [i for i, label in enumerate(labels) if 'LH' in label]
+    rh_indices = [i for i, label in enumerate(labels) if 'RH' in label]
+    
+    if hemisphere == 'left':
+        labels = [labels[i] for i in lh_indices]
+        network_labels = network_labels[lh_indices]
+    elif hemisphere == 'right':
+        labels = [labels[i] for i in rh_indices]
+        network_labels = network_labels[rh_indices]
 
     return labels, network_labels

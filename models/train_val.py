@@ -54,9 +54,7 @@ def evaluate(model, val_loader, criterion, device, scheduler=None):
             total_samples += batch_y.size(0)
     
     mean_val_loss = total_val_loss / len(val_loader)
-    print(f'Mean Val Loss: {mean_val_loss:.4f}')
     accuracy = total_correct / total_samples
-    print(f'Validation Accuracy: {accuracy:.4f}')
 
     if scheduler is not None:
         prev_lr = scheduler.optimizer.param_groups[0]['lr']

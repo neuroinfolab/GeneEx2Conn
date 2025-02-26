@@ -120,7 +120,7 @@ class XGBClassifierModel(BaseModel):
             'verbosity': [0],
             'objective': ['binary:logistic'],          # For binary classification
             'eval_metric': ['logloss'],                 # Evaluation metric for binary classification
-            # 'scale_pos_weight': [1] #, 2, 3, 4]
+            'scale_pos_weight': [1, 2, 3, 4, 5]
         }
         
         self.param_dist = {
