@@ -54,6 +54,27 @@ parameters:
   epochs:
     values: [100, 150]
   
+# BINARY
+# best_parameters:
+#   input_dim:
+#     value: !!int 0
+#   binarize:
+#     value: !!int 0
+#   hidden_dims:
+#     values:     
+#     - [256, 128]
+#   learning_rate:
+#     values: [0.00009]
+#   batch_size:
+#     values: [64]
+#   dropout_rate:
+#     values: [0.5]
+#   weight_decay:
+#     values: [0.0001]
+#   epochs:
+#     values: [100]
+
+# REGRESSION
 best_parameters:
   input_dim:
     value: !!int 0
@@ -65,9 +86,9 @@ best_parameters:
   learning_rate:
     values: [0.00009]
   batch_size:
-    values: [64]
+    values: [512]
   dropout_rate:
-    values: [0.5]
+    values: [0.2]
   weight_decay:
     values: [0.0001]
   epochs:

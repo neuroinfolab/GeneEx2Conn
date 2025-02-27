@@ -36,7 +36,8 @@ class DynamicMLP(nn.Module):
         self.model = nn.Sequential(*layers)
         
         self.optimizer = Adam(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
-
+        
+        self.patience = 40
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
@@ -70,4 +71,4 @@ class DynamicMLP(nn.Module):
     def fit(self, X_train, y_train, X_test, y_test, verbose=True):
         train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, weight=True) # weighted sampling since many more 0s than 1s
         val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, weight=False)
-        return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, self.scheduler, verbose=verbose)
+        return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
