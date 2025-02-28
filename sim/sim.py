@@ -327,7 +327,7 @@ class Simulation:
                 )
             
             # Initialize sweep
-            # sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
+            sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
             sweep_id = f"{self.model_type}_{sweep_id}" #  # figure out how to tag with {self.model_type}
             print('sweep_id', sweep_id)
 
@@ -354,16 +354,12 @@ class Simulation:
 
     def run_innercv_wandb_torch(self, input_dim, train_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
         """Inner cross-validation with W&B support for deep learning models"""
-        
-        # Create inner CV object for X_train and Y_train
-        inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
-        
         device = torch.device("cuda")
-        
-        # Load sweep config
         sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')
         sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
         
+        inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
+
         if self.skip_cv: 
             best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
             best_val_loss = 0.0 # no CV --> no best val loss
@@ -390,7 +386,7 @@ class Simulation:
                 )
             
             # Initialize sweep
-            # sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
+            sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
             sweep_id = f"{self.model_type}_{sweep_id}" #  # figure out how to tag with {self.model_type}
             print('sweep_id', sweep_id)
 
@@ -474,23 +470,43 @@ class Simulation:
         if search_method[0] == 'wandb' or track_wandb:
             wandb.login()
         
-        print('region pair dataset', self.region_pair_dataset.valid_pair_to_expanded_idx)
+        network_dict = self.cv_obj.networks
+
+        for fold_idx, (train_indices, test_indices) in enumerate(self.cv_obj.split(self.X, self.Y)):
+            
+            # Convert to structured array format for faster lookup
+            print('train_indices', train_indices)
+            print('test_indices', test_indices)
+            train_region_pairs = expand_X_symmetric(train_indices)
+            test_region_pairs = expand_X_symmetric(test_indices)
+            print('train_region_pairs', train_region_pairs)
+            print('test_region_pairs', test_region_pairs)
+            print('valid_pair_to_expanded_idx', self.region_pair_dataset.valid_pair_to_expanded_idx)
+
+
+            # Get expanded indices using vectorized dictionary lookup
+            '''
+            # Use vectorized dictionary lookup instead of list comprehension
+            train_indices_expanded = np.array(
+                np.vectorize(self.region_pair_dataset.valid_pair_to_expanded_idx.get)(train_region_pairs[:, 0], train_region_pairs[:, 1])
+            )
+
+            test_indices_expanded = np.array(
+                np.vectorize(self.region_pair_dataset.valid_pair_to_expanded_idx.get)(test_region_pairs[:, 0], test_region_pairs[:, 1])
+            )
+
+            print('train_indices_expanded', train_indices_expanded)
+            print('test_indices_expanded', test_indices_expanded)
+            innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
+            input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
+            self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
+            '''
+
+            break
+        
         # from here we can get the list of indices for each fold 
         # iter through all pairs and build list of expaneded indices - pass to subset
         # make sure loading in bidirectional within train and test
-
-        '''
-        network_dict = self.cv_obj.networks
-        print(f"Network dict: {network_dict}")        
-        
-        for fold_idx, (train_indices, test_indices) in enumerate(self.cv_obj.split(self.X, self.Y)):
-            print(f'Fold {fold_idx+1} train indices: {train_indices}')
-            print(f'Fold {fold_idx+1} test indices: {test_indices}')
-
-            innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
-            print(f"InnerCV network dict: {innercv_network_dict}")
-        '''
-
         # within cv will create appropriate train/test split objects. (Create a map from pairs to index)
         # Will have to create a dataset subset object for each train/test outer split
 

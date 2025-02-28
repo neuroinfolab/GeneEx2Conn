@@ -2,32 +2,6 @@ from env.imports import *
 from torch.utils.data import WeightedRandomSampler, DataLoader, TensorDataset, Dataset
 
 
-def create_data_loader(X, y, batch_size, device, shuffle=True, weight=False):
-    X = torch.FloatTensor(X).to(device)
-    y = torch.FloatTensor(y).to(device)
-    dataset = TensorDataset(X, y)
-    
-    # Handle class imbalance for binary classification, but only during training
-    if len(y.unique()) == 2 and weight:
-        # Calculate class weights
-        class_counts = torch.bincount(y.long())
-        print('class counts', class_counts)
-        total_samples = len(y)
-        class_weights = total_samples / (2 * class_counts)
-        print(f'Class weights - 0: {class_weights[0]:.4f}, 1: {class_weights[1]:.4f}')
-        sample_weights = class_weights[y.long()]
-
-        # Create weighted sampler
-        sampler = WeightedRandomSampler(
-            weights=sample_weights,
-            num_samples=len(sample_weights),
-            replacement=True
-        )
-        return DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=0)
-    
-    # For validation or non-binary cases, use regular DataLoader
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0)
-
 def reconstruct_connectome(Y, symmetric=True):
     """
     Reconstructs the full connectome matrix from a given input vector Y.
@@ -407,7 +381,7 @@ def expand_shared_matrices(X_train, X_train2, Y_train2, Y_train_feats1=np.nan, Y
     return X_train_shared, Y_expanded
 
 
-def expand_X_symmetric(X):
+def expand_X_symmetric_v0(X):
     """
     Expands the X matrix symmetrically by combining features from pairs of regions.
 
@@ -426,6 +400,23 @@ def expand_X_symmetric(X):
     for i, (region1, region2) in enumerate(region_combinations):
         expanded_X[i * 2] = np.concatenate((X[region1], X[region2]))
         expanded_X[i * 2 + 1] = np.concatenate((X[region2], X[region1]))
+
+    return expanded_X
+
+
+def expand_X_symmetric(X):
+    num_regions, num_genes = X.shape
+    region_combinations = np.array(list(combinations(range(num_regions), 2)))  # (num_combinations, 2)
+
+    # Efficiently extract pairs using NumPy indexing
+    X1 = X[region_combinations[:, 0]]  # Select first region of each pair
+    X2 = X[region_combinations[:, 1]]  # Select second region of each pair
+
+    # Ensure concatenation matches original function order
+    expanded_X = np.zeros((len(region_combinations) * 2, 2 * num_genes))
+
+    expanded_X[0::2] = np.hstack((X1, X2))  # First order (region1, region2)
+    expanded_X[1::2] = np.hstack((X2, X1))  # Reverse order (region2, region1)
 
     return expanded_X
 
@@ -674,6 +665,32 @@ def expanded_inner_folds_combined_plus_indices_connectome(X_train, X_test, Y_tra
     return X_combined, Y_combined, train_test_indices        
 '''
 
+def create_data_loader(X, y, batch_size, device, shuffle=True, weight=False):
+    X = torch.FloatTensor(X).to(device)
+    y = torch.FloatTensor(y).to(device)
+    dataset = TensorDataset(X, y)
+    
+    # Handle class imbalance for binary classification, but only during training
+    if len(y.unique()) == 2 and weight:
+        # Calculate class weights
+        class_counts = torch.bincount(y.long())
+        print('class counts', class_counts)
+        total_samples = len(y)
+        class_weights = total_samples / (2 * class_counts)
+        print(f'Class weights - 0: {class_weights[0]:.4f}, 1: {class_weights[1]:.4f}')
+        sample_weights = class_weights[y.long()]
+
+        # Create weighted sampler
+        sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True
+        )
+        return DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=0)
+    
+    # For validation or non-binary cases, use regular DataLoader
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0)
+
 
 class RegionPairDataset(Dataset):
     def __init__(self, X, Y, coords, valid2true_mapping):
@@ -700,15 +717,14 @@ class RegionPairDataset(Dataset):
         
         self.valid_pair_to_expanded_idx = dict(zip(valid_pairs, range(len(valid_pairs))))
         self.true_pair_to_expanded_idx = dict(zip(true_pairs, range(len(true_pairs))))
-        
+    
         print(f"Dataset sizes:")
-        print(f"X: {self.X_expanded.shape}")
-        print(f"Y: {self.Y_expanded.shape}") 
-        print(f"Coords: {self.coords_expanded.shape}")
+        print(f"X expanded: {self.X_expanded.shape}")
+        print(f"Y expanded: {self.Y_expanded.shape}")
+        print(f"Coords expanded: {self.coords_expanded.shape}")
         print(f"Valid indices: {self.valid_indices_expanded.shape}")
         print(f"True indices: {self.true_indices_expanded.shape}")
-        
-        print(f"Valid pair to expanded idx: {self.valid_pair_to_expanded_idx}") 
+        #print(f"Valid pair to expanded idx: {self.valid_pair_to_expanded_idx}")
 
     def __len__(self):
         return len(self.X_expanded)

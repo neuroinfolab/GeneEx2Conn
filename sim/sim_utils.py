@@ -418,9 +418,23 @@ def train_sweep_torch(config, model_type, feature_type, connectome_target, datas
 
     # BASIC IDEA IS TO CREATE A DATASET SUBSET OBJECT
     # Process each inner fold
-    for fold_idx, (X_train, X_val, y_train, y_val) in enumerate(inner_fold_splits):
+    for fold_idx, (train_regions, test_regions) in enumerate(inner_cv_obj.split()):
         print(f'Processing inner fold {fold_idx}')
+        print('inner train_regions', train_regions)
+        print('inner test_regions', test_regions)
         
+        train_region_pairs = expand_X_symmetric(train_regions)
+        test_region_pairs = expand_X_symmetric(test_regions)
+        print('train_region_pairs', train_region_pairs)
+        print('test_region_pairs', test_region_pairs)
+
+       # train_indices = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
+       # test_indices = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])
+       # print('train_indices', train_indices)
+       # print('test_indices', test_indices)
+        
+        break
+
         # Initialize model dynamically based on sweep config
         model = ModelClass(**sweep_config).to(device)
 
