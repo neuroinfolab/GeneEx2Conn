@@ -1,5 +1,6 @@
 from env.imports import *
-from torch.utils.data import WeightedRandomSampler, DataLoader, TensorDataset
+from torch.utils.data import WeightedRandomSampler, DataLoader, TensorDataset, Dataset
+
 
 def create_data_loader(X, y, batch_size, device, shuffle=True, weight=False):
     X = torch.FloatTensor(X).to(device)
@@ -26,15 +27,6 @@ def create_data_loader(X, y, batch_size, device, shuffle=True, weight=False):
     
     # For validation or non-binary cases, use regular DataLoader
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0)
-
-def set_seed(seed=42):
-    """Set seeds for reproducibility."""
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # For multi-GPU
-    np.random.seed(seed)
-    random.seed(seed)
-    torch.backends.cudnn.deterministic = True  # Forces deterministic behavior
-    torch.backends.cudnn.benchmark = False     # Disables auto-tuning (non-deterministic)
 
 def reconstruct_connectome(Y, symmetric=True):
     """
@@ -681,3 +673,65 @@ def expanded_inner_folds_combined_plus_indices_connectome(X_train, X_test, Y_tra
 
     return X_combined, Y_combined, train_test_indices        
 '''
+
+
+class RegionPairDataset(Dataset):
+    def __init__(self, X, Y, coords, valid2true_mapping):
+        self.X = torch.FloatTensor(X)
+        self.Y = torch.FloatTensor(Y)
+        self.coords = torch.FloatTensor(coords)
+        
+        # Create mappings between valid and true indices
+        self.valid_indices = np.array(list(valid2true_mapping.keys()))
+        self.true_indices = np.array(list(valid2true_mapping.values()))
+        
+        # Expand data symmetrically
+        self.X_expanded = torch.FloatTensor(expand_X_symmetric(X))
+        self.Y_expanded = torch.FloatTensor(expand_Y_symmetric(Y))
+        self.coords_expanded = torch.FloatTensor(expand_X_symmetric(coords))
+
+        # Create maps from input pairs to expanded indices
+        self.valid_indices_expanded = expand_X_symmetric(self.valid_indices.reshape(-1,1)).astype(int)
+        self.true_indices_expanded = expand_X_symmetric(self.true_indices.reshape(-1,1)).astype(int)
+        
+        # Create mapping arrays using numpy operations
+        valid_pairs = tuple(map(tuple, self.valid_indices_expanded))
+        true_pairs = tuple(map(tuple, self.true_indices_expanded))
+        
+        self.valid_pair_to_expanded_idx = dict(zip(valid_pairs, range(len(valid_pairs))))
+        self.true_pair_to_expanded_idx = dict(zip(true_pairs, range(len(true_pairs))))
+        
+        print(f"Dataset sizes:")
+        print(f"X: {self.X_expanded.shape}")
+        print(f"Y: {self.Y_expanded.shape}") 
+        print(f"Coords: {self.coords_expanded.shape}")
+        print(f"Valid indices: {self.valid_indices_expanded.shape}")
+        print(f"True indices: {self.true_indices_expanded.shape}")
+        
+        print(f"Valid pair to expanded idx: {self.valid_pair_to_expanded_idx}") 
+
+    def __len__(self):
+        return len(self.X_expanded)
+        
+    def __getitem__(self, idx):
+        return self.X_expanded[idx], self.Y_expanded[idx]
+        
+    def get_all_data(self, idx):
+        return {
+            'features': self.X_expanded[idx],
+            'target': self.Y_expanded[idx], 
+            'coords': self.coords_expanded[idx],
+            'valid_idx': self.valid_indices_expanded[idx],
+            'true_idx': self.true_indices_expanded[idx]
+        }
+        
+    def get_by_valid_indices(self, idx1, idx2):
+        # Get data for a specific valid index pair using the mapping
+        pair_idx = self.valid_pair_to_expanded_idx[(idx1, idx2)]
+        return self.__getitem__(pair_idx)
+        
+    def get_by_true_indices(self, idx1, idx2):
+        # Get data for a specific true index pair using the mapping
+        # This is really only for returning target data
+        pair_idx = self.true_pair_to_expanded_idx[(idx1, idx2)]
+        return self.__getitem__(pair_idx)

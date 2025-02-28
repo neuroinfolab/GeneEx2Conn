@@ -16,6 +16,15 @@ from models.metrics.eval import (
 )
 
 # HELPERS 
+def set_seed(seed=42):
+    """Set seeds for reproducibility."""
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # For multi-GPU
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True  # Forces deterministic behavior
+    torch.backends.cudnn.benchmark = False     # Disables auto-tuning (non-deterministic)
+
 def bytes2human(n):
     """
     Convert bytes to a human-readable format.
@@ -71,7 +80,7 @@ def load_best_parameters(yaml_file_path, input_dim, binarize):
     return best_config
 
 # CROSS-VALIDATION
-def drop_test_network(cv_type, network_dict, value, idx):
+def drop_test_network(cv_type, network_dict, value, test_fold_idx):
         """
         Drop an entry from the dictionary based on the given value and return a new dictionary.
         Helper function for removing schaefer network from dict
@@ -79,7 +88,7 @@ def drop_test_network(cv_type, network_dict, value, idx):
         # Create a copy of the original dictionary
         new_dict = network_dict.copy()
     
-        if cv_type == 'schaefer': 
+        if cv_type == 'schaefer': # REVISIT THIS LOGIC
             # Identify the keys to remove
             keys_to_remove = [key for key, val in new_dict.items() if val == value]
             
@@ -87,7 +96,7 @@ def drop_test_network(cv_type, network_dict, value, idx):
             for key in keys_to_remove:
                 del new_dict[key]
         else: 
-            new_dict.pop(str(idx))
+            new_dict.pop(str(test_fold_idx))
 
         return new_dict
 
@@ -332,6 +341,82 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
     
     ModelClass = model_classes[model_type]
 
+    # Process each inner fold
+    for fold_idx, (X_train, X_val, y_train, y_val) in enumerate(inner_fold_splits):
+        print(f'Processing inner fold {fold_idx}')
+        
+        # Initialize model dynamically based on sweep config
+        model = ModelClass(**sweep_config).to(device)
+
+        # Train model
+        history = model.fit(X_train, y_train, X_val, y_val)
+        
+        # Log epoch-wise metrics
+        for epoch, metrics in enumerate(zip(history['train_loss'], history['val_loss'])):
+            wandb.log({
+                'inner_fold': fold_idx,
+                f'fold{fold_idx}_epoch': epoch,
+                f'fold{fold_idx}_train_loss': metrics[0],
+                f'fold{fold_idx}_val_loss': metrics[1]
+            })
+        
+        # Store final metrics
+        inner_fold_metrics['train_losses'].append(history['train_loss'][-1])
+        inner_fold_metrics['val_losses'].append(history['val_loss'][-1])
+
+    # Log mean metrics across folds
+    mean_metrics = {
+        'mean_train_loss': np.mean(inner_fold_metrics['train_losses']),
+        'mean_val_loss': np.mean(inner_fold_metrics['val_losses'])
+    }
+    wandb.log(mean_metrics)
+    
+    run.finish()
+    return mean_metrics['mean_val_loss']
+
+def train_sweep_torch(config, model_type, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize):
+    """
+    Training function for W&B sweeps for deep learning models.
+    
+    Args:
+        config: W&B sweep configuration
+        model_type: Type of deep learning model
+        feature_type: List of feature dictionaries
+        connectome_target: Target connectome type
+        cv_type: Type of cross-validation
+        outer_fold_idx: Current outer fold index
+        inner_fold_splits: List of inner fold data splits
+        device: torch device (cuda/cpu)
+        sweep_id: Current W&B sweep ID
+    
+    Returns:
+        float: Mean validation loss across inner folds
+    """
+    feature_str = "+".join(str(k) if v is None else f"{k}_{v}"
+                         for feat in feature_type 
+                         for k,v in feat.items())
+    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{outer_fold_idx}_innerCV" 
+
+    run = wandb.init(
+        project="gx2conn",
+        name=run_name,
+        group=f"sweep_{sweep_id}",
+        tags=["inner cross validation", f'cv_type_{cv_type}', f"fold{outer_fold_idx}", f"model_{model_type}", f"split_{cv_type}{seed}", f'feature_type_{feature_str}', f'target_{connectome_target}', f"parcellation_{parcellation}",  f"hemisphere_{hemisphere}", f"omit_subcortical_{omit_subcortical}", f"gene_list_{gene_list}", f"binarize_{binarize}"],
+        reinit=True
+    )
+
+    sweep_config = wandb.config
+    inner_fold_metrics = {
+        'train_losses': [], 'val_losses': []
+    }
+
+    # Get the appropriate model class
+    if model_type not in model_classes:
+        raise ValueError(f"Model type {model_type} not supported for W&B sweeps")
+    
+    ModelClass = model_classes[model_type]
+
+    # BASIC IDEA IS TO CREATE A DATASET SUBSET OBJECT
     # Process each inner fold
     for fold_idx, (X_train, X_val, y_train, y_val) in enumerate(inner_fold_splits):
         print(f'Processing inner fold {fold_idx}')

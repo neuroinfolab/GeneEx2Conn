@@ -46,7 +46,7 @@ parameters:
   learning_rate:
     values: [0.00009, 0.0001]
   batch_size:
-    values: [256, 512]
+    values: [64, 256, 512]
   dropout_rate:
     values: [0.1, 0.3]
   weight_decay:
@@ -84,7 +84,7 @@ best_parameters:
     values:     
     - [256, 128]
   learning_rate:
-    values: [0.00009]
+    values: [0.00009] # .00009
   batch_size:
     values: [512]
   dropout_rate:

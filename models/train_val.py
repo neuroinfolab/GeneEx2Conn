@@ -4,20 +4,8 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
     train_history = {"train_loss": [], "val_loss": []}
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    '''
-    for epoch in range(epochs):
-        train_loss = train_epoch(model, train_loader, optimizer, criterion)
-        train_history["train_loss"].append(train_loss)
-        if val_loader:
-            val_loss = evaluate(model, val_loader, criterion, device, scheduler)
-            train_history["val_loss"].append(val_loss)
-            if verbose and (epoch + 1) % 5 == 0:
-                print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
-        elif verbose and (epoch + 1) % 5 == 0:
-            print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}")
-    '''
-
     best_val_loss = float("inf")  # Track the best validation loss
+    best_model_state = None  # Store the best model state
     patience_counter = 0  # Counts epochs without improvement
 
     for epoch in range(epochs):
@@ -35,13 +23,17 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 print(f"Best val loss so far at epoch {epoch+1}: {best_val_loss:.4f}")
+                best_model_state = model.state_dict()  # Save best model
                 patience_counter = 0  # Reset counter if improvement
             else:
                 patience_counter += 1  # Increment counter if no improvement
 
+            # Early stopping if patience threshold reached
             if patience_counter >= patience:
-                print(f"\nEarly stopping triggered after {epoch+1} epochs. Best Val Loss: {best_val_loss:.4f}")
-                break  # Stop training
+                print(f"\nEarly stopping triggered at epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}")
+                model.load_state_dict(best_model_state)  # Rewind to best model
+                break
+
         elif verbose and (epoch + 1) % 5 == 0:
             print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}")
 
