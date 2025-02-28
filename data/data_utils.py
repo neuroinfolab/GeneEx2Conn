@@ -710,13 +710,13 @@ class RegionPairDataset(Dataset):
         # Create maps from input pairs to expanded indices
         self.valid_indices_expanded = expand_X_symmetric(self.valid_indices.reshape(-1,1)).astype(int)
         self.true_indices_expanded = expand_X_symmetric(self.true_indices.reshape(-1,1)).astype(int)
-        
-        # Create mapping arrays using numpy operations
         valid_pairs = tuple(map(tuple, self.valid_indices_expanded))
         true_pairs = tuple(map(tuple, self.true_indices_expanded))
         
         self.valid_pair_to_expanded_idx = dict(zip(valid_pairs, range(len(valid_pairs))))
+        self.expanded_idx_to_valid_pair = {v: k for k, v in self.valid_pair_to_expanded_idx.items()}
         self.true_pair_to_expanded_idx = dict(zip(true_pairs, range(len(true_pairs))))
+        self.expanded_idx_to_true_pair = {v: k for k, v in self.true_pair_to_expanded_idx.items()}
     
         print(f"Dataset sizes:")
         print(f"X expanded: {self.X_expanded.shape}")
@@ -730,7 +730,7 @@ class RegionPairDataset(Dataset):
         return len(self.X_expanded)
         
     def __getitem__(self, idx):
-        return self.X_expanded[idx], self.Y_expanded[idx]
+        return self.X_expanded[idx], self.Y_expanded[idx], idx
         
     def get_all_data(self, idx):
         return {

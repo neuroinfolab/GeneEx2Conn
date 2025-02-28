@@ -24,6 +24,8 @@ from models.dynamic_mlp import DynamicMLP
 from models.bilinear import BilinearLowRank, BilinearSCM
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
 from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionCLSModel
+from torch.utils.data import DataLoader, Subset
+
 MODEL_CLASSES = {
     'dynamic_mlp': DynamicMLP,
     'bilinear_lowrank': BilinearLowRank,
@@ -473,43 +475,52 @@ class Simulation:
         network_dict = self.cv_obj.networks
 
         for fold_idx, (train_indices, test_indices) in enumerate(self.cv_obj.split(self.X, self.Y)):
-            
-            # Convert to structured array format for faster lookup
-            print('train_indices', train_indices)
-            print('test_indices', test_indices)
-            train_region_pairs = expand_X_symmetric(train_indices)
-            test_region_pairs = expand_X_symmetric(test_indices)
+            # Expand region indices efficiently
+            train_region_pairs = expand_X_symmetric(train_indices.reshape(-1, 1)).astype(int)
+            test_region_pairs = expand_X_symmetric(test_indices.reshape(-1, 1)).astype(int)
             print('train_region_pairs', train_region_pairs)
             print('test_region_pairs', test_region_pairs)
-            print('valid_pair_to_expanded_idx', self.region_pair_dataset.valid_pair_to_expanded_idx)
 
-
-            # Get expanded indices using vectorized dictionary lookup
-            '''
-            # Use vectorized dictionary lookup instead of list comprehension
-            train_indices_expanded = np.array(
-                np.vectorize(self.region_pair_dataset.valid_pair_to_expanded_idx.get)(train_region_pairs[:, 0], train_region_pairs[:, 1])
-            )
-
-            test_indices_expanded = np.array(
-                np.vectorize(self.region_pair_dataset.valid_pair_to_expanded_idx.get)(test_region_pairs[:, 0], test_region_pairs[:, 1])
-            )
-
+            # Directly convert to tuples in list comprehension and lookup indices
+            train_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
+            test_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])
             print('train_indices_expanded', train_indices_expanded)
             print('test_indices_expanded', test_indices_expanded)
-            innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
-            input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
-            self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
-            '''
+
+            train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
+            test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
+            train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+            test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
+
+            for batch_X, batch_y, idx in train_loader:
+                print('train batch_X shape:', batch_X.shape)
+                print('train batch_y shape:', batch_y.shape)
+                print('batch indices:', idx)
+                print('valid region pairs:', [self.region_pair_dataset.expanded_idx_to_valid_pair[i.item()] for i in idx])
+                print('true region pairs:', [self.region_pair_dataset.expanded_idx_to_true_pair[i.item()] for i in idx])
+                print()
+
+                break
+            
+            for batch_X, batch_y, idx in test_loader:
+                print('test batch_X shape:', batch_X.shape)
+                print('test batch_y shape:', batch_y.shape)
+                print('batch indices:', idx)
+                print('valid region pairs:', [self.region_pair_dataset.expanded_idx_to_valid_pair[i.item()] for i in idx])
+                print('true region pairs:', [self.region_pair_dataset.expanded_idx_to_true_pair[i.item()] for i in idx])
+                print()
+
+                break
+            
+
+            #innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
+            #input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
+            #self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
+            
+
 
             break
         
-        # from here we can get the list of indices for each fold 
-        # iter through all pairs and build list of expaneded indices - pass to subset
-        # make sure loading in bidirectional within train and test
-        # within cv will create appropriate train/test split objects. (Create a map from pairs to index)
-        # Will have to create a dataset subset object for each train/test outer split
-
         return
 
         self.expand_data()        
