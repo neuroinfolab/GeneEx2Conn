@@ -1,3 +1,4 @@
+name: dynamic_mlp
 method: random
 metric:
   name: mean_val_loss
@@ -42,6 +43,7 @@ parameters:
     value: !!int 0
   hidden_dims:
     values:
+      - [256, 128]
       - [512, 256, 128]
   learning_rate:
     values: [0.00009, 0.0001]

@@ -168,8 +168,7 @@ class Metrics:
         return metrics
         
     def visualize_predictions_scatter(self):
-        plt.figure(figsize=(10, 10))
-        
+        plt.figure(figsize=(10, 10))        
         # Get min and max across both true and predicted values
         min_val = min(self.Y_true_flat.min(), self.Y_pred_flat.min())
         max_val = max(self.Y_true_flat.max(), self.Y_pred_flat.max())
@@ -198,9 +197,7 @@ class Metrics:
             Y_true_connectome = reconstruct_connectome(self.Y_true)
             self.geodesic_distance = distance_FC(Y_true_connectome, Y_pred_connectome).geodesic()
 
-            # Visualize true and predicted connectomes
             plt.figure(figsize=(16, 4))
-
             plt.subplot(131)
             plt.imshow(Y_true_connectome, cmap='viridis', vmin=Y_true_connectome.min(), vmax=Y_true_connectome.max())
             plt.colorbar(shrink=0.5)
@@ -280,8 +277,6 @@ class Metrics:
             ]
             cmap = mcolors.LinearSegmentedColormap.from_list("custom_cmap", colors)
         
-
-        # Create the colormap
         # Plot prediction differences with network labels
         plt.subplot(122)
         plt.imshow(split_mask, cmap=cmap, interpolation='none', vmin=0, vmax=1)
@@ -302,6 +297,7 @@ class ModelEvaluator:
         self.Y_train = Y_train 
         self.X_test = X_test
         self.Y_test = Y_test
+
         self.network_labels = network_labels
 
         self.train_shared_regions = train_shared_regions
@@ -313,8 +309,35 @@ class ModelEvaluator:
         self.test_metrics = self.evaluate(X_test, Y_test, test_indices, not self.test_shared_regions)
 
     def evaluate(self, X, Y, indices, square):
-        self.Y_pred = self.model.predict(X)
+        self.Y_pred = self.model.predict(X)        
         return Metrics(self.Y, indices, Y, self.Y_pred, square, self.binarize, self.network_labels).get_metrics()
+
+    def get_train_metrics(self):
+        return self.train_metrics
+
+    def get_test_metrics(self):
+        return self.test_metrics
+
+class ModelEvaluatorTorch:
+    def __init__(self, model, Y, train_loader, train_indices, test_loader, test_indices, network_labels, train_shared_regions, test_shared_regions):        
+        self.model = model
+        self.train_loader = train_loader
+        self.train_indices = train_indices
+        self.test_loader = test_loader
+        self.test_indices = test_indices
+        self.network_labels = network_labels
+        self.train_shared_regions = train_shared_regions
+        self.test_shared_regions = test_shared_regions
+        self.Y = Y
+
+        self.binarize = len(np.unique(Y)) == 2
+        
+        self.train_metrics = self.evaluate(self.train_loader, self.train_indices, not self.train_shared_regions)
+        self.test_metrics = self.evaluate(self.test_loader, self.test_indices, not self.test_shared_regions)
+
+    def evaluate(self, loader, indices, square):
+        self.Y_pred, self.Y_true = self.model.predict(loader)
+        return Metrics(self.Y, indices, self.Y_true, self.Y_pred, square, self.binarize, self.network_labels).get_metrics()
 
     def get_train_metrics(self):
         return self.train_metrics

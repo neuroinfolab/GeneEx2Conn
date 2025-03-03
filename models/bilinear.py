@@ -62,7 +62,7 @@ class BilinearLowRank(nn.Module):
         out1 = self.activation(self.linear(x_i))
         out2 = self.activation(self.linear(x_j) if self.shared_weights else self.linear2(x_j))
         return torch.sum(out1 * out2, dim=1) # dot product for paired samples
-
+    
     def predict(self, X):
         self.eval()
         X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
@@ -74,7 +74,7 @@ class BilinearLowRank(nn.Module):
         train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, shuffle=True)
         val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, shuffle=True)
         return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, verbose=verbose)
-
+    
 
 class BilinearSCM(nn.Module):
     def __init__(self, input_dim, learning_rate=0.01, epochs=100, 

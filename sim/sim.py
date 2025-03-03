@@ -24,7 +24,6 @@ from models.dynamic_mlp import DynamicMLP
 from models.bilinear import BilinearLowRank, BilinearSCM
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
 from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionCLSModel
-from torch.utils.data import DataLoader, Subset
 
 MODEL_CLASSES = {
     'dynamic_mlp': DynamicMLP,
@@ -37,7 +36,8 @@ MODEL_CLASSES = {
 }
 
 from models.metrics.eval import (
-    ModelEvaluator
+    ModelEvaluator,
+    ModelEvaluatorTorch
 )
 
 from sim.sim_utils import (
@@ -58,6 +58,7 @@ from sim.sim_utils import (
 
 from sim.sim_utils import (
     train_sweep,
+    train_sweep_torch,
     load_sweep_config, 
     load_best_parameters,
     log_wandb_metrics
@@ -278,6 +279,7 @@ class Simulation:
             X.append(feature_X)
         
         self.X = np.hstack(X)
+        print('X generated... expanding to pairwise dataset')
 
         # Create custom dataset for region pair data
         self.region_pair_dataset = RegionPairDataset(
@@ -287,7 +289,7 @@ class Simulation:
             self.valid2true_index_mapping
         )
 
-                        
+    
     def run_innercv_wandb(self, input_dim, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
         """Inner cross-validation with W&B support for deep learning models"""
         
@@ -330,7 +332,7 @@ class Simulation:
             
             # Initialize sweep
             sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
-            sweep_id = f"{self.model_type}_{sweep_id}" #  # figure out how to tag with {self.model_type}
+            # sweep_id = f"{self.model_type}_{sweep_id}" #  # figure out how to tag with {self.model_type}
             print('sweep_id', sweep_id)
 
             # Run sweep
@@ -389,7 +391,6 @@ class Simulation:
             
             # Initialize sweep
             sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
-            sweep_id = f"{self.model_type}_{sweep_id}" #  # figure out how to tag with {self.model_type}
             print('sweep_id', sweep_id)
 
             # Run sweep
@@ -459,7 +460,7 @@ class Simulation:
         return best_model, param_search.best_score_
 
 
-    def run_sim(self, search_method=('random', 'mse', 5), track_wandb=False):
+    def run_sim_torch(self, search_method=('random', 'mse', 5), track_wandb=False):
         """
         Main simulation method
         """
@@ -475,55 +476,68 @@ class Simulation:
         network_dict = self.cv_obj.networks
 
         for fold_idx, (train_indices, test_indices) in enumerate(self.cv_obj.split(self.X, self.Y)):
-            # Expand region indices efficiently
             train_region_pairs = expand_X_symmetric(train_indices.reshape(-1, 1)).astype(int)
             test_region_pairs = expand_X_symmetric(test_indices.reshape(-1, 1)).astype(int)
-            print('train_region_pairs', train_region_pairs)
-            print('test_region_pairs', test_region_pairs)
 
-            # Directly convert to tuples in list comprehension and lookup indices
             train_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
             test_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])
-            print('train_indices_expanded', train_indices_expanded)
-            print('test_indices_expanded', test_indices_expanded)
+            
+            innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
+            input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
+            best_model, best_val_score = self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
+            
+            train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
 
             train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
             test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
-            train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
-            test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
+            train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
+            test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
 
-            for batch_X, batch_y, idx in train_loader:
-                print('train batch_X shape:', batch_X.shape)
-                print('train batch_y shape:', batch_y.shape)
-                print('batch indices:', idx)
-                print('valid region pairs:', [self.region_pair_dataset.expanded_idx_to_valid_pair[i.item()] for i in idx])
-                print('true region pairs:', [self.region_pair_dataset.expanded_idx_to_true_pair[i.item()] for i in idx])
-                print()
+            # Evaluate on the test fold                
+            evaluator = ModelEvaluatorTorch(best_model, self.Y, train_loader, train_indices, test_loader, test_indices, self.network_labels, self.use_shared_regions, self.test_shared_regions)
+            train_metrics = evaluator.get_train_metrics()
+            test_metrics = evaluator.get_test_metrics()
+            print("\nTRAIN METRICS:", train_metrics)
+            print("TEST METRICS:", test_metrics)
+            print('BEST VAL SCORE', best_val_score)
+            print('BEST MODEL HYPERPARAMS', best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model))
 
-                break
+            if track_wandb:
+                log_wandb_metrics(
+                    self.feature_type, self.model_type, self.connectome_target, self.cv_type, 
+                    fold_idx,
+                    train_metrics, 
+                    test_metrics, 
+                    best_val_score, 
+                    best_model, 
+                    train_history, 
+                    model_classes=MODEL_CLASSES,
+                    parcellation=self.parcellation, 
+                    hemisphere=self.hemisphere, 
+                    omit_subcortical=self.omit_subcortical, 
+                    gene_list=self.gene_list,
+                    binarize=self.binarize,
+                    seed=self.random_seed
+                )
             
-            for batch_X, batch_y, idx in test_loader:
-                print('test batch_X shape:', batch_X.shape)
-                print('test batch_y shape:', batch_y.shape)
-                print('batch indices:', idx)
-                print('valid region pairs:', [self.region_pair_dataset.expanded_idx_to_valid_pair[i.item()] for i in idx])
-                print('true region pairs:', [self.region_pair_dataset.expanded_idx_to_true_pair[i.item()] for i in idx])
-                print()
-
-                break
-            
-
-            #innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
-            #input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
-            #self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
-            
-
-
             break
-        
-        return
 
+        print_system_usage() # Display CPU and RAM utilization 
+        GPUtil.showUtilization() # Display GPU utilization
+
+
+    def run_sim(self, search_method=('random', 'mse', 5), track_wandb=False):
+        """
+        Main simulation method
+        """
+        set_seed(self.random_seed)
+        self.load_data()
+        self.select_cv()
         self.expand_data()        
+    
+        if search_method[0] == 'wandb' or track_wandb:
+            wandb.login()
+    
         # Outer CV
         for fold_idx, (X_train, X_test, Y_train, Y_test) in enumerate(self.fold_splits):
             print('\n', f'Test fold num: {fold_idx+1}', f'X_train shape: {X_train.shape}', f'Y_train shape: {Y_train.shape}', f'X_test shape: {X_test.shape}', f'Y_test shape: {Y_test.shape}')
@@ -539,8 +553,6 @@ class Simulation:
             # Generate train and test indices from network dictionaries
             train_indices = np.concatenate([indices for indices in train_network_dict.values()])
             test_indices = network_dict[str(fold_idx+1)]
-
-            break
 
             if self.gpu_acceleration:
                 X_train, Y_train, X_test, Y_test = map(cp.array, [X_train, Y_train, X_test, Y_test])
@@ -605,5 +617,3 @@ class Simulation:
 
             print_system_usage() # Display CPU and RAM utilization 
             GPUtil.showUtilization() # Display GPU utilization
-            
-            break 

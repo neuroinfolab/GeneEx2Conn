@@ -1,15 +1,23 @@
 from env.imports import *
+import torch.backends.cudnn as cudnn
+from torch.cuda.amp import autocast, GradScaler
 
 def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, verbose=True):
     train_history = {"train_loss": [], "val_loss": []}
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # Enable optimizations
+    cudnn.benchmark = True  # Auto-tune GPU kernels
+    scaler = GradScaler()  # Enable FP16 training
     
     best_val_loss = float("inf")  # Track the best validation loss
     best_model_state = None  # Store the best model state
     patience_counter = 0  # Counts epochs without improvement
 
     for epoch in range(epochs):
-        train_loss = train_epoch(model, train_loader, optimizer, criterion)
+        train_loss = train_epoch(model, train_loader, criterion, optimizer, device)
+        # train_loss = train_epoch_torch(model, train_loader, criterion, optimizer, scaler, device)
+
         train_history["train_loss"].append(train_loss)
 
         if val_loader:
@@ -39,18 +47,39 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
 
     return train_history
 
-
-def train_epoch(model, train_loader, optimizer, criterion):
+def train_epoch(model, train_loader, criterion, optimizer, device):
     model.train()
     total_train_loss = 0
     
-    for batch_X, batch_y in train_loader:
+    for batch_X, batch_y, _ in train_loader:
+        batch_X = batch_X.to(device)
+        batch_y = batch_y.to(device)
         optimizer.zero_grad()
         predictions = model(batch_X).squeeze()
         loss = criterion(predictions, batch_y)
         total_train_loss += loss.item()
         loss.backward()
         optimizer.step()
+    
+    return total_train_loss / len(train_loader)
+
+def train_epoch_torch(model, train_loader, criterion, optimizer, scaler, device):
+    model.train()
+    total_train_loss = 0
+    
+    for batch_X, batch_y, _ in train_loader:
+        batch_X, batch_y = batch_X.to(device), batch_y.to(device)
+        
+        optimizer.zero_grad()
+        with autocast():  # Enable Mixed Precision
+            predictions = model(batch_X).squeeze()
+            loss = criterion(predictions, batch_y)
+            
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+        
+        total_train_loss += loss.item()
     
     return total_train_loss / len(train_loader)
 
@@ -62,7 +91,9 @@ def evaluate(model, val_loader, criterion, device, scheduler=None):
     total_samples = 0
     
     with torch.no_grad():
-        for batch_X, batch_y in val_loader:
+        for batch_X, batch_y, _ in val_loader:
+            batch_X = batch_X.to(device)
+            batch_y = batch_y.to(device)
             predictions = model(batch_X).squeeze()
             val_loss = criterion(predictions, batch_y)            
             total_val_loss += val_loss.item()

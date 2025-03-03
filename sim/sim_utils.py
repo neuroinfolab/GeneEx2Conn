@@ -1,7 +1,5 @@
-# imports
 from env.imports import *
 
-# metric classes
 from models.metrics.eval import (
     pearson_numpy,
     pearson_cupy,
@@ -14,6 +12,8 @@ from models.metrics.eval import (
     logloss_cupy,
     logloss_numpy
 )
+
+from data.data_utils import expand_X_symmetric, expand_Y_symmetric
 
 # HELPERS 
 def set_seed(seed=42):
@@ -416,30 +416,19 @@ def train_sweep_torch(config, model_type, feature_type, connectome_target, datas
     
     ModelClass = model_classes[model_type]
 
-    # BASIC IDEA IS TO CREATE A DATASET SUBSET OBJECT
     # Process each inner fold
-    for fold_idx, (train_regions, test_regions) in enumerate(inner_cv_obj.split()):
+    for fold_idx, (train_indices, test_indices) in enumerate(cv_obj.split()):
         print(f'Processing inner fold {fold_idx}')
-        print('inner train_regions', train_regions)
-        print('inner test_regions', test_regions)
-        
-        train_region_pairs = expand_X_symmetric(train_regions)
-        test_region_pairs = expand_X_symmetric(test_regions)
-        print('train_region_pairs', train_region_pairs)
-        print('test_region_pairs', test_region_pairs)
-
-       # train_indices = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
-       # test_indices = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])
-       # print('train_indices', train_indices)
-       # print('test_indices', test_indices)
-        
-        break
+        train_region_pairs = expand_X_symmetric(np.array(train_indices).reshape(-1, 1)).astype(int)
+        test_region_pairs = expand_X_symmetric(np.array(test_indices).reshape(-1, 1)).astype(int)
+        train_indices_expanded = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
+        test_indices_expanded = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])    
 
         # Initialize model dynamically based on sweep config
         model = ModelClass(**sweep_config).to(device)
 
         # Train model
-        history = model.fit(X_train, y_train, X_val, y_val)
+        history = model.fit(dataset, train_indices_expanded, test_indices_expanded)
         
         # Log epoch-wise metrics
         for epoch, metrics in enumerate(zip(history['train_loss'], history['val_loss'])):

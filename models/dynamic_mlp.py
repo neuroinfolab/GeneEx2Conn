@@ -1,7 +1,6 @@
 from env.imports import *
 from data.data_utils import create_data_loader
 from models.train_val import train_model
-from torch.optim import Adam, AdamW
 
 class TweedieLoss(nn.Module):
     def __init__(self, p: float = 1.5, reduction: str = "mean", eps: float = 1e-8):
@@ -73,16 +72,16 @@ class DynamicMLP(nn.Module):
         if self.binarize:
             self.criterion = nn.BCEWithLogitsLoss()
         else: 
-            #self.criterion = nn.MSELoss() # consider HuberLoss for less sensitivity to outliers; QuantileLoss to prioritize outliers
-            #self.criterion = nn.PoissonNLLLoss(log_input=True)
-
-            self.criterion = TweedieLoss(p=1.5)
+            self.criterion = nn.MSELoss()
+            # consider HuberLoss for less sensitivity to outliers; QuantileLoss to prioritize outliers
+            # self.criterion = nn.PoissonNLLLoss(log_input=True)
+            # self.criterion = TweedieLoss(p=1.5)
 
         self.model = nn.Sequential(*layers)
         
         self.optimizer = AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
         
-        self.patience = 30
+        self.patience = 20
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
@@ -94,7 +93,6 @@ class DynamicMLP(nn.Module):
             verbose=True
         )
 
-        # HELPER FUNC THIS AT SOME POINT
         num_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         print(f"Number of learnable parameters in MLP: {num_params}")
 
@@ -106,14 +104,30 @@ class DynamicMLP(nn.Module):
     def forward(self, x):
         return self.model(x).squeeze()
 
-    def predict(self, X):
+    def predict(self, loader):
         self.eval()
-        X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
+        predictions = []
+        targets = []
         with torch.no_grad():
-            predictions = self(X).cpu().numpy()
-        return (predictions > 0.5).astype(int) if self.binarize else predictions
-
+            for batch_X, batch_y, _ in loader:
+                batch_X = batch_X.to(self.device)
+                batch_preds = self(batch_X).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
+    
+    def fit(self, dataset, train_indices, test_indices, verbose=True):
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+    
+    '''
     def fit(self, X_train, y_train, X_test, y_test, verbose=True):
         train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, weight=True) # weighted sampling since many more 0s than 1s
         val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, weight=False)
         return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+    '''

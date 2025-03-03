@@ -381,7 +381,7 @@ def expand_shared_matrices(X_train, X_train2, Y_train2, Y_train_feats1=np.nan, Y
     return X_train_shared, Y_expanded
 
 
-def expand_X_symmetric_v0(X):
+def expand_X_symmetric(X):
     """
     Expands the X matrix symmetrically by combining features from pairs of regions.
 
@@ -400,23 +400,6 @@ def expand_X_symmetric_v0(X):
     for i, (region1, region2) in enumerate(region_combinations):
         expanded_X[i * 2] = np.concatenate((X[region1], X[region2]))
         expanded_X[i * 2 + 1] = np.concatenate((X[region2], X[region1]))
-
-    return expanded_X
-
-
-def expand_X_symmetric(X):
-    num_regions, num_genes = X.shape
-    region_combinations = np.array(list(combinations(range(num_regions), 2)))  # (num_combinations, 2)
-
-    # Efficiently extract pairs using NumPy indexing
-    X1 = X[region_combinations[:, 0]]  # Select first region of each pair
-    X2 = X[region_combinations[:, 1]]  # Select second region of each pair
-
-    # Ensure concatenation matches original function order
-    expanded_X = np.zeros((len(region_combinations) * 2, 2 * num_genes))
-
-    expanded_X[0::2] = np.hstack((X1, X2))  # First order (region1, region2)
-    expanded_X[1::2] = np.hstack((X2, X1))  # Reverse order (region2, region1)
 
     return expanded_X
 
@@ -559,7 +542,6 @@ def process_cv_splits_coords(X, Y, coords, cv_obj):
     return results
 
 
-
 def expanded_inner_folds_combined_plus_indices(inner_fold_splits):
     """
     Combines the training and testing data from inner cross-validation folds and generates train-test indices.
@@ -598,7 +580,6 @@ def expanded_inner_folds_combined_plus_indices(inner_fold_splits):
 
     return X_combined, Y_combined, train_test_indices
 
-'''
 def expand_X_Y_symmetric_conn_only(X, Y):
     """
     Expands X matrix symmetrically and vectorizes Y matrix for connectivity only model.
@@ -624,9 +605,7 @@ def expand_X_Y_symmetric_conn_only(X, Y):
         expanded_Y[i * 2 + 1] = Y[region2, region1]
 
     return expanded_X, expanded_Y
-'''
 
-'''
 def expanded_inner_folds_combined_plus_indices_connectome(X_train, X_test, Y_train, Y_test):
     """
     Combines the training and testing data from inner cross-validation folds and generates train-test indices.
@@ -663,7 +642,7 @@ def expanded_inner_folds_combined_plus_indices_connectome(X_train, X_test, Y_tra
     Y_combined = np.hstack(Y_combined)
 
     return X_combined, Y_combined, train_test_indices        
-'''
+
 
 def create_data_loader(X, y, batch_size, device, shuffle=True, weight=False):
     X = torch.FloatTensor(X).to(device)
@@ -694,43 +673,31 @@ def create_data_loader(X, y, batch_size, device, shuffle=True, weight=False):
 
 class RegionPairDataset(Dataset):
     def __init__(self, X, Y, coords, valid2true_mapping):
-        self.X = torch.FloatTensor(X)
-        self.Y = torch.FloatTensor(Y)
-        self.coords = torch.FloatTensor(coords)
-        
-        # Create mappings between valid and true indices
-        self.valid_indices = np.array(list(valid2true_mapping.keys()))
-        self.true_indices = np.array(list(valid2true_mapping.values()))
-        
-        # Expand data symmetrically
-        self.X_expanded = torch.FloatTensor(expand_X_symmetric(X))
-        self.Y_expanded = torch.FloatTensor(expand_Y_symmetric(Y))
-        self.coords_expanded = torch.FloatTensor(expand_X_symmetric(coords))
+        self.X = torch.tensor(X, dtype=torch.float32)
+        self.Y = torch.tensor(Y, dtype=torch.float32)
+        self.coords = torch.tensor(coords, dtype=torch.float32)
+        self.valid_indices = np.array(list(valid2true_mapping.keys()), dtype=np.int32) # subset indices
+        self.true_indices = np.array(list(valid2true_mapping.values()), dtype=np.int32) # full dataset indices
 
-        # Create maps from input pairs to expanded indices
-        self.valid_indices_expanded = expand_X_symmetric(self.valid_indices.reshape(-1,1)).astype(int)
-        self.true_indices_expanded = expand_X_symmetric(self.true_indices.reshape(-1,1)).astype(int)
+        self.X_expanded = torch.tensor(expand_X_symmetric(X), dtype=torch.float32)
+        self.Y_expanded = torch.tensor(expand_Y_symmetric(Y), dtype=torch.float32)
+        self.coords_expanded = torch.tensor(expand_X_symmetric(coords), dtype=torch.float32)
+        self.valid_indices_expanded = expand_X_symmetric(self.valid_indices.reshape(-1,1)).astype(np.int32)
+        self.true_indices_expanded = expand_X_symmetric(self.true_indices.reshape(-1,1)).astype(np.int32)
         valid_pairs = tuple(map(tuple, self.valid_indices_expanded))
         true_pairs = tuple(map(tuple, self.true_indices_expanded))
-        
+
         self.valid_pair_to_expanded_idx = dict(zip(valid_pairs, range(len(valid_pairs))))
-        self.expanded_idx_to_valid_pair = {v: k for k, v in self.valid_pair_to_expanded_idx.items()}
         self.true_pair_to_expanded_idx = dict(zip(true_pairs, range(len(true_pairs))))
+        self.expanded_idx_to_valid_pair = {v: k for k, v in self.valid_pair_to_expanded_idx.items()}
         self.expanded_idx_to_true_pair = {v: k for k, v in self.true_pair_to_expanded_idx.items()}
-    
-        print(f"Dataset sizes:")
-        print(f"X expanded: {self.X_expanded.shape}")
-        print(f"Y expanded: {self.Y_expanded.shape}")
-        print(f"Coords expanded: {self.coords_expanded.shape}")
-        print(f"Valid indices: {self.valid_indices_expanded.shape}")
-        print(f"True indices: {self.true_indices_expanded.shape}")
-        #print(f"Valid pair to expanded idx: {self.valid_pair_to_expanded_idx}")
 
     def __len__(self):
         return len(self.X_expanded)
         
     def __getitem__(self, idx):
-        return self.X_expanded[idx], self.Y_expanded[idx], idx
+        # return features, target, and index in expanded dataset (can be used to map to true region pairs)
+        return self.X_expanded[idx], self.Y_expanded[idx], idx 
         
     def get_all_data(self, idx):
         return {

@@ -172,8 +172,15 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
                     skip_cv=skip_cv
                 )
     
-    sim.run_sim(search_method, track_wandb)
-    single_model_results.append(sim.results)
+    if search_method[0] == 'wandb':
+        sim.run_sim_torch(search_method, track_wandb)
+    else:
+        sim.run_sim(search_method, track_wandb)
+    
+    try: 
+        single_model_results.append(sim.results)
+    except:
+        print('No results to append')
     
     # Save sim data
     if save_sim:
