@@ -2,7 +2,7 @@
 This repository contains code for predicting human brain connectivity (_the connectome_) from regional gene expression (_the transcriptome_). 
 
 ## Description
-At a high-level, the connectome prediction problem is a small-network link prediction problem. The nodes of the network (brain regions) come from a high-dimensional feature space; $O(n^4)$ gene expression measures per region. The goal is to predict edge connectivity strength between any pair of regions across the brain based solely on their node-wise features. This repo implements several architectures for solving the connectome prediction problem, with emphasis on encoder-based models that capture intra and inter-region genetic interactions.
+At a high-level, the connectome prediction problem is a small-network link prediction problem. Each node/brain region in the network has several thousand unique gene expression values. The goal is to predict connectivity strength between any pair of brain regions based solely on their node-wise features. This repo implements several architectures for solving the connectome prediction problem with emphasis on encoder-based models that capture genetic interactions within and between brain regions.
 
 <div style="display: flex; justify-content: center;">
   <table>
