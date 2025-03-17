@@ -7,8 +7,8 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # Enable optimizations
-    cudnn.benchmark = True  # Auto-tune GPU kernels
-    scaler = GradScaler()  # Enable FP16 training
+    # cudnn.benchmark = True  # Auto-tune GPU kernels
+    # scaler = GradScaler()  # Enable FP16 training
     
     best_val_loss = float("inf")  # Track the best validation loss
     best_model_state = None  # Store the best model state
@@ -51,35 +51,20 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
     model.train()
     total_train_loss = 0
     
-    for batch_X, batch_y, _ in train_loader:
+    for batch_X, batch_y, batch_coords, batch_idx in train_loader:
         batch_X = batch_X.to(device)
         batch_y = batch_y.to(device)
         optimizer.zero_grad()
-        predictions = model(batch_X).squeeze()
+        
+        if hasattr(model, 'include_coords'):
+            predictions = model(batch_X, batch_coords).squeeze()
+        else:
+            predictions = model(batch_X).squeeze()
+        
         loss = criterion(predictions, batch_y)
         total_train_loss += loss.item()
         loss.backward()
         optimizer.step()
-    
-    return total_train_loss / len(train_loader)
-
-def train_epoch_torch(model, train_loader, criterion, optimizer, scaler, device):
-    model.train()
-    total_train_loss = 0
-    
-    for batch_X, batch_y, _ in train_loader:
-        batch_X, batch_y = batch_X.to(device), batch_y.to(device)
-        
-        optimizer.zero_grad()
-        with autocast():  # Enable Mixed Precision
-            predictions = model(batch_X).squeeze()
-            loss = criterion(predictions, batch_y)
-            
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-        
-        total_train_loss += loss.item()
     
     return total_train_loss / len(train_loader)
 
@@ -91,13 +76,21 @@ def evaluate(model, val_loader, criterion, device, scheduler=None):
     total_samples = 0
     
     with torch.no_grad():
-        for batch_X, batch_y, _ in val_loader:
+        for batch_X, batch_y, batch_coords, batch_idx in val_loader:
             batch_X = batch_X.to(device)
             batch_y = batch_y.to(device)
+
             predictions = model(batch_X).squeeze()
+            
             val_loss = criterion(predictions, batch_y)            
             total_val_loss += val_loss.item()
             
+            if hasattr(model, 'include_coords'):
+                predictions = model(batch_X, batch_coords).squeeze()
+            else:
+                predictions = model(batch_X).squeeze()
+            
+            # integrate these eventually 
             if hasattr(model, 'binarize') and model.binarize:
                 pred_labels = (torch.sigmoid(predictions) > 0.5).float()
             else:
@@ -117,3 +110,25 @@ def evaluate(model, val_loader, criterion, device, scheduler=None):
             print(f"\nLR REDUCED: {prev_lr:.6f} → {new_lr:.6f} at Val Loss: {mean_val_loss:.6f}")
 
     return mean_val_loss
+
+'''
+def train_epoch_torch(model, train_loader, criterion, optimizer, scaler, device):
+    model.train()
+    total_train_loss = 0
+    
+    for batch_X, batch_y, _ in train_loader:
+        batch_X, batch_y = batch_X.to(device), batch_y.to(device)
+        
+        optimizer.zero_grad()
+        with autocast():  # Enable Mixed Precision
+            predictions = model(batch_X).squeeze()
+            loss = criterion(predictions, batch_y)
+            
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+        
+        total_train_loss += loss.item()
+    
+    return total_train_loss / len(train_loader)
+'''

@@ -7,6 +7,8 @@ metric:
 parameters: 
   input_dim:
     value: !!int 0
+  binarize:
+    value: !!int 0
   token_encoder_dim:
     values: [20, 40]
   d_model:
@@ -40,6 +42,8 @@ parameters:
 # BEST PARAMS EUCLID
 best_parameters:
   input_dim:
+    value: !!int 0
+  binarize:
     value: !!int 0
   token_encoder_dim:
     values: [40]

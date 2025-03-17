@@ -4,7 +4,7 @@ from models.train_val import train_model
 
 
 class SelfAttentionEncoder(nn.Module):
-    def __init__(self, input_dim, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1):
+    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1):
         super(SelfAttentionEncoder, self).__init__()
         self.token_encoder_dim = token_encoder_dim
         self.d_model = d_model
@@ -39,11 +39,13 @@ class SelfAttentionEncoder(nn.Module):
 
 
 class SharedSelfAttentionModel(nn.Module):
-    def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
+    def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
                  use_positional_encoding=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, lambda_reg=0.0, 
                  batch_size=128, epochs=100):
         super().__init__()
 
+        self.binarize=False 
+        
         # Transformer parameters
         self.input_dim = input_dim // 2
         self.token_encoder_dim = token_encoder_dim 
@@ -64,8 +66,7 @@ class SharedSelfAttentionModel(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Create self-attention encoder
-        self.encoder = SelfAttentionEncoder(input_dim=self.input_dim, # change this
-                                            token_encoder_dim=self.token_encoder_dim,
+        self.encoder = SelfAttentionEncoder(token_encoder_dim=self.token_encoder_dim,
                                             d_model=self.d_model,
                                             output_dim=self.encoder_output_dim, 
                                             nhead=self.nhead, 
@@ -89,8 +90,19 @@ class SharedSelfAttentionModel(nn.Module):
             self.encoder = nn.DataParallel(self.encoder)
             self.deep_layers = nn.DataParallel(self.deep_layers)
             self.output_layer = nn.DataParallel(self.output_layer)
-        
+                
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        self.patience = 20
+        self.scheduler = ReduceLROnPlateau( 
+            self.optimizer, 
+            mode='min', 
+            factor=0.3,  # Reduce LR by 70%
+            patience=30,  # Reduce LR after patientce epochs of no improvement
+            threshold=0.1,  # Threshold to detect stagnation
+            cooldown=1,  # Reduce cooldown period
+            min_lr=1e-6,  # Prevent LR from going too low
+            verbose=True
+        )
         self.criterion = nn.MSELoss()
 
     def forward(self, x):
@@ -106,6 +118,7 @@ class SharedSelfAttentionModel(nn.Module):
 
         return output.squeeze()
 
+    '''
     def predict(self, X):
         """Make predictions in memory-efficient batches."""
         self.eval()
@@ -134,11 +147,34 @@ class SharedSelfAttentionModel(nn.Module):
         if X_test is not None and y_test is not None:
             val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device)
         return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, scheduler=None, verbose=verbose)
+    '''
+    
+    def predict(self, loader):
+        self.eval()
+        predictions = []
+        targets = []
+        with torch.no_grad():
+            for batch_X, batch_y, _ in loader:
+                batch_X = batch_X.to(self.device)
+                batch_preds = self(batch_X).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
+    
+    def fit(self, dataset, train_indices, test_indices, verbose=True):
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+
 
 
 
 class SelfAttentionCLSEncoder(nn.Module):
-    def __init__(self, input_dim, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False):
+    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False):
         super(SelfAttentionCLSEncoder, self).__init__()
         
         self.token_encoder_dim = token_encoder_dim
@@ -159,12 +195,9 @@ class SelfAttentionCLSEncoder(nn.Module):
         self.transformer = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)
         self.fc = nn.Linear(d_model, output_dim)
 
-    def forward(self, x): 
-        batch_size, total_features = x.shape
+    def forward(self, gene_exp, coords): 
+        batch_size, total_features = gene_exp.shape
 
-        coords = x[:, -3:]                     # (batch_size, 3)
-        gene_exp = x[:, :-3]                   # (batch_size, gene_dim)
-       
         L = gene_exp.shape[1] // self.token_encoder_dim # number of tokens
         gene_exp = gene_exp.view(batch_size, L, self.token_encoder_dim) # (batch_size, seq len, token_encoder_dim)
         x_proj = self.input_projection(gene_exp)  # (batch_size, L, d_model)
@@ -177,7 +210,7 @@ class SelfAttentionCLSEncoder(nn.Module):
 
         x_enc = self.transformer(x_proj)
 
-        x_enc = x_enc[:, 0, :] # take the [CLS] token
+        x_enc = x_enc[:, 0, :] # grab the context vector
         
         return x_enc
 
@@ -194,10 +227,13 @@ class SelfAttentionCLSEncoder(nn.Module):
 
 
 class SharedSelfAttentionCLSModel(nn.Module):
-    def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
+    def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
                  use_positional_encoding=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, lambda_reg=0.0, 
                  batch_size=128, epochs=100):
         super().__init__()
+        
+        self.binarize=False 
+        self.include_coords = True
 
         # Transformer parameters
         self.input_dim = input_dim // 2
@@ -220,7 +256,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Create self-attention encoder
-        self.encoder = SelfAttentionCLSEncoder(input_dim=self.input_dim,
+        self.encoder = SelfAttentionCLSEncoder(
                                             token_encoder_dim=self.token_encoder_dim,
                                             d_model=self.d_model,
                                             output_dim=self.encoder_output_dim, 
@@ -250,12 +286,24 @@ class SharedSelfAttentionCLSModel(nn.Module):
         
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss()
+        self.patience = 20
+        self.scheduler = ReduceLROnPlateau( 
+            self.optimizer, 
+            mode='min', 
+            factor=0.3,  # Reduce LR by 70%
+            patience=30,  # Reduce LR after patientce epochs of no improvement
+            threshold=0.1,  # Threshold to detect stagnation
+            cooldown=1,  # Reduce cooldown period
+            min_lr=1e-6,  # Prevent LR from going too low
+            verbose=True
+        )
 
-    def forward(self, x):
+    def forward(self, x, coords):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
-        
-        encoded_i = self.encoder(x_i)
-        encoded_j = self.encoder(x_j)
+        coords_i, coords_j = torch.chunk(coords, chunks=2, dim=1)
+
+        encoded_i = self.encoder(x_i, coords_i)
+        encoded_j = self.encoder(x_j, coords_j)
         
         concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
 
@@ -263,7 +311,31 @@ class SharedSelfAttentionCLSModel(nn.Module):
         output = self.output_layer(deep_output)
         
         return output.squeeze()
-
+        
+    def predict(self, loader):
+        self.eval()
+        predictions = []
+        targets = []
+        with torch.no_grad():
+            for batch_X, batch_y, batch_coords in loader:
+                batch_X = batch_X.to(self.device)
+                batch_coords = batch_coords.to(self.device)
+                batch_preds = self(batch_X, batch_coords).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
+    
+    def fit(self, dataset, train_indices, test_indices, verbose=True):
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+    
+    '''
     def predict(self, X):
         """Make predictions in memory-efficient batches."""
         self.eval()
@@ -294,3 +366,4 @@ class SharedSelfAttentionCLSModel(nn.Module):
         if X_test is not None and y_test is not None:
             val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device)
         return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, scheduler=None, verbose=verbose)
+        '''

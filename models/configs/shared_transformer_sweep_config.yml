@@ -7,6 +7,8 @@ metric:
 parameters: 
   input_dim:
     value: !!int 0
+  binarize:
+    value: !!int 0
   token_encoder_dim:
     values: [20, 40]
   d_model:
@@ -41,6 +43,8 @@ parameters:
 best_parameters:
   input_dim:
     value: !!int 0
+  binarize:
+    value: !!int 0
   token_encoder_dim:
     values: [20]
   d_model:
@@ -67,6 +71,6 @@ best_parameters:
   lambda_reg:
     values: [0]
   batch_size:
-    values: [128]
+    values: [512]
   epochs:
-    values: [75]
+    values: [40]

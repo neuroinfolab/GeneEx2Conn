@@ -48,7 +48,7 @@ class TweedieLoss(nn.Module):
             return loss  # Return per-sample loss
 
 class DynamicMLP(nn.Module):
-    def __init__(self, input_dim, binarize, hidden_dims=[256, 128], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0, batch_size=64, epochs=100):
+    def __init__(self, input_dim, binarize, hidden_dims=[256, 128], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0.0, batch_size=64, epochs=100):
         super().__init__()
         self.input_dim = input_dim
         self.binarize = binarize

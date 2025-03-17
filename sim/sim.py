@@ -485,9 +485,9 @@ class Simulation:
             innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
             input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
             best_model, best_val_score = self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
-            
+        
             train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
-
+                
             train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
             test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
             train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)

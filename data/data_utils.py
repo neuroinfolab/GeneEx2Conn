@@ -696,8 +696,8 @@ class RegionPairDataset(Dataset):
         return len(self.X_expanded)
         
     def __getitem__(self, idx):
-        # return features, target, and index in expanded dataset (can be used to map to true region pairs)
-        return self.X_expanded[idx], self.Y_expanded[idx], idx 
+        # return features, target, coords, and index in expanded dataset (can be used to map to true region pairs)
+        return self.X_expanded[idx], self.Y_expanded[idx], self.coords_expanded[idx], idx
         
     def get_all_data(self, idx):
         return {
