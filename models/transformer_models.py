@@ -92,7 +92,7 @@ class SharedSelfAttentionModel(nn.Module):
             self.output_layer = nn.DataParallel(self.output_layer)
                 
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
-        self.patience = 20
+        self.patience = 15
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
@@ -215,7 +215,6 @@ class SelfAttentionCLSEncoder(nn.Module):
         
         x_enc = self.fc(x_enc)
         x_enc = x_enc.reshape(batch_size, -1) # flatten for downstream tasks
-        print(f"x_enc: {x_enc.shape}")
 
         return x_enc
 
@@ -272,11 +271,11 @@ class SharedSelfAttentionCLSModel(nn.Module):
         
         #prev_dim = self.d_model # if adding CLS tokens
         # prev_dim = self.d_model * 2 # Concatenated outputs of encoder CLS token only or mean pooled
-        print(f"input_dim: {self.input_dim}")
-        print(f"token_encoder_dim: {self.token_encoder_dim}")
-        print(f"encoder_output_dim: {self.encoder_output_dim}")
+        # print(f"input_dim: {self.input_dim}")
+        # print(f"token_encoder_dim: {self.token_encoder_dim}")
+        # print(f"encoder_output_dim: {self.encoder_output_dim}")
         prev_dim = (self.input_dim // self.token_encoder_dim * self.encoder_output_dim) * 2 + 2 * self.encoder_output_dim # Concatenated outputs of encoder
-        print(f"prev_dim: {prev_dim}")
+        #print(f"prev_dim: {prev_dim}")
 
         deep_layers = [] # Deep layers for concatenated outputs
         for hidden_dim in self.deep_hidden_dims:
@@ -296,7 +295,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
         
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss()
-        self.patience = 20
+        self.patience = 15
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 

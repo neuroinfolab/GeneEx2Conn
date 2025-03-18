@@ -27,7 +27,7 @@ def _apply_pca(data, var_thresh=0.95):
         return data_pca
 
 
-def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=True, hemisphere='both', sort_genes=True, return_valid_genes=False):
+def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=True, hemisphere='both', resolve_missing=None, sort_genes=True, return_valid_genes=False):
     """
     Load transcriptome data with optional PCA reduction.
     
@@ -40,6 +40,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         run_PCA (bool): Apply PCA with 95% variance threshold. Default: False
         omit_subcortical (bool): Exclude subcortical regions. Default: False
         hemisphere (str): Brain hemisphere ('both', 'left', 'right'). Default: 'both'
+        resolve_missing (str): How to resolve missing values ('mirror', 'interpolate', 'mirror_interpolate'). Default: None (otherwise: 'mirror_interpolate' recommended)
         sort_genes (bool): Sort genes based on reference genome order. Default: False
     Returns
         np.ndarray: Processed gene expression data
@@ -51,7 +52,14 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r1_schaefer_{parcellation[1:]}.csv") # from https://github.com/saratheriver/enigma-extra/tree/master/ahba
         elif parcellation == 'S400':
             AHBA_UKBB_path = relative_data_path + '/Penn_UKBB_data/AHBA_population_MH/'
-            genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
+            if resolve_missing == 'mirror':
+                genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean_mirror.csv'))
+            elif resolve_missing == 'interpolate':
+                genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean_interpolate.csv'))
+            elif resolve_missing == 'mirror_interpolate':
+                genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean_mirror_interpolate.csv'))
+            else:
+                genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
             genes_data = genes_data.drop('label', axis=1)
             region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t').iterrows()]
         
@@ -107,7 +115,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             region_labels = rh_labels
 
         if return_valid_genes:
-            print("ordered valid genes", valid_genes)
+            print("valid genes", valid_genes)
             return genes_data, valid_genes
         
         return genes_data
