@@ -44,7 +44,7 @@ class SharedSelfAttentionModel(nn.Module):
                  batch_size=128, epochs=100):
         super().__init__()
 
-        self.binarize=False 
+        self.binarize=binarize 
         
         # Transformer parameters
         self.input_dim = input_dim // 2
@@ -91,13 +91,13 @@ class SharedSelfAttentionModel(nn.Module):
             self.deep_layers = nn.DataParallel(self.deep_layers)
             self.output_layer = nn.DataParallel(self.output_layer)
                 
-        self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.patience = 20
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
             factor=0.3,  # Reduce LR by 70%
-            patience=30,  # Reduce LR after patientce epochs of no improvement
+            patience=20,  # Reduce LR after patientce epochs of no improvement
             threshold=0.1,  # Threshold to detect stagnation
             cooldown=1,  # Reduce cooldown period
             min_lr=1e-6,  # Prevent LR from going too low
@@ -154,7 +154,7 @@ class SharedSelfAttentionModel(nn.Module):
         predictions = []
         targets = []
         with torch.no_grad():
-            for batch_X, batch_y, _ in loader:
+            for batch_X, batch_y, _, _ in loader:
                 batch_X = batch_X.to(self.device)
                 batch_preds = self(batch_X).cpu().numpy()
                 predictions.append(batch_preds)
@@ -210,8 +210,13 @@ class SelfAttentionCLSEncoder(nn.Module):
 
         x_enc = self.transformer(x_proj)
 
-        x_enc = x_enc[:, 0, :] # grab the context vector
+        # x_enc = x_enc[:, 0, :] # grab the context vector
+        # x_enc = x_enc.mean(dim=1)  # mean pool across sequence length
         
+        x_enc = self.fc(x_enc)
+        x_enc = x_enc.reshape(batch_size, -1) # flatten for downstream tasks
+        print(f"x_enc: {x_enc.shape}")
+
         return x_enc
 
     def add_positional_encoding(self, x): # REVISE
@@ -225,14 +230,13 @@ class SelfAttentionCLSEncoder(nn.Module):
         return x + pe
 
 
-
 class SharedSelfAttentionCLSModel(nn.Module):
     def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
                  use_positional_encoding=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, lambda_reg=0.0, 
                  batch_size=128, epochs=100):
         super().__init__()
         
-        self.binarize=False 
+        self.binarize=binarize 
         self.include_coords = True
 
         # Transformer parameters
@@ -266,7 +270,13 @@ class SharedSelfAttentionCLSModel(nn.Module):
                                             use_positional_encoding=self.use_positional_encoding)
 
         
-        prev_dim = self.d_model * 2 # Concatenated outputs of encoder CLS token only
+        #prev_dim = self.d_model # if adding CLS tokens
+        # prev_dim = self.d_model * 2 # Concatenated outputs of encoder CLS token only or mean pooled
+        print(f"input_dim: {self.input_dim}")
+        print(f"token_encoder_dim: {self.token_encoder_dim}")
+        print(f"encoder_output_dim: {self.encoder_output_dim}")
+        prev_dim = (self.input_dim // self.token_encoder_dim * self.encoder_output_dim) * 2 + 2 * self.encoder_output_dim # Concatenated outputs of encoder
+        print(f"prev_dim: {prev_dim}")
 
         deep_layers = [] # Deep layers for concatenated outputs
         for hidden_dim in self.deep_hidden_dims:
@@ -284,14 +294,14 @@ class SharedSelfAttentionCLSModel(nn.Module):
             self.deep_layers = nn.DataParallel(self.deep_layers)
             self.output_layer = nn.DataParallel(self.output_layer)
         
-        self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss()
         self.patience = 20
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
             factor=0.3,  # Reduce LR by 70%
-            patience=30,  # Reduce LR after patientce epochs of no improvement
+            patience=20,  # Reduce LR after patientce epochs of no improvement
             threshold=0.1,  # Threshold to detect stagnation
             cooldown=1,  # Reduce cooldown period
             min_lr=1e-6,  # Prevent LR from going too low
@@ -305,9 +315,10 @@ class SharedSelfAttentionCLSModel(nn.Module):
         encoded_i = self.encoder(x_i, coords_i)
         encoded_j = self.encoder(x_j, coords_j)
         
-        concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
+        pairwise_embedding = torch.cat((encoded_i, encoded_j), dim=1)
+        # pairwise_embedding = encoded_i + encoded_j
 
-        deep_output = self.deep_layers(concatenated_embedding)
+        deep_output = self.deep_layers(pairwise_embedding)
         output = self.output_layer(deep_output)
         
         return output.squeeze()
@@ -317,7 +328,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
         predictions = []
         targets = []
         with torch.no_grad():
-            for batch_X, batch_y, batch_coords in loader:
+            for batch_X, batch_y, batch_coords, batch_idx in loader:
                 batch_X = batch_X.to(self.device)
                 batch_coords = batch_coords.to(self.device)
                 batch_preds = self(batch_X, batch_coords).cpu().numpy()
@@ -367,3 +378,126 @@ class SharedSelfAttentionCLSModel(nn.Module):
             val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device)
         return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, scheduler=None, verbose=verbose)
         '''
+
+
+class CrossAttentionEncoder(nn.Module):
+    # NEED TO REWORK THIS PROPERLY 
+    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1):
+        super(CrossAttentionEncoder, self).__init__()
+        self.token_encoder_dim = token_encoder_dim
+        self.d_model = d_model
+
+        self.input_projection = nn.Linear(token_encoder_dim, d_model)
+
+        # self.encoder_layer = nn.TransformerEncoderLayer(
+        #     batch_first=True, 
+        #     d_model=d_model, 
+        #     nhead=nhead,
+        #     dim_feedforward=4 * d_model,
+        #     dropout=dropout
+        # )
+
+        self.cross_attention = nn.MultiheadAttention(embed_dim=d_model, num_heads=nhead, batch_first=True)
+
+        self.fc = nn.Linear(d_model, output_dim)  # Linear output layer (after attention)
+
+    def forward(self, x_i, x_j): 
+        batch_size, total_features = x_i.shape
+        
+        L = total_features // self.token_encoder_dim
+        x_i = x_i.view(batch_size, L, self.token_encoder_dim)  # (batch_size, seq_len, token_encoder_dim)
+        x_j = x_j.view(batch_size, L, self.token_encoder_dim)  # (batch_size, seq_len, token_encoder_dim)
+
+        x_i = self.input_projection(x_i)  # (batch_size, L, d_model)
+        x_j = self.input_projection(x_j)  # (batch_size, L, d_model)
+
+        # Perform cross-attention (x_i attends to x_j and vice versa)
+        attn_output_i, _ = self.cross_attention(query=x_i, key=x_j, value=x_j)
+        attn_output_j, _ = self.cross_attention(query=x_j, key=x_i, value=x_i)
+
+        # Pass through linear layer without mean pooling
+        x_enc_i = self.fc(attn_output_i)  # (batch_size, L, output_dim)
+        x_enc_j = self.fc(attn_output_j)  # (batch_size, L, output_dim)
+        # Flatten for downstream tasks
+        x_enc_i = x_enc_i.reshape(batch_size, -1)  # (batch_size, L * output_dim)
+        x_enc_j = x_enc_j.reshape(batch_size, -1)  # (batch_size, L * output_dim)
+
+        return x_enc_i, x_enc_j
+
+class CrossAttentionModel(nn.Module):
+    def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
+                  use_positional_encoding=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, lambda_reg=0.0, 
+                 batch_size=128, epochs=100):
+                  
+        super().__init__()
+
+        self.binarize = binarize
+        self.input_dim = input_dim // 2
+        self.token_encoder_dim = token_encoder_dim
+        self.d_model = d_model
+        self.encoder_output_dim = encoder_output_dim
+        self.batch_size = batch_size
+        self.epochs = epochs
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.encoder = CrossAttentionEncoder(
+            token_encoder_dim=self.token_encoder_dim,
+            d_model=self.d_model,
+            output_dim=self.encoder_output_dim, 
+            nhead=nhead, 
+            num_layers=num_layers,
+            dropout=dropout_rate
+        )
+
+        # prev_dim = self.encoder_output_dim  # Concatenated outputs of encoder
+        prev_dim = (self.input_dim // self.token_encoder_dim * self.encoder_output_dim)
+        self.deep_layers = nn.Sequential(
+            nn.Linear(prev_dim, deep_hidden_dims[0]),
+            nn.ReLU(),
+            nn.BatchNorm1d(deep_hidden_dims[0]),
+            nn.Dropout(dropout_rate),
+            nn.Linear(deep_hidden_dims[0], 1)
+        )
+
+        self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        self.criterion = nn.MSELoss()
+        self.patience = 20
+        self.scheduler = ReduceLROnPlateau( 
+            self.optimizer, 
+            mode='min', 
+            factor=0.3,  # Reduce LR by 70%
+            patience=20,  # Reduce LR after patientce epochs of no improvement
+            threshold=0.1,  # Threshold to detect stagnation
+            cooldown=1,  # Reduce cooldown period
+            min_lr=1e-6,  # Prevent LR from going too low
+            verbose=True
+        )
+
+    def forward(self, x):
+        x_i, x_j = torch.chunk(x, chunks=2, dim=1)
+        encoded_i, encoded_j = self.encoder(x_i, x_j)
+        concatenated_embedding = encoded_i + encoded_j
+        return self.deep_layers(concatenated_embedding).squeeze()
+    
+    def predict(self, loader):
+        self.eval()
+        predictions = []
+        targets = []
+        with torch.no_grad():
+            for batch_X, batch_y, _, _ in loader:
+                batch_X = batch_X.to(self.device)
+                batch_preds = self(batch_X).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
+    
+    def fit(self, dataset, train_indices, test_indices, verbose=True):
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+
+

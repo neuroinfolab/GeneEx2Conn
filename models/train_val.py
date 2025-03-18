@@ -1,6 +1,9 @@
 from env.imports import *
 import torch.backends.cudnn as cudnn
 from torch.cuda.amp import autocast, GradScaler
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+
 
 def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, verbose=True):
     train_history = {"train_loss": [], "val_loss": []}
@@ -9,7 +12,21 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
     # Enable optimizations
     # cudnn.benchmark = True  # Auto-tune GPU kernels
     # scaler = GradScaler()  # Enable FP16 training
+
+    # Check available GPUs
+    print(f"Available GPUs: {torch.cuda.device_count()}")
+
+    # Print which device is being used
+    for i in range(torch.cuda.device_count()):
+        print(f"GPU {i}: {torch.cuda.get_device_name(i)} - Memory Allocated: {torch.cuda.memory_allocated(i)/1024**3:.2f} GB")
     
+    # # Initialize distributed processing
+    # dist.init_process_group(backend="nccl")
+    # rank = dist.get_rank()  # Get the rank of this process
+
+    # model = model.to(rank)
+    # model = DDP(model, device_ids=[rank])
+        
     best_val_loss = float("inf")  # Track the best validation loss
     best_model_state = None  # Store the best model state
     patience_counter = 0  # Counts epochs without improvement
@@ -54,6 +71,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
     for batch_X, batch_y, batch_coords, batch_idx in train_loader:
         batch_X = batch_X.to(device)
         batch_y = batch_y.to(device)
+        batch_coords = batch_coords.to(device)
         optimizer.zero_grad()
         
         if hasattr(model, 'include_coords'):
@@ -79,16 +97,16 @@ def evaluate(model, val_loader, criterion, device, scheduler=None):
         for batch_X, batch_y, batch_coords, batch_idx in val_loader:
             batch_X = batch_X.to(device)
             batch_y = batch_y.to(device)
+            batch_coords = batch_coords.to(device)
+            
 
-            predictions = model(batch_X).squeeze()
-            
-            val_loss = criterion(predictions, batch_y)            
-            total_val_loss += val_loss.item()
-            
             if hasattr(model, 'include_coords'):
                 predictions = model(batch_X, batch_coords).squeeze()
             else:
                 predictions = model(batch_X).squeeze()
+                
+            val_loss = criterion(predictions, batch_y)            
+            total_val_loss += val_loss.item()
             
             # integrate these eventually 
             if hasattr(model, 'binarize') and model.binarize:

@@ -23,7 +23,7 @@ from models.base_models import ModelBuild, BaseModel
 from models.dynamic_mlp import DynamicMLP
 from models.bilinear import BilinearLowRank, BilinearSCM
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
-from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionCLSModel
+from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionCLSModel, CrossAttentionModel
 
 MODEL_CLASSES = {
     'dynamic_mlp': DynamicMLP,
@@ -32,7 +32,8 @@ MODEL_CLASSES = {
     'shared_mlp_encoder': SharedMLPEncoderModel,
     'shared_linear_encoder': SharedLinearEncoderModel,
     'shared_transformer': SharedSelfAttentionModel,
-    'shared_transformer_cls': SharedSelfAttentionCLSModel
+    'shared_transformer_cls': SharedSelfAttentionCLSModel,
+    'cross_attention': CrossAttentionModel
 }
 
 from models.metrics.eval import (
@@ -520,8 +521,6 @@ class Simulation:
                     seed=self.random_seed
                 )
             
-            break
-
         print_system_usage() # Display CPU and RAM utilization 
         GPUtil.showUtilization() # Display GPU utilization
 

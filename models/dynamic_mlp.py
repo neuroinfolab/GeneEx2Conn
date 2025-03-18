@@ -86,7 +86,7 @@ class DynamicMLP(nn.Module):
             self.optimizer, 
             mode='min', 
             factor=0.3,  # Reduce LR by 70%
-            patience=30,  # Reduce LR after patientce epochs of no improvement
+            patience=20,  # Reduce LR after patientce epochs of no improvement
             threshold=0.1,  # Threshold to detect stagnation
             cooldown=1,  # Reduce cooldown period
             min_lr=1e-6,  # Prevent LR from going too low
@@ -109,7 +109,7 @@ class DynamicMLP(nn.Module):
         predictions = []
         targets = []
         with torch.no_grad():
-            for batch_X, batch_y, _ in loader:
+            for batch_X, batch_y, _, _ in loader:
                 batch_X = batch_X.to(self.device)
                 batch_preds = self(batch_X).cpu().numpy()
                 predictions.append(batch_preds)

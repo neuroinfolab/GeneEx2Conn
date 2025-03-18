@@ -442,6 +442,8 @@ def train_sweep_torch(config, model_type, feature_type, connectome_target, datas
         # Store final metrics
         inner_fold_metrics['train_losses'].append(history['train_loss'][-1])
         inner_fold_metrics['val_losses'].append(history['val_loss'][-1])
+        
+        break # only run CV on the first inner fold to test more parameters
 
     # Log mean metrics across folds
     mean_metrics = {
