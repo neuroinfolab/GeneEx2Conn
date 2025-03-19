@@ -9,31 +9,20 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
     train_history = {"train_loss": [], "val_loss": []}
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # Enable optimizations
-    # cudnn.benchmark = True  # Auto-tune GPU kernels
-    # scaler = GradScaler()  # Enable FP16 training
-
-    # Check available GPUs
     print(f"Available GPUs: {torch.cuda.device_count()}")
-
-    # Print which device is being used
     for i in range(torch.cuda.device_count()):
         print(f"GPU {i}: {torch.cuda.get_device_name(i)} - Memory Allocated: {torch.cuda.memory_allocated(i)/1024**3:.2f} GB")
     
-    # # Initialize distributed processing
-    # dist.init_process_group(backend="nccl")
-    # rank = dist.get_rank()  # Get the rank of this process
+    cudnn.benchmark = True  # Auto-tune GPU kernels
+    scaler = GradScaler()  # Enable FP16 training
 
-    # model = model.to(rank)
-    # model = DDP(model, device_ids=[rank])
-        
     best_val_loss = float("inf")  # Track the best validation loss
     best_model_state = None  # Store the best model state
     patience_counter = 0  # Counts epochs without improvement
 
     for epoch in range(epochs):
-        train_loss = train_epoch(model, train_loader, criterion, optimizer, device)
-        # train_loss = train_epoch_torch(model, train_loader, criterion, optimizer, scaler, device)
+        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, scaler=scaler)
+        # train_loss = train_epoch_torch(model, train_loader, criterion, optimizer, device, scaler))
 
         train_history["train_loss"].append(train_loss)
 
@@ -64,6 +53,7 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
 
     return train_history
 
+'''
 def train_epoch(model, train_loader, criterion, optimizer, device):
     model.train()
     total_train_loss = 0
@@ -83,6 +73,42 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
         total_train_loss += loss.item()
         loss.backward()
         optimizer.step()
+    
+    return total_train_loss / len(train_loader)
+'''
+def train_epoch(model, train_loader, criterion, optimizer, device, scaler=None):
+    """Combined training function that handles both regular and mixed precision training"""
+    model.train()
+    total_train_loss = 0
+    
+    for batch_X, batch_y, batch_coords, batch_idx in train_loader:
+        batch_X = batch_X.to(device)
+        batch_y = batch_y.to(device)
+        batch_coords = batch_coords.to(device)
+        
+        optimizer.zero_grad()
+
+        if scaler is not None: # Mixed precision training path            
+            with autocast():
+                if hasattr(model, 'include_coords'):
+                    predictions = model(batch_X, batch_coords).squeeze()
+                else:
+                    predictions = model(batch_X).squeeze()
+                loss = criterion(predictions, batch_y)
+            
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+        else: # Regular training path
+            if hasattr(model, 'include_coords'):
+                predictions = model(batch_X, batch_coords).squeeze()
+            else:
+                predictions = model(batch_X).squeeze()
+            loss = criterion(predictions, batch_y)
+            loss.backward()
+            optimizer.step()
+        
+        total_train_loss += loss.item()
     
     return total_train_loss / len(train_loader)
 
@@ -128,25 +154,3 @@ def evaluate(model, val_loader, criterion, device, scheduler=None):
             print(f"\nLR REDUCED: {prev_lr:.6f} → {new_lr:.6f} at Val Loss: {mean_val_loss:.6f}")
 
     return mean_val_loss
-
-'''
-def train_epoch_torch(model, train_loader, criterion, optimizer, scaler, device):
-    model.train()
-    total_train_loss = 0
-    
-    for batch_X, batch_y, _ in train_loader:
-        batch_X, batch_y = batch_X.to(device), batch_y.to(device)
-        
-        optimizer.zero_grad()
-        with autocast():  # Enable Mixed Precision
-            predictions = model(batch_X).squeeze()
-            loss = criterion(predictions, batch_y)
-            
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-        
-        total_train_loss += loss.item()
-    
-    return total_train_loss / len(train_loader)
-'''

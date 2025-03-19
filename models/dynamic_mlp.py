@@ -78,7 +78,6 @@ class DynamicMLP(nn.Module):
             # self.criterion = TweedieLoss(p=1.5)
 
         self.model = nn.Sequential(*layers)
-        
         self.optimizer = AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
         
         self.patience = 20
@@ -86,19 +85,16 @@ class DynamicMLP(nn.Module):
             self.optimizer, 
             mode='min', 
             factor=0.3,  # Reduce LR by 70%
-            patience=20,  # Reduce LR after patientce epochs of no improvement
+            patience=20,  # Reduce LR after patience epochs of no improvement
             threshold=0.1,  # Threshold to detect stagnation
             cooldown=1,  # Reduce cooldown period
             min_lr=1e-6,  # Prevent LR from going too low
             verbose=True
         )
-
+        
         num_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         print(f"Number of learnable parameters in MLP: {num_params}")
-
-        if torch.cuda.device_count() > 1:
-            dist.init_process_group(backend='nccl')
-            self.model = DDP(self.model)
+        
         self.to(self.device)
     
     def forward(self, x):
@@ -124,10 +120,3 @@ class DynamicMLP(nn.Module):
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
-    
-    '''
-    def fit(self, X_train, y_train, X_test, y_test, verbose=True):
-        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, weight=True) # weighted sampling since many more 0s than 1s
-        val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, weight=False)
-        return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
-    '''

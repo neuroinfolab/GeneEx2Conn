@@ -67,7 +67,7 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     return
 
 
-def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target='FC', binarize=False, feature_interactions=None, use_shared_regions=False, test_shared_regions=False, omit_subcortical=False, parcellation='S100', gene_list='0.2', hemisphere='both', resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse', 5), save_model_json=False, track_wandb=False, skip_cv=False):
+def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target='FC', binarize=False, feature_interactions=None, use_shared_regions=False, test_shared_regions=False, omit_subcortical=False, parcellation='S100', impute_strategy=None, sort_genes=None, gene_list='0.2', hemisphere='both', resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse', 5), save_model_json=False, track_wandb=False, skip_cv=False):
     """
     Runs a single simulation for a given feature type and model configuration.
 
@@ -110,6 +110,12 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
     
     parcellation : str, optional
         Parcellation scheme to use. Default: 'S100'
+
+    impute_strategy : str, optional
+        Imputation strategy to use. Default: None. Options: None, 'mirror', 'interpolate', 'mirror_interpolate'
+
+    sort_genes : str, optional
+        Sort genes based on reference genome order 'refgenome', or by mean expression across brain 'expression', or alphabetically (None). Default: 'expression'
     
     gene_list : str, optional
         Gene list identifier to use. Default: '0.2'
@@ -164,6 +170,8 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
                     test_shared_regions=test_shared_regions,
                     omit_subcortical=omit_subcortical,
                     parcellation=parcellation,
+                    impute_strategy=impute_strategy,
+                    sort_genes=sort_genes,
                     gene_list=gene_list,
                     hemisphere=hemisphere,
                     connectome_target=connectome_target,

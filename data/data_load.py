@@ -27,7 +27,7 @@ def _apply_pca(data, var_thresh=0.95):
         return data_pca
 
 
-def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=True, hemisphere='both', resolve_missing=None, sort_genes=True, return_valid_genes=False):
+def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='expression', return_valid_genes=False):
     """
     Load transcriptome data with optional PCA reduction.
     
@@ -40,8 +40,8 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         run_PCA (bool): Apply PCA with 95% variance threshold. Default: False
         omit_subcortical (bool): Exclude subcortical regions. Default: False
         hemisphere (str): Brain hemisphere ('both', 'left', 'right'). Default: 'both'
-        resolve_missing (str): How to resolve missing values ('mirror', 'interpolate', 'mirror_interpolate'). Default: None (otherwise: 'mirror_interpolate' recommended)
-        sort_genes (bool): Sort genes based on reference genome order. Default: False
+        impute_strategy (str): How to impute missing values ('mirror', 'interpolate', 'mirror_interpolate'). Default: None (otherwise: 'mirror_interpolate' recommended)
+        sort_genes (str): Sort genes based on reference genome order 'refgenome', or by mean expression across brain 'expression', or alphabetically (None). Default: 'expression'
     Returns
         np.ndarray: Processed gene expression data
     """
@@ -52,11 +52,11 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r1_schaefer_{parcellation[1:]}.csv") # from https://github.com/saratheriver/enigma-extra/tree/master/ahba
         elif parcellation == 'S400':
             AHBA_UKBB_path = relative_data_path + '/Penn_UKBB_data/AHBA_population_MH/'
-            if resolve_missing == 'mirror':
+            if impute_strategy == 'mirror':
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean_mirror.csv'))
-            elif resolve_missing == 'interpolate':
+            elif impute_strategy == 'interpolate':
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean_interpolate.csv'))
-            elif resolve_missing == 'mirror_interpolate':
+            elif impute_strategy == 'mirror_interpolate':
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean_mirror_interpolate.csv'))
             else:
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
@@ -80,18 +80,34 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
                         set(abagen.fetch_gene_group('synaptome')),
                         set(abagen.fetch_gene_group('layers')))
 
-       
-        if sort_genes: # this may drop some genes if the gene list symbol does not directly match to the gene_id of the reference genome (ususally drops <5% of genes)
+        # Temporarily subset all sorting methods to ref genome for experiments
+        human_refgenome = pd.read_csv(relative_data_path + '/human_refgenome/human_refgenome_ordered.csv')
+        ordered_genes = human_refgenome['gene_id'].tolist()
+        gene_order_dict = {gene: idx for idx, gene in enumerate(ordered_genes)}
+        valid_genes = [gene for gene in genes_list if gene in gene_order_dict and gene in genes_data.columns]
+        
+        if sort_genes == 'refgenome': # this may drop some genes if the gene list symbol does not directly match to the gene_id of the reference genome (ususally drops <5% of genes)
             human_refgenome = pd.read_csv(relative_data_path + '/human_refgenome/human_refgenome_ordered.csv')
             ordered_genes = human_refgenome['gene_id'].tolist()
             gene_order_dict = {gene: idx for idx, gene in enumerate(ordered_genes)}
-
             # Filter and sort genes based on reference genome order
             valid_genes = [gene for gene in genes_list if gene in gene_order_dict and gene in genes_data.columns]
             valid_genes.sort(key=lambda x: gene_order_dict[x])
             genes_data = np.array(genes_data[valid_genes])
+        elif sort_genes == 'expression':
+            #valid_genes = [gene for gene in genes_list if gene in genes_data.columns]
+            genes_data = np.array(genes_data[valid_genes])
+            mean_expr = np.nanmean(genes_data, axis=0)
+            sort_idx = np.argsort(mean_expr)
+            genes_data = genes_data[:, sort_idx]
+            valid_genes = [valid_genes[i] for i in sort_idx]
+        elif sort_genes == 'random':
+            #valid_genes = [gene for gene in genes_list if gene in genes_data.columns]
+            random_genes = np.random.permutation(valid_genes)
+            genes_data = np.array(genes_data[random_genes])
+            valid_genes = random_genes
         else:
-            valid_genes = [gene for gene in genes_list if gene in genes_data.columns]
+            #valid_genes = [gene for gene in genes_list if gene in genes_data.columns]
             genes_data = np.array(genes_data[valid_genes])
 
         # Apply PCA if specified

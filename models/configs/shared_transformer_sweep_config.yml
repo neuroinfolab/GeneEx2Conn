@@ -1,3 +1,4 @@
+name: shared_transformer
 method: random
 metric:
   name: mean_val_loss
@@ -9,7 +10,7 @@ parameters:
   binarize:
     value: !!int 0
   token_encoder_dim:
-    values: [20, 60]
+    values: [20, 30, 60]
   d_model:
     values: [64, 128]
   encoder_output_dim:
@@ -36,7 +37,7 @@ parameters:
   batch_size:
     values: [256, 512]
   epochs:
-    values: [50, 100]
+    values: [50, 75]
 
 best_parameters:
   input_dim:
@@ -44,7 +45,7 @@ best_parameters:
   binarize:
     value: !!int 0
   token_encoder_dim:
-    values: [20]
+    values: [30] # 20
   d_model:
     values: [128]
   encoder_output_dim:

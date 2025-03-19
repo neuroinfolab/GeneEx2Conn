@@ -68,7 +68,7 @@ from sim.sim_utils import (
 
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, feature_interactions=None, resolution=1.0,random_seed=42,
-                 omit_subcortical=False, parcellation='S100', gene_list='0.2', hemisphere='both',
+                 omit_subcortical=False, parcellation='S100', impute_strategy='mirror_interpolate', sort_genes='expression', gene_list='0.2', hemisphere='both',
                  use_shared_regions=False, test_shared_regions=False, connectome_target='FC', binarize=False, save_model_json=False, skip_cv=False):        
         """
         Initialization of simulation parameters
@@ -80,7 +80,7 @@ class Simulation:
         self.feature_interactions = feature_interactions
         self.resolution = resolution
         self.random_seed=random_seed
-        self.omit_subcortical, self.parcellation, self.gene_list, self.hemisphere = omit_subcortical, parcellation, gene_list, hemisphere
+        self.omit_subcortical, self.parcellation, self.impute_strategy, self.sort_genes, self.gene_list, self.hemisphere = omit_subcortical, parcellation, impute_strategy, sort_genes, gene_list, hemisphere
         self.use_shared_regions = use_shared_regions
         self.test_shared_regions = test_shared_regions
         self.connectome_target = connectome_target.upper()
@@ -94,7 +94,7 @@ class Simulation:
         """
         Load transcriptome and connectome data
         """
-        self.X = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere)        
+        self.X = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes)        
         self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA=True, hemisphere=self.hemisphere)
         self.Y_sc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None, hemisphere=self.hemisphere)
         self.Y_sc_binary = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
@@ -289,8 +289,52 @@ class Simulation:
             self.coords,
             self.valid2true_index_mapping
         )
-
     
+    def run_innercv(self, train_indices, test_indices, train_network_dict, search_method=('random', 'mse', 10)):
+        """
+        Inner cross-validation with option for Grid, Bayesian, or Randomized hyperparameter search for sklearn-like models
+        """
+        # Create inner CV object (just indices) for X_train and Y_train for any strategy
+        inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
+
+        inner_fold_splits = process_cv_splits(self.X, self.Y, inner_cv_obj, 
+                                                self.use_shared_regions, 
+                                                self.test_shared_regions)
+
+        # Inner CV data packaged into a large matrix with indices for individual folds
+        X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
+    
+        model = ModelBuild.init_model(self.model_type, self.binarize)
+
+        param_grid = model.get_param_grid()
+        param_dist = model.get_param_dist()
+
+        search_type, metric, n_iter = search_method        
+
+        if search_type == 'grid':
+            param_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, metric=metric)
+        elif search_type == 'random':
+            param_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
+        elif search_type == 'bayes':
+            param_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
+
+        # Fit GridSearchCV on the combined data
+        param_search.fit(X_combined, Y_combined)
+        
+        # Display comprehensive results
+        print("\nParameter Search CV Results:")
+        print("=============================")
+        print("Best Parameters: ", param_search.best_params_)
+        print("Best Cross-Validation Score: ", param_search.best_score_)
+        
+        # if search_type == 'bayes': _ = plot_objective(param_search.optimizer_results_[0], size=5); plt.show() # Display objective plots for hyperparameter search
+        
+        best_model = model.get_model()
+        best_model.set_params(**param_search.best_params_)
+
+        return best_model, param_search.best_score_
+
+
     def run_innercv_wandb(self, input_dim, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
         """Inner cross-validation with W&B support for deep learning models"""
         
@@ -328,7 +372,9 @@ class Simulation:
                     omit_subcortical=self.omit_subcortical, 
                     gene_list=self.gene_list, 
                     seed=self.random_seed,
-                    binarize=self.binarize
+                    binarize=self.binarize,
+                    impute_strategy=self.impute_strategy,
+                    sort_genes=self.sort_genes
                 )
             
             # Initialize sweep
@@ -387,7 +433,9 @@ class Simulation:
                     omit_subcortical=self.omit_subcortical, 
                     gene_list=self.gene_list, 
                     seed=self.random_seed,
-                    binarize=self.binarize
+                    binarize=self.binarize,
+                    impute_strategy=self.impute_strategy,
+                    sort_genes=self.sort_genes
                 )
             
             # Initialize sweep
@@ -414,53 +462,6 @@ class Simulation:
             
         return best_model, best_val_loss
 
-
-
-    def run_innercv(self, train_indices, test_indices, train_network_dict, search_method=('random', 'mse', 10)):
-        """
-        Inner cross-validation with option for Grid, Bayesian, or Randomized hyperparameter search for sklearn-like models
-        """
-        # Create inner CV object (just indices) for X_train and Y_train for any strategy
-        inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
-
-        inner_fold_splits = process_cv_splits(self.X, self.Y, inner_cv_obj, 
-                                                self.use_shared_regions, 
-                                                self.test_shared_regions)
-
-        # Inner CV data packaged into a large matrix with indices for individual folds
-        X_combined, Y_combined, train_test_indices = expanded_inner_folds_combined_plus_indices(inner_fold_splits)
-    
-        model = ModelBuild.init_model(self.model_type, self.binarize)
-
-        param_grid = model.get_param_grid()
-        param_dist = model.get_param_dist()
-
-        search_type, metric, n_iter = search_method        
-
-        if search_type == 'grid':
-            param_search, X_combined, Y_combined = grid_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_grid, train_test_indices, metric=metric)
-        elif search_type == 'random':
-            param_search, X_combined, Y_combined = random_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
-        elif search_type == 'bayes':
-            param_search, X_combined, Y_combined = bayes_search_init(self.gpu_acceleration, model, X_combined, Y_combined, param_dist, train_test_indices, n_iter=n_iter, metric=metric)
-
-        # Fit GridSearchCV on the combined data
-        param_search.fit(X_combined, Y_combined)
-        
-        # Display comprehensive results
-        print("\nParameter Search CV Results:")
-        print("=============================")
-        print("Best Parameters: ", param_search.best_params_)
-        print("Best Cross-Validation Score: ", param_search.best_score_)
-        
-        # if search_type == 'bayes': _ = plot_objective(param_search.optimizer_results_[0], size=5); plt.show() # Display objective plots for hyperparameter search
-        
-        best_model = model.get_model()
-        best_model.set_params(**param_search.best_params_)
-
-        return best_model, param_search.best_score_
-
-
     def run_sim_torch(self, search_method=('random', 'mse', 5), track_wandb=False):
         """
         Main simulation method
@@ -486,7 +487,6 @@ class Simulation:
             innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
             input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
             best_model, best_val_score = self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
-        
             train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
                 
             train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
@@ -518,13 +518,18 @@ class Simulation:
                     omit_subcortical=self.omit_subcortical, 
                     gene_list=self.gene_list,
                     binarize=self.binarize,
+                    impute_strategy=self.impute_strategy,
+                    sort_genes=self.sort_genes,
                     seed=self.random_seed
                 )
+            
+             
+
             
         print_system_usage() # Display CPU and RAM utilization 
         GPUtil.showUtilization() # Display GPU utilization
 
-
+    
     def run_sim(self, search_method=('random', 'mse', 5), track_wandb=False):
         """
         Main simulation method
@@ -592,6 +597,8 @@ class Simulation:
                     omit_subcortical=self.omit_subcortical, 
                     gene_list=self.gene_list,
                     binarize=self.binarize,
+                    impute_strategy=self.impute_strategy,
+                    sort_genes=self.sort_genes,
                     seed=self.random_seed
                 )
 

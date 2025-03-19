@@ -80,7 +80,7 @@ class SharedSelfAttentionModel(nn.Module):
             deep_layers.extend([
                 nn.Linear(prev_dim, hidden_dim),
                 nn.ReLU(),
-                nn.BatchNorm1d(hidden_dim),
+                nn.BatchNorm1d(hidden_dim, dtype=torch.float32),
                 nn.Dropout(dropout_rate)])
             prev_dim = hidden_dim
         self.deep_layers = nn.Sequential(*deep_layers)
@@ -92,7 +92,7 @@ class SharedSelfAttentionModel(nn.Module):
             self.output_layer = nn.DataParallel(self.output_layer)
                 
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
-        self.patience = 15
+        self.patience = 10
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
@@ -282,7 +282,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
             deep_layers.extend([
                 nn.Linear(prev_dim, hidden_dim),
                 nn.ReLU(),
-                nn.BatchNorm1d(hidden_dim),
+                nn.BatchNorm1d(hidden_dim, dtype=torch.float32),
                 nn.Dropout(dropout_rate)])
             prev_dim = hidden_dim
         self.deep_layers = nn.Sequential(*deep_layers)
@@ -295,7 +295,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
         
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss()
-        self.patience = 15
+        self.patience = 10
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 

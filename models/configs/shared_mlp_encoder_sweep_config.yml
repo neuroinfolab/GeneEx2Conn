@@ -4,8 +4,6 @@ metric:
   name: mean_val_loss
   goal: minimize
 
-### TRANSCRIPTOME, 100 parc full brain
-# BAYES
 parameters: 
   input_dim:
     value: !!int 0
