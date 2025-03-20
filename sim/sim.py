@@ -478,54 +478,52 @@ class Simulation:
         network_dict = self.cv_obj.networks
 
         for fold_idx, (train_indices, test_indices) in enumerate(self.cv_obj.split(self.X, self.Y)):
-            train_region_pairs = expand_X_symmetric(train_indices.reshape(-1, 1)).astype(int)
-            test_region_pairs = expand_X_symmetric(test_indices.reshape(-1, 1)).astype(int)
-
-            train_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
-            test_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])
-            
-            innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
-            input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
-            best_model, best_val_score = self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
-            train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
+            if fold_idx == 3:
+                train_region_pairs = expand_X_symmetric(train_indices.reshape(-1, 1)).astype(int)
+                test_region_pairs = expand_X_symmetric(test_indices.reshape(-1, 1)).astype(int)
+    
+                train_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
+                test_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])
                 
-            train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
-            test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
-            train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
-            test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
-
-            # Evaluate on the test fold                
-            evaluator = ModelEvaluatorTorch(best_model, self.Y, train_loader, train_indices, test_loader, test_indices, self.network_labels, self.use_shared_regions, self.test_shared_regions)
-            train_metrics = evaluator.get_train_metrics()
-            test_metrics = evaluator.get_test_metrics()
-            print("\nTRAIN METRICS:", train_metrics)
-            print("TEST METRICS:", test_metrics)
-            print('BEST VAL SCORE', best_val_score)
-            print('BEST MODEL HYPERPARAMS', best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model))
-
-            if track_wandb:
-                log_wandb_metrics(
-                    self.feature_type, self.model_type, self.connectome_target, self.cv_type, 
-                    fold_idx,
-                    train_metrics, 
-                    test_metrics, 
-                    best_val_score, 
-                    best_model, 
-                    train_history, 
-                    model_classes=MODEL_CLASSES,
-                    parcellation=self.parcellation, 
-                    hemisphere=self.hemisphere, 
-                    omit_subcortical=self.omit_subcortical, 
-                    gene_list=self.gene_list,
-                    binarize=self.binarize,
-                    impute_strategy=self.impute_strategy,
-                    sort_genes=self.sort_genes,
-                    seed=self.random_seed
-                )
-            
-             
-
-            
+                innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
+                input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
+                best_model, best_val_score = self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
+                train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
+                    
+                train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
+                test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
+                train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
+                test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
+    
+                # Evaluate on the test fold                
+                evaluator = ModelEvaluatorTorch(best_model, self.Y, train_loader, train_indices, test_loader, test_indices, self.network_labels, self.use_shared_regions, self.test_shared_regions)
+                train_metrics = evaluator.get_train_metrics()
+                test_metrics = evaluator.get_test_metrics()
+                print("\nTRAIN METRICS:", train_metrics)
+                print("TEST METRICS:", test_metrics)
+                print('BEST VAL SCORE', best_val_score)
+                print('BEST MODEL HYPERPARAMS', best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model))
+    
+                if track_wandb:
+                    log_wandb_metrics(
+                        self.feature_type, self.model_type, self.connectome_target, self.cv_type, 
+                        fold_idx,
+                        train_metrics, 
+                        test_metrics, 
+                        best_val_score, 
+                        best_model, 
+                        train_history, 
+                        model_classes=MODEL_CLASSES,
+                        parcellation=self.parcellation, 
+                        hemisphere=self.hemisphere, 
+                        omit_subcortical=self.omit_subcortical, 
+                        gene_list=self.gene_list,
+                        binarize=self.binarize,
+                        impute_strategy=self.impute_strategy,
+                        sort_genes=self.sort_genes,
+                        seed=self.random_seed
+                    )
+        
         print_system_usage() # Display CPU and RAM utilization 
         GPUtil.showUtilization() # Display GPU utilization
 
