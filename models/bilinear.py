@@ -61,18 +61,27 @@ class BilinearLowRank(nn.Module):
         out2 = self.activation(self.linear(x_j) if self.shared_weights else self.linear2(x_j))
         return torch.sum(out1 * out2, dim=1) # dot product for paired samples
     
-    def predict(self, X):
+    def predict(self, loader):
         self.eval()
-        X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
+        predictions = []
+        targets = []
         with torch.no_grad():
-            predictions = self(X).cpu().numpy()
-        return predictions
-
-    def fit(self, X_train, y_train, X_test, y_test, verbose=True):
-        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, shuffle=True)
-        val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, shuffle=True)
-        return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, verbose=verbose)
+            for batch_X, batch_y, _, _ in loader:
+                batch_X = batch_X.to(self.device)
+                batch_preds = self(batch_X).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        return predictions, targets
     
+    def fit(self, dataset, train_indices, test_indices, verbose=True):
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer)
+
 
 class BilinearSCM(nn.Module):
     def __init__(self, input_dim, learning_rate=0.01, epochs=100, 
@@ -97,17 +106,23 @@ class BilinearSCM(nn.Module):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         return self.bilinear(x_i, x_j).squeeze()
 
-    def predict(self, X):
+    def predict(self, loader):
         self.eval()
-        X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
+        predictions = []
+        targets = []
         with torch.no_grad():
-            predictions = self(X).cpu().numpy()
-        return predictions
-
-    def fit(self, X_train, y_train, X_test=None, y_test=None, verbose=True):
-        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device, shuffle=True)
-        if X_test is not None and y_test is not None:
-            val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device, shuffle=True)
-        else:
-            val_loader = None
-        return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, self.scheduler, verbose=verbose)
+            for batch_X, batch_y, _, _ in loader:
+                batch_X = batch_X.to(self.device)
+                batch_preds = self(batch_X).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        return predictions, targets
+    
+    def fit(self, dataset, train_indices, test_indices, verbose=True):
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer)

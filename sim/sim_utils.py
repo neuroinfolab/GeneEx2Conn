@@ -59,7 +59,8 @@ def load_sweep_config(file_path, input_dim, binarize):
         config = yaml.safe_load(file)
     
     config['parameters']['input_dim']['value'] = input_dim
-    config['parameters']['binarize']['value'] = binarize
+    if binarize is not None:
+        config['parameters']['binarize']['value'] = binarize
 
     return config
 
@@ -75,7 +76,8 @@ def load_best_parameters(yaml_file_path, input_dim, binarize):
                    for key, value in best_parameters.items()}
     
     best_config['input_dim'] = input_dim    
-    best_config['binarize'] = binarize
+    if binarize is not None:
+        best_config['binarize'] = binarize
 
     return best_config
 

@@ -22,7 +22,6 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
 
     for epoch in range(epochs):
         train_loss = train_epoch(model, train_loader, criterion, optimizer, device, scaler=scaler)
-        # train_loss = train_epoch_torch(model, train_loader, criterion, optimizer, device, scaler))
 
         train_history["train_loss"].append(train_loss)
 
@@ -53,29 +52,6 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
 
     return train_history
 
-'''
-def train_epoch(model, train_loader, criterion, optimizer, device):
-    model.train()
-    total_train_loss = 0
-    
-    for batch_X, batch_y, batch_coords, batch_idx in train_loader:
-        batch_X = batch_X.to(device)
-        batch_y = batch_y.to(device)
-        batch_coords = batch_coords.to(device)
-        optimizer.zero_grad()
-        
-        if hasattr(model, 'include_coords'):
-            predictions = model(batch_X, batch_coords).squeeze()
-        else:
-            predictions = model(batch_X).squeeze()
-        
-        loss = criterion(predictions, batch_y)
-        total_train_loss += loss.item()
-        loss.backward()
-        optimizer.step()
-    
-    return total_train_loss / len(train_loader)
-'''
 def train_epoch(model, train_loader, criterion, optimizer, device, scaler=None):
     """Combined training function that handles both regular and mixed precision training"""
     model.train()
@@ -111,7 +87,6 @@ def train_epoch(model, train_loader, criterion, optimizer, device, scaler=None):
         total_train_loss += loss.item()
     
     return total_train_loss / len(train_loader)
-
 
 def evaluate(model, val_loader, criterion, device, scheduler=None):
     model.eval()

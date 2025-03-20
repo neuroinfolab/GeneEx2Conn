@@ -1,3 +1,4 @@
+name: bilinear_SCM
 method: random
 metric:
   name: mean_val_loss
