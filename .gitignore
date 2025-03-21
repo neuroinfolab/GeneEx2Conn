@@ -7,6 +7,7 @@
 **/*.pickle
 .png
 **/*.png
+**/*.gif
 notebooks/quick_experiments/
 .jpg
 **/*.jpg
@@ -15,3 +16,7 @@ notebooks/quick_experiments/
 slurm-*
 *alexander-ratzan-new-york-university
 *.netrc
+
+!glass/cv_split_s400_structural_connectivity_spatial_split_10-3.gif
+!glass/cv_split_s400_structural_connectivity_random_split_4.gif
+!glass/S400_LAMA1_expression.png
