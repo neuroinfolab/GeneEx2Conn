@@ -65,13 +65,13 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         
         # Choose gene list
         if gene_list == '0.2' or gene_list == '1':
-            genes_list = pd.read_csv(f"./data/gene_lists/stable_r{gene_list}_schaefer_{parcellation[1:]}.txt", header=None)[0].tolist()
+            genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_{parcellation[1:]}.txt", header=None)[0].tolist()
         elif gene_list in ['brain', 'neuron', 'oligodendrocyte', 'synaptome', 'layers']:
             genes_list = abagen.fetch_gene_group(gene_list)
         elif gene_list == 'richiardi2015':
-            genes_list = pd.read_csv('./data/gene_lists/richiardi2015.txt', header=None)[0].tolist()
+            genes_list = pd.read_csv('./data/enigma/gene_lists/richiardi2015.txt', header=None)[0].tolist()
         elif gene_list == 'syngo':
-            genes_list = pd.read_csv('./data/gene_lists/syngo.txt', header=None)[0].tolist()
+            genes_list = pd.read_csv('./data/enigma/gene_lists/syngo.txt', header=None)[0].tolist()
         elif gene_list == 'all_abagen':  
             genes_list = set.union(
                         set(abagen.fetch_gene_group('brain')),

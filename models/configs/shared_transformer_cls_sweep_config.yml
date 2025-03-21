@@ -38,7 +38,7 @@ parameters:
     values: [256, 512]
   epochs:
     values: [50, 75]
-
+    
 best_parameters:
   input_dim:
     value: !!int 0
