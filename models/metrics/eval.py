@@ -127,8 +127,12 @@ class Metrics:
         self.binarize = binarize
 
         self.compute_metrics()
-        self.visualize_predictions_full()
-        self.visualize_predictions_subset()
+
+        try: 
+            self.visualize_predictions_full()
+            self.visualize_predictions_subset()
+        except: 
+            print('No full or subset visualizations for this model')
         if not self.binarize:
             self.visualize_predictions_scatter()
     
@@ -146,6 +150,11 @@ class Metrics:
             self.mae = mean_absolute_error(self.Y_true_flat, self.Y_pred_flat)
             self.r2 = r2_score(self.Y_true_flat, self.Y_pred_flat)
             self.pearson_corr = pearsonr(self.Y_true_flat, self.Y_pred_flat)[0]
+            if self.square: # Compute geodesic distance if test data is a square connectome
+                Y_pred_connectome = reconstruct_connectome(self.Y_pred, symmetric=True)
+                Y_pred_connectome_asymmetric = reconstruct_connectome(self.Y_pred, symmetric=False)
+                Y_true_connectome = reconstruct_connectome(self.Y_true)
+                self.geodesic_distance = distance_FC(Y_true_connectome, Y_pred_connectome).geodesic()
         
     def get_metrics(self):
         if self.binarize:
@@ -195,7 +204,6 @@ class Metrics:
             Y_pred_connectome = reconstruct_connectome(self.Y_pred, symmetric=True)
             Y_pred_connectome_asymmetric = reconstruct_connectome(self.Y_pred, symmetric=False)
             Y_true_connectome = reconstruct_connectome(self.Y_true)
-            self.geodesic_distance = distance_FC(Y_true_connectome, Y_pred_connectome).geodesic()
 
             plt.figure(figsize=(16, 4))
             plt.subplot(131)

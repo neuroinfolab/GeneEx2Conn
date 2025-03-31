@@ -61,20 +61,26 @@ class SharedLinearEncoderModel(nn.Module):
         
         return output.squeeze()
 
-    def predict(self, X):
+    def predict(self, loader):
         self.eval()
-        X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
+        predictions = []
+        targets = []
         with torch.no_grad():
-            predictions = self(X).cpu().numpy()
-        return predictions
+            for batch_X, batch_y, _, _ in loader:
+                batch_X = batch_X.to(self.device)
+                batch_preds = self(batch_X).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        return predictions, targets
 
-    def fit(self, X_train, y_train, X_test=None, y_test=None, verbose=True):
-        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device) # for bilinear models keeping unshuffled leads to more symmetric guess
-        val_loader = None
-        if X_test is not None and y_test is not None:
-            val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device)
-        return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, verbose=verbose)
-
+    def fit(self, dataset, train_indices, test_indices, verbose=True):
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, verbose=verbose)
 
 class SparseEncoderLoss(nn.Module):
     def __init__(self, encoder, base_loss=nn.MSELoss(), lambda_reg=0.1):
@@ -161,12 +167,13 @@ class SharedMLPEncoderModel(nn.Module):
             self.deep_layers = nn.Sequential(*deep_layers)
             self.output_layer = nn.Linear(prev_dim, 1)  # Final output layer
         
+        '''
         if torch.cuda.device_count() > 1:
             self.encoder = nn.DataParallel(self.encoder)
             if not self.use_bilinear:
                 self.deep_layers = nn.DataParallel(self.deep_layers)
                 self.output_layer = nn.DataParallel(self.output_layer)
-        
+        '''
         self.criterion = SparseEncoderLoss(self.encoder, base_loss=nn.MSELoss(), lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
@@ -188,17 +195,24 @@ class SharedMLPEncoderModel(nn.Module):
             output = self.output_layer(deep_output)
         
         return output.squeeze()
-
-    def predict(self, X):
+    
+    def predict(self, loader):
         self.eval()
-        X = torch.as_tensor(X, dtype=torch.float32).to(self.device)
+        predictions = []
+        targets = []
         with torch.no_grad():
-            predictions = self(X).cpu().numpy()
-        return predictions
+            for batch_X, batch_y, _, _ in loader:
+                batch_X = batch_X.to(self.device)
+                batch_preds = self(batch_X).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        return predictions, targets
 
-    def fit(self, X_train, y_train, X_test=None, y_test=None, verbose=True):
-        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device) # for bilinear models keeping unshuffled leads to more symmetric guess
-        val_loader = None
-        if X_test is not None and y_test is not None:
-            val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device)
-        return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, verbose=verbose)
+    def fit(self, dataset, train_indices, test_indices, verbose=True):
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, verbose=verbose)

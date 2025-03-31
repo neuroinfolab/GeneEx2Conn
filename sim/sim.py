@@ -570,6 +570,7 @@ class Simulation:
             
             # Evaluate on the test fold                
             evaluator = ModelEvaluator(best_model, self.Y, train_indices, test_indices, self.network_labels, X_train, Y_train, X_test, Y_test, self.use_shared_regions, self.test_shared_regions)
+
             train_metrics = evaluator.get_train_metrics()
             test_metrics = evaluator.get_test_metrics()
             
@@ -578,6 +579,8 @@ class Simulation:
             print("TEST METRICS:", test_metrics)
             print('BEST VAL SCORE', best_val_score)
             print('BEST MODEL HYPERPARAMS', best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model))
+
+            break # ADDED FOR TESTING
 
             # Log final evaluation metrics
             if track_wandb:

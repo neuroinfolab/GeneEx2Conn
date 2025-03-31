@@ -1,6 +1,4 @@
-# imports
 from env.imports import *
-
 from sim.sim import Simulation
 
 def open_pickled_results(file, added_dir='', backup=False): # Specify the path to your pickle file

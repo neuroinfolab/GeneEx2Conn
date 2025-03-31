@@ -76,6 +76,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.decomposition import PCA
 from sklearn.svm import SVC
+from sklearn.svm import SVR
 from skopt import BayesSearchCV
 from skopt.space import Real, Categorical, Integer
 import xgboost

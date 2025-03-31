@@ -6,7 +6,7 @@ class BilinearLoss(nn.Module):
     """MSE loss with optional L1/L2 regularization for bilinear models."""
     def __init__(self, parameters, regularization='l1', lambda_reg=1.0):
         super().__init__()
-        self.parameters = parameters
+        self.param_list = list(parameters)
         self.regularization = regularization
         self.lambda_reg = lambda_reg
         self.mse = nn.MSELoss()
@@ -14,14 +14,12 @@ class BilinearLoss(nn.Module):
     def forward(self, predictions, targets):
         mse_loss = self.mse(predictions, targets)
         if self.lambda_reg > 0:
-            # Concatenate all parameters into a single tensor
-            params = torch.cat([p.view(-1) for p in self.parameters if p.requires_grad])
+            params = torch.cat([p.view(-1) for p in self.param_list if p.requires_grad])
             if self.regularization == 'l1':
-                reg_loss = torch.linalg.norm(params, ord=1)  # L1 norm
+                reg_loss = torch.linalg.norm(params, ord=1)
             elif self.regularization == 'l2':
-                reg_loss = torch.linalg.norm(params, ord=2) # L2 norm
+                reg_loss = torch.linalg.norm(params, ord=2)
             return mse_loss + self.lambda_reg * reg_loss
-
         return mse_loss
 
 
