@@ -47,7 +47,7 @@ best_parameters:
   token_encoder_dim:
     values: [30] # 20, 30, 60 
   d_model:
-    values: [128] # curr best 64
+    values: [64] # curr best 64
   use_positional_encoding:
     values: [False]
   encoder_output_dim:
@@ -72,4 +72,4 @@ best_parameters:
   batch_size:
     values: [512]
   epochs:
-    values: [50]
+    values: [30]

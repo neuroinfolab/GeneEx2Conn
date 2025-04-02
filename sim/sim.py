@@ -495,8 +495,21 @@ class Simulation:
                 train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
                 test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
     
-                # Evaluate on the test fold                
-                evaluator = ModelEvaluatorTorch(best_model, self.Y, train_loader, train_indices, test_loader, test_indices, self.network_labels, self.use_shared_regions, self.test_shared_regions)
+                # Evaluate on the test fold 
+                evaluator = ModelEvaluatorTorch(
+                                              region_pair_dataset=self.region_pair_dataset,
+                                              model=best_model,
+                                              Y=self.Y,
+                                              train_loader=train_loader,
+                                              train_indices=train_indices,
+                                              train_indices_expanded=train_indices_expanded,
+                                              test_loader=test_loader,
+                                              test_indices=test_indices,
+                                              test_indices_expanded=test_indices_expanded,
+                                              network_labels=self.network_labels,
+                                              train_shared_regions=self.use_shared_regions,
+                                              test_shared_regions=self.test_shared_regions)
+
                 train_metrics = evaluator.get_train_metrics()
                 test_metrics = evaluator.get_test_metrics()
                 print("\nTRAIN METRICS:", train_metrics)

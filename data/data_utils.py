@@ -682,6 +682,7 @@ class RegionPairDataset(Dataset):
         self.X_expanded = torch.tensor(expand_X_symmetric(X), dtype=torch.float32)
         self.Y_expanded = torch.tensor(expand_Y_symmetric(Y), dtype=torch.float32)
         self.coords_expanded = torch.tensor(expand_X_symmetric(coords), dtype=torch.float32)
+        self.distances_expanded = torch.sqrt(torch.sum((self.coords_expanded[:, :3] - self.coords_expanded[:, 3:])**2, dim=1))
         self.valid_indices_expanded = expand_X_symmetric(self.valid_indices.reshape(-1,1)).astype(np.int32)
         self.true_indices_expanded = expand_X_symmetric(self.true_indices.reshape(-1,1)).astype(np.int32)
         valid_pairs = tuple(map(tuple, self.valid_indices_expanded))

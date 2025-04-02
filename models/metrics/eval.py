@@ -4,6 +4,8 @@ import models.metrics.distance_FC
 from models.metrics.distance_FC import *
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, log_loss
 from matplotlib.colors import ListedColormap
+from scipy.optimize import curve_fit
+from scipy.stats import binned_statistic
 
 # Evaluation funcs that preserve connectome properties 
 def connectome_correlation(Y_pred, Y_ground_truth, include_diag=False, output=False):
@@ -112,11 +114,11 @@ def logloss_cupy(y_true, y_pred):
 
 
 class Metrics:
-    def __init__(self, Y, indices, Y_true, Y_pred, square=False, binarize=False, network_labels=None):
+    def __init__(self, Y, indices, Y_true, Y_pred, square=False, binarize=False, network_labels=None, distances=None):
         self.Y = Y
+        self.distances = distances
         self.indices = indices
         self.network_labels = network_labels
-
         # convert cupy arrays to numpy arrays if necessary
         self.Y_true = getattr(Y_true, 'get', lambda: Y_true)()
         self.Y_pred = getattr(Y_pred, 'get', lambda: Y_pred)()
@@ -127,7 +129,7 @@ class Metrics:
         self.binarize = binarize
 
         self.compute_metrics()
-
+        
         try: 
             self.visualize_predictions_full()
             self.visualize_predictions_subset()
@@ -135,17 +137,65 @@ class Metrics:
             print('No full or subset visualizations for this model')
         if not self.binarize:
             self.visualize_predictions_scatter()
-    
+            self.visualize_spatial_autocorr()
+
+    def visualize_spatial_autocorr(self):
+        """Plot spatial autocorrelation between distance and FC predictions"""
+        # Define exponential decay function
+        def exp_decay(x, SA_inf, SA_lambda):
+            return SA_inf + (1 - SA_inf) * np.exp(-x / SA_lambda)
+
+        # Create distance bins
+        bin_size_mm = 10
+        bin_edges = np.arange(0, self.distances.max() + bin_size_mm, bin_size_mm)
+        
+        # Calculate binned statistics for true values
+        bin_means_true, bin_edges, _ = binned_statistic(self.distances, self.Y_true_flat, 
+                                                       statistic='mean', bins=bin_edges)
+        bin_std_true, _, _ = binned_statistic(self.distances, self.Y_true_flat,
+                                             statistic='std', bins=bin_edges)
+        
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+        print(f"# of NaNs in bin_means_true: {np.sum(np.isnan(bin_means_true))}")
+        print(f"bin_means_true: {bin_means_true}")
+        print(f"bin_centers: {bin_centers}")
+
+        # Fit exponential decay for true and predicted
+        popt_true, _ = curve_fit(exp_decay, bin_centers, bin_means_true,
+                                p0=[0, 10], bounds=([-1, 0], [1, 100]))
+
+        plt.figure(figsize=(12,8))
+        
+        # Plot true values
+        plt.errorbar(bin_centers, bin_means_true, yerr=bin_std_true, 
+                    color='blue', fmt='o', label='True FC', alpha=0.7)
+        plt.plot(bin_centers, exp_decay(bin_centers, *popt_true), 
+                'b-', label=f'True Fit (λ={popt_true[1]:.2f})')
+        
+        # Generate predictions using exponential decay
+        distance_based_pred = exp_decay(self.distances, *popt_true)
+        
+        # Print metrics comparing distance-based prediction to true values
+        print("\nDistance-based prediction metrics:")
+        print(f"MSE: {mean_squared_error(self.Y_true_flat, distance_based_pred):.4f}")
+        print(f"MAE: {mean_absolute_error(self.Y_true_flat, distance_based_pred):.4f}")
+        print(f"R2: {r2_score(self.Y_true_flat, distance_based_pred):.4f}")
+        print(f"Pearson r: {pearsonr(self.Y_true_flat, distance_based_pred)[0]:.4f}")
+
+        plt.xlabel('Distance (mm)')
+        plt.ylabel('FC Strength')
+        plt.title('Spatial Autocorrelation of FC')
+        plt.legend()
+        plt.show()
+        
     def compute_metrics(self):
-        if self.binarize:    
-            # Compute classification metrics
+        if self.binarize: # Compute classification metrics
             self.accuracy = accuracy_score(self.Y_true_flat, self.Y_pred_flat)
             self.precision = precision_score(self.Y_true_flat, self.Y_pred_flat)
             self.recall = recall_score(self.Y_true_flat, self.Y_pred_flat)
             self.f1 = f1_score(self.Y_true_flat, self.Y_pred_flat)
             self.auc_roc = roc_auc_score(self.Y_true_flat, self.Y_pred_flat)
-        else:
-            # Compute regression metrics
+        else: # Compute regression metrics
             self.mse = mean_squared_error(self.Y_true_flat, self.Y_pred_flat)
             self.mae = mean_absolute_error(self.Y_true_flat, self.Y_pred_flat)
             self.r2 = r2_score(self.Y_true_flat, self.Y_pred_flat)
@@ -177,13 +227,37 @@ class Metrics:
         return metrics
         
     def visualize_predictions_scatter(self):
-        plt.figure(figsize=(10, 10))        
+        plt.figure(figsize=(14, 10))        
         # Get min and max across both true and predicted values
         min_val = min(self.Y_true_flat.min(), self.Y_pred_flat.min())
         max_val = max(self.Y_true_flat.max(), self.Y_pred_flat.max())
         
-        # Create scatter plot with smaller points
-        plt.scatter(self.Y_true_flat, self.Y_pred_flat, alpha=0.5, s=8)
+        # Calculate fixed distance cutoffs for short/mid/long range
+        dist_min = self.distances.min()
+        dist_max = self.distances.max()
+        dist_range = dist_max - dist_min
+        dist_33 = dist_min + (dist_range / 3)
+        dist_67 = dist_min + (2 * dist_range / 3)
+        
+        # Create masks for different ranges
+        short_mask = self.distances <= dist_33
+        mid_mask = (self.distances > dist_33) & (self.distances <= dist_67)
+        long_mask = self.distances > dist_67
+        
+        # Calculate ICCs for each range
+        overall_r = pearsonr(self.Y_true_flat, self.Y_pred_flat)[0]
+        short_r = pearsonr(self.Y_true_flat[short_mask], self.Y_pred_flat[short_mask])[0]
+        mid_r = pearsonr(self.Y_true_flat[mid_mask], self.Y_pred_flat[mid_mask])[0]
+        long_r = pearsonr(self.Y_true_flat[long_mask], self.Y_pred_flat[long_mask])[0]
+        
+        # Create distance-based colormap
+        norm = plt.Normalize(self.distances.min(), self.distances.max())
+        cmap = plt.cm.viridis  # Using viridis colormap for distance gradient
+        
+        # Create scatter plot with distance-based colors
+        scatter = plt.scatter(self.Y_true_flat, self.Y_pred_flat, 
+                            c=self.distances, cmap=cmap,
+                            alpha=0.5, s=4)
         
         # Add line of best fit
         z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
@@ -194,9 +268,15 @@ class Metrics:
         plt.xlim(min_val, max_val)
         plt.ylim(min_val, max_val)
         
+        # Add legend with correlations
+        legend_text = f'Overall r = {overall_r:.3f}\nShort-range r = {short_r:.3f}\nMid-range r = {mid_r:.3f}\nLong-range r = {long_r:.3f}'
+        plt.text(0.05, 0.95, legend_text, transform=plt.gca().transAxes, 
+                bbox=dict(facecolor='white', alpha=0.8), verticalalignment='top')
+        
         plt.xlabel('True Values')
         plt.ylabel('Predicted Values')
         plt.title('Scatter Plot of True vs Predicted Values')
+        plt.colorbar(scatter, label='Distance (mm)')
         plt.show()
 
     def visualize_predictions_subset(self):
@@ -214,7 +294,7 @@ class Metrics:
             plt.subplot(132) 
             plt.imshow(Y_pred_connectome_asymmetric, cmap='viridis', vmin=Y_true_connectome.min(), vmax=Y_true_connectome.max())
             plt.colorbar(shrink=0.5)
-            plt.title('Predicted Connectome (non-symmetrized)')
+            plt.title('Predicted Connectome') # (non-symmetrized)
 
             plt.subplot(133)
             plt.imshow(abs(Y_true_connectome - Y_pred_connectome_asymmetric), cmap='RdYlGn_r')
@@ -327,7 +407,11 @@ class ModelEvaluator:
         return self.test_metrics
 
 class ModelEvaluatorTorch:
-    def __init__(self, model, Y, train_loader, train_indices, test_loader, test_indices, network_labels, train_shared_regions, test_shared_regions):        
+    def __init__(self, region_pair_dataset, model, Y, train_loader, train_indices, train_indices_expanded, test_loader, test_indices, test_indices_expanded, network_labels, train_shared_regions, test_shared_regions):        
+        self.region_pair_dataset = region_pair_dataset
+        self.train_distances_expanded = self.region_pair_dataset.distances_expanded[train_indices_expanded]
+        self.test_distances_expanded = self.region_pair_dataset.distances_expanded[test_indices_expanded]    
+        
         self.model = model
         self.train_loader = train_loader
         self.train_indices = train_indices
@@ -340,12 +424,12 @@ class ModelEvaluatorTorch:
 
         self.binarize = len(np.unique(Y)) == 2
         
-        self.train_metrics = self.evaluate(self.train_loader, self.train_indices, not self.train_shared_regions)
-        self.test_metrics = self.evaluate(self.test_loader, self.test_indices, not self.test_shared_regions)
+        self.train_metrics = self.evaluate(self.train_loader, self.train_indices, self.train_distances_expanded, not self.train_shared_regions)
+        self.test_metrics = self.evaluate(self.test_loader, self.test_indices, self.test_distances_expanded, not self.test_shared_regions)
 
-    def evaluate(self, loader, indices, square):
+    def evaluate(self, loader, indices, distances, square):
         self.Y_pred, self.Y_true = self.model.predict(loader)
-        return Metrics(self.Y, indices, self.Y_true, self.Y_pred, square, self.binarize, self.network_labels).get_metrics()
+        return Metrics(self.Y, indices, self.Y_true, self.Y_pred, square, self.binarize, self.network_labels, distances).get_metrics()
 
     def get_train_metrics(self):
         return self.train_metrics

@@ -47,7 +47,10 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
                 print(f"\nEarly stopping triggered at epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}")
                 model.load_state_dict(best_model_state)  # Rewind to best model
                 break
-
+            elif epoch == epochs - 1: # always rewind to best model at end of training
+                model.load_state_dict(best_model_state)  # Rewind to best model
+                print("Model state dict loaded from best model")
+                
         elif verbose and (epoch + 1) % 5 == 0:
             print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}")
 
