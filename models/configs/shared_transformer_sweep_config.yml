@@ -47,9 +47,9 @@ best_parameters:
   token_encoder_dim:
     values: [30] # 20
   d_model:
-    values: [128]
+    values: [64]
   encoder_output_dim:
-    values: [10]
+    values: [20]
   use_positional_encoding:
     values: [False]
   nhead:

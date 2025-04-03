@@ -124,3 +124,7 @@ class BilinearSCM(nn.Module):
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer)
+
+    def fit_full(self, dataset, verbose=True):
+        train_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, pin_memory=False)
+        return train_model(self, train_loader, None, self.epochs, self.criterion, self.optimizer)

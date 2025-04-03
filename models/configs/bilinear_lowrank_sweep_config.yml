@@ -61,16 +61,18 @@ parameters:
 
 # BEST
 best_parameters: # best 01/28 - should rerun bayes
+  input_dim: 
+    value: !!int 0
   activation:
     values: ['none'] 
   learning_rate:
-    values: [0.001]
+    values: [0.0001]
   batch_size:
     values: [256]
   regularization:
     values: ['l2']
   lambda_reg:
-    values: [0.1] 
+    values: [0.001] 
   shared_weights:
     values: [True] 
   input_dim:
@@ -78,4 +80,4 @@ best_parameters: # best 01/28 - should rerun bayes
   reduced_dim:
     values: [10]
   epochs:
-    values: [150]
+    values: [100]

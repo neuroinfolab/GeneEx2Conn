@@ -137,7 +137,7 @@ class Metrics:
             print('No full or subset visualizations for this model')
         if not self.binarize:
             self.visualize_predictions_scatter()
-            self.visualize_spatial_autocorr()
+            #self.visualize_spatial_autocorr()
 
     def visualize_spatial_autocorr(self):
         """Plot spatial autocorrelation between distance and FC predictions"""
