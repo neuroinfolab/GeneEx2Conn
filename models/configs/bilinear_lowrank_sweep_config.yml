@@ -80,4 +80,4 @@ best_parameters: # best 01/28 - should rerun bayes
   reduced_dim:
     values: [10]
   epochs:
-    values: [100]
+    values: [120]

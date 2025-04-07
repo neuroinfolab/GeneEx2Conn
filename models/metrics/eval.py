@@ -227,7 +227,14 @@ class Metrics:
         return metrics
         
     def visualize_predictions_scatter(self):
-        plt.figure(figsize=(14, 10))        
+        # Set global visualization parameters
+        TITLE_SIZE = 14
+        LABEL_SIZE = 22
+        LEGEND_SIZE = 20
+        TEXT_SIZE = 20
+        TICK_SIZE = 20
+        
+        plt.figure(figsize=(10, 7))        
         # Get min and max across both true and predicted values
         min_val = min(self.Y_true_flat.min(), self.Y_pred_flat.min())
         max_val = max(self.Y_true_flat.max(), self.Y_pred_flat.max())
@@ -271,12 +278,22 @@ class Metrics:
         # Add legend with correlations
         legend_text = f'Overall r = {overall_r:.3f}\nShort-range r = {short_r:.3f}\nMid-range r = {mid_r:.3f}\nLong-range r = {long_r:.3f}'
         plt.text(0.05, 0.95, legend_text, transform=plt.gca().transAxes, 
-                bbox=dict(facecolor='white', alpha=0.8), verticalalignment='top')
+                bbox=dict(facecolor='white', alpha=0.8), verticalalignment='top',
+                fontsize=LEGEND_SIZE)
         
-        plt.xlabel('True Values')
-        plt.ylabel('Predicted Values')
-        plt.title('Scatter Plot of True vs Predicted Values')
-        plt.colorbar(scatter, label='Distance (mm)')
+        plt.xlabel('True Values', fontsize=LABEL_SIZE)
+        plt.ylabel('Predicted Values', fontsize=LABEL_SIZE)
+        #plt.title('Scatter Plot of True vs Predicted Values', fontsize=TITLE_SIZE)
+        
+        # Set tick label sizes
+        plt.xticks(fontsize=TICK_SIZE)
+        plt.yticks(fontsize=TICK_SIZE)
+        
+        # Add colorbar with consistent font sizes
+        cbar = plt.colorbar(scatter)
+        cbar.set_label('Distance (mm)', fontsize=LABEL_SIZE)
+        cbar.ax.tick_params(labelsize=TICK_SIZE)  # Correct way to set colorbar tick label size
+        
         plt.show()
 
     def visualize_predictions_subset(self):

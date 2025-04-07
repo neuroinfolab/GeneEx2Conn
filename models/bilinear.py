@@ -50,6 +50,18 @@ class BilinearLowRank(nn.Module):
         else:  # 'none'
             self.activation = nn.Identity()
 
+        
+        # self.patience = 20
+        # self.scheduler = ReduceLROnPlateau( 
+        #     self.optimizer, 
+        #     mode='min', 
+        #     factor=0.3,  # Reduce LR by 70%
+        #     patience=20,  # Reduce LR after patience epochs of no improvement
+        #     threshold=0.1,  # Threshold to detect stagnation
+        #     cooldown=1,  # Reduce cooldown period
+        #     min_lr=1e-6,  # Prevent LR from going too low
+        #     verbose=True
+        # )
         self.criterion = BilinearLoss(self.parameters(), regularization=regularization, lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate)
 
@@ -79,7 +91,6 @@ class BilinearLowRank(nn.Module):
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer)
-
 
 class BilinearSCM(nn.Module):
     def __init__(self, input_dim, learning_rate=0.01, epochs=100, 
