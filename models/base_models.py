@@ -1,14 +1,4 @@
-# Gene2Conn/models/base_models.py
-
-from imports import *
-from skopt.space import Real, Categorical, Integer
-from sklearn.base import BaseEstimator, RegressorMixin
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import TensorDataset, DataLoader
-
-from models.metrics.eval import mse_cupy
+from env.imports import *
 
 class BaseModel:
     """Base class for all models."""
@@ -28,130 +18,48 @@ class BaseModel:
         """Return the parameter grid for GridSearchCV."""
         return self.param_dist
 
+class LinearModel(BaseModel):
+    def __init__(self):
+        super().__init__()
+        self.model = LinearRegression()
+        self.param_grid = {
+            'fit_intercept': [True, False],
+            'positive': [True, False]
+        }
+        self.param_dist = {
+            'fit_intercept': Categorical([True, False]),
+            'positive': Categorical([True, False])
+        }
 
 class RidgeModel(BaseModel):
-    """Ridge Regression model with parameter grid."""
-
     def __init__(self):
         super().__init__()
         self.model = Ridge()
         self.param_grid = {
-            'alpha': [0, 0.001, 0.01, 0.1, 1.0, 10, 100, 1000],
-            # 'alpha': np.logspace(-6, 2, 9)  # Explore 10^-6 to 10^2
+            'alpha': [0.001, 0.01, 0.1, 1.0, 10, 100, 1000],
             'solver': ['auto'] #, 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga']
         }
         self.param_dist = {
-            'alpha': Real(1e-6, 1e2, prior='log-uniform')  # Log-uniform to explore a wide range of alphas
-            #'solver': Categorical(['auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga'])  # Different solvers to try
+            'alpha': Real(1e-6, 1e2, prior='log-uniform'),  # Log-uniform to explore a wide range of alphas
+            'solver': Categorical(['auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga'])  # Different solvers to try
         }
-
-class RidgeModelTorch(BaseEstimator, RegressorMixin):
-    """PyTorch-based Ridge Regression model with L2 regularization (Ridge penalty)."""
-
-    def __init__(self, input_dim, output_dim=1, alpha=1.0, lr=0.01, epochs=100, batch_size=32):
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.alpha = alpha  # Equivalent to L2 regularization
-        self.lr = lr  # Learning rate
-        self.epochs = epochs
-        self.batch_size = batch_size
-
-        # Define the model: a single layer linear model (Ridge regression is just linear regression with L2 regularization)
-        self.model = nn.Linear(input_dim, output_dim)
-
-        # Loss function: MSE with L2 regularization (weight_decay equivalent to alpha)
-        self.criterion = nn.MSELoss()
-
-        # Move model to GPU if available
-        if torch.cuda.is_available():
-            self.model = self.model.to('cuda')
-
-    def fit(self, X, y):
-        """Fit the Ridge regression model using PyTorch."""
-        # Convert X and y to tensors
-        X_tensor = torch.tensor(X, dtype=torch.float32)
-        y_tensor = torch.tensor(y, dtype=torch.float32).view(-1, 1)  # Ensure y is a column vector
-
-        # Move data to GPU if available
-        if torch.cuda.is_available():
-            X_tensor = X_tensor.to('cuda')
-            y_tensor = y_tensor.to('cuda')
-
-        # Define the optimizer with weight decay to apply L2 regularization (alpha)
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=self.alpha)
-
-        # Training loop
-        self.model.train()  # Set model to training mode
-        for epoch in range(self.epochs):
-            optimizer.zero_grad()  # Reset gradients
-            outputs = self.model(X_tensor)  # Forward pass
-            loss = self.criterion(outputs, y_tensor)  # Calculate the loss
-            loss.backward()  # Backpropagation
-            optimizer.step()  # Update weights
-
-    def score(self, X, y):
-        """Score the model using a custom scorer."""
-        y_pred = self.predict(X)
-        return mse_cupy(y, y_pred)  # or another custom metric
-    
-    def predict(self, X):
-        """Make predictions using the trained Ridge regression model."""
-        self.model.eval()  # Set model to evaluation mode
-        X_tensor = torch.tensor(X, dtype=torch.float32)
-
-        # Move data to GPU if available
-        if torch.cuda.is_available():
-            X_tensor = X_tensor.to('cuda')
-
-        with torch.no_grad():  # Disable gradient calculation for inference
-            predictions = self.model(X_tensor).cpu().numpy()  # Move predictions back to CPU
-        return predictions
-
-    def get_param_grid(self):
-        """Return a parameter grid for hyperparameter tuning."""
-        return {
-            'alpha': [0.001, 0.01, 0.1, 1.0, 10.0, 100],
-            'lr': [0.001, 0.01],
-            'epochs': [100, 200, 300],
-            'batch_size': [32, 64]
-        }
-    
-    def get_param_dist(self):
-        """Return the parameter distribution for Bayesian optimization."""
-        return {
-            'alpha': Real(1e-6, 1e2, prior='log-uniform'),
-            #'lr': Real(1e-4, 1e-2, prior='log-uniform'),
-            #'epochs': Integer(50, 500)
-        }
-
-    def get_model(self):
-        """Return the PyTorch model instance."""
-        return self
-
 
 class PLSModel(BaseModel):
-    """Partial Least Squares Regression model with parameter grid."""
-
     def __init__(self):
         super().__init__()
         self.model = PLSRegression()
         self.param_grid = {
-            'n_components': [1, 2, 3, 5], # 7, 9, 15],
+            'n_components': [1, 2, 3, 4], # [1, 2, 3, 4, 5, 7, 10], # 7, 9, 15],
             'max_iter': [1000],
             'tol': [1e-07],
-            'scale': [True, False] #, False]
+            'scale': [True] #, False]
         }
         self.param_dist = {
-            'n_components': Integer(1, 5),  # Integer range for number of components
-            #'max_iter': Integer(500, 2000),  # Range for max iterations
-            #'tol': Real(1e-7, 1e-4, prior='log-uniform'),  # Log-uniform for tolerance
+            'n_components': Categorical([1, 2, 3, 4, 5, 7, 10]),  # Integer range for number of components
             'scale': Categorical([True, False])  # Whether to scale the data
         }
 
-
-class XGBModel(BaseModel):
-    """XGBoost model with parameter grid."""
-
+class XGBRegressorModel(BaseModel):
     def __init__(self):
         super().__init__()
         self.model = XGBRegressor()
@@ -185,16 +93,76 @@ class XGBModel(BaseModel):
             'device':['cuda'],
             'n_gpus':[-1],
             'random_state': [42],
-            'verbosity': [0]
+            'verbosity': [0] # consider adding this hyperparam: Sampling method. Used only by the GPU version of hist tree method. uniform: select random training instances uniformly. gradient_based select random training instances with higher probability when the gradient and hessian are larger. (cf. CatBoost)
         }
-        # consider adding this hyperparam
-        # Sampling method. Used only by the GPU version of hist tree method. uniform: select random training instances uniformly. gradient_based select random training instances with higher probability when the gradient and hessian are larger. (cf. CatBoost)
-        #
 
+
+class XGBClassifierModel(BaseModel):
+    def __init__(self):
+        super().__init__()
+        self.model = XGBClassifier()
+        
+        self.param_grid = {
+            'n_estimators': [50, 150, 250, 250],  # Num trees
+            'max_depth': [2, 3, 5, 7],                 # Maximum depth of each tree
+            'learning_rate': [0.01, 0.1, 0.3],         # Learning rate (shrinkage)
+            'subsample': [0.6, 0.8, 1],                # Subsample ratio of the training data
+            'colsample_bytree': [0.5, 0.8, 1],         # Subsample ratio of columns when constructing each tree
+            'gamma': [0, 0.1],                         # Minimum loss reduction required to make a split
+            'reg_lambda': [0.01, 0.1, 1],              # L2 regularization term (Ridge penalty)
+            'reg_alpha': [0.01, 0.1, 1],               # L1 regularization term (Lasso penalty)
+            'random_state': [42],                      # Seed for reproducibility
+            'min_child_weight': [1, 3, 5],             # Child weight for pruning
+            'tree_method':['gpu_hist'],                # Use the GPU
+            'device':['cuda'],                         # Use GPU predictor
+            'n_gpus':[-1],
+            'verbosity': [0],
+            'objective': ['binary:logistic'],          # For binary classification
+            'eval_metric': ['logloss'],                 # Evaluation metric for binary classification
+            'scale_pos_weight': [1, 2, 3, 4, 5]
+        }
+        
+        self.param_dist = {
+            'learning_rate': Categorical([1e-3, 1e-2, 1e-1, 0.3]), 
+            'n_estimators': Categorical([50, 150, 250, 350]),
+            'max_depth': Categorical([2, 3, 4, 5, 6, 7]),
+            'subsample': Categorical([0.6, 0.8, 1]),
+            'colsample_bytree': Categorical([0.6, 0.8, 1]),
+            'reg_lambda': Categorical([0, 1e-4, 1e-2, 1e-1, 1]),  # L2 regularization term (Ridge penalty)
+            'reg_alpha': Categorical([0, 1e-4, 1e-2, 1e-1, 1]),   # L1 regularization term (Lasso penalty)
+            'tree_method': Categorical(['gpu_hist']),
+            'scale_pos_weight': Categorical([3, 4, 5]),
+            'device':['cuda'],
+            'n_gpus':[-1],
+            'random_state': [42],
+            'verbosity': [0],
+            'objective': ['binary:logistic'],
+            'eval_metric': ['logloss']
+        }
+
+class SVCModel(BaseModel):
+    def __init__(self):
+        super().__init__()
+        self.model = SVC()
+        
+        self.param_grid = {
+            'C': [0.1, 1, 10, 20],                # Regularization parameter
+            'kernel': ['linear'],
+            # 'rbf'           # Kernel type 
+            # 'gamma': ['scale', 'auto', 0.1, 1],    # Kernel coefficient
+            'class_weight': ['balanced'],     # Class weights
+            'random_state': [42]                    # Random seed
+        }
+        
+        self.param_dist = {
+            'C': Categorical([0.1, 1, 10]),
+            'kernel': Categorical(['linear']),
+            'gamma': Categorical(['scale', 'auto']),
+            'class_weight': Categorical(['balanced']),
+            # 'random_state': [42]
+        }
 
 class RandomForestModel(BaseModel):
-    """Random Forest model with parameter grid."""
-
     def __init__(self):
         super().__init__()
         self.model = RandomForestRegressor()
@@ -214,169 +182,26 @@ class RandomForestModel(BaseModel):
             'max_features': ['auto', 'sqrt', 'log2'],  # Number of features to consider when looking for the best split
             'bootstrap': [True, False]  # Whether bootstrap samples are used when building trees
         }
-        
-
-
-class MLPModel(BaseEstimator, RegressorMixin):
-    """Basic MLP model using PyTorch with support for bayesian hyperparameter tuning."""
-    
-    def __init__(self, input_dim, output_dim=1, hidden_dims=None, dropout=0.05, l2_reg=1e-4, lr=0.001, epochs=100, batch_size=32,  max_grad_norm=1.0):
-        super().__init__()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.hidden_dims = hidden_dims if hidden_dims is not None else self._default_hidden_dims(input_dim)
-        self.dropout = dropout
-        self.l2_reg = l2_reg
-        self.lr = lr
-        self.epochs = epochs
-        self.batch_size = batch_size
-        self.max_grad_norm = max_grad_norm
-        self.criterion = nn.MSELoss()
-
-        # Define the architecture dynamically based on input size
-        layers = []
-        prev_dim = input_dim
-
-        for hidden_dim in self.hidden_dims:
-            layers.append(nn.Linear(prev_dim, hidden_dim))
-            #layers.append(nn.BatchNorm1d(hidden_dim))
-            layers.append(nn.ReLU())
-            #if self.dropout > 0:
-            #    layers.append(nn.Dropout(self.dropout))
-            prev_dim = hidden_dim
-        
-        layers.append(nn.Linear(prev_dim, output_dim))
-        self.model = nn.Sequential(*layers)
-
-        if torch.cuda.device_count() > 1:
-            print(f"Using {torch.cuda.device_count()} GPUs")
-            self.model = nn.DataParallel(self.model)
-        self.model = self.model.to(self.device)
-
-    def _default_hidden_dims(self, input_dim):
-        """Private method to define default hidden dimensions based on input size."""
-        if input_dim <= 100:
-            return [128, 64]
-        elif 100 < input_dim <= 300:
-            return [256, 128] # [512,256, 128]
-        else:
-            return [512, 256, 128] # [1024, 512, 256, 128]
-    
-    def forward(self, x):
-        return self.model(x)
-
-
-    def fit(self, X, y):
-        """Train the model with PyTorch."""
-        self.model.train()
-        #print('model', self.model)
-        #print('self params',self.dropout, self.l2_reg, self.lr, self.epochs, self.batch_size, self.criterion)
-
-        optimizer = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=self.l2_reg)
-        
-        X_tensor = torch.FloatTensor(X) # requires_grad_(True) - can consider using this for gradient tracking
-        y_tensor = torch.FloatTensor(y).unsqueeze(1)
-
-        # Move to device
-        X_tensor = X_tensor.to(self.device)
-        y_tensor = y_tensor.to(self.device)
-        
-        dataset = TensorDataset(X_tensor, y_tensor)
-        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False) # keep unshuffled so bidirectional pairs are passed in simultaneously during training
-        
-        for epoch in range(self.epochs):
-            epoch_loss = 0.0
-            for batch_X, batch_y in dataloader:
-                optimizer.zero_grad()
-                outputs = self.forward(batch_X)
-                loss = self.criterion(outputs, batch_y)
-                loss.backward()
-                #torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_grad_norm)
-                optimizer.step()
-                epoch_loss += loss.item()
-            
-            avg_epoch_loss = epoch_loss / len(dataloader)
-            if (epoch + 1) % 10 == 0:
-                print(f'Epoch [{epoch+1}/{self.epochs}], Loss: {avg_epoch_loss:.4f}')
-
-    def predict(self, X):
-        """Make predictions with the trained model."""
-        self.model.eval()
-
-        X_tensor = torch.tensor(X, dtype=torch.float32)
-        if torch.cuda.is_available():
-            X_tensor = X_tensor.to('cuda')
-
-        with torch.no_grad():
-            predictions = self.model(X_tensor).cpu().numpy()
-        
-        return predictions
-        
-    def get_param_grid(self):
-        """Return a parameter grid for hyperparameter tuning."""
-        return {
-            #'hidden_dims': [[64, 64], [128, 64], [128, 128, 64]],
-            #'dropout': [0.1, 0.3],
-            # 'l2_reg': [1e-4, 1e-2, 0],
-            # 'lr': [0.001, 0.01, 0.03],
-            # 'epochs': [300, 500, 1000], #[50, 100, 300],
-            # 'batch_size': [8, 64]
-
-            # single run params for debugging
-            'l2_reg': [1e-3, 0], # [1e-3, 0]
-            'lr': [1e-3], #, 0.01, 0.03],
-            'epochs': [200], #[50, 100, 300],
-            'batch_size': [32, 64] # [32, 64]. has to be an even number, 32 works well with 1e_3 learning rate, no reg, dropout 0.2
-        }
-    
-    def get_param_dist(self):
-        """Return a parameter distribution for random search or Bayesian optimization."""
-        return {
-            #'hidden_dims': Categorical([(64, 64)]), # , (128, 64), (128, 128, 64)]),  # Use tuples instead of lists 
-            #'dropout': Real(0.0, 0.5),
-            # 'l2_reg': Real(0, 1e-0), #, prior='log-uniform'),
-            # 'lr': Real(1e-3, 1e-1), # , prior='log-uniform'),
-            # 'epochs': Integer(100, 300),
-            # 'batch_size': Integer(8, 96)
-            
-            'dropout': Categorical([0.0, 0.2, 0.3, 0.4, 0.5]),
-            'l2_reg': Categorical([0.0, 1e-4, 1e-3, 1e-2]),
-            'lr': Categorical([1e-4, 1e-3, 1e-2, 3e-2]),
-            'epochs': Categorical([100, 300]),
-            'batch_size': Categorical([16, 32, 64])
-        }
-
-    def get_model(self):
-        """Return the PyTorch model instance."""
-        return self
-    
-    # def score(self, X, y):
-    #     """Score the model using a custom scorer."""
-    #     y_pred = self.predict(X)
-    #     return mse_cupy(y, y_pred)  # or another custom metric
 
 class ModelBuild:
-    """Factory class to create models based on the given model type."""
-        
+    """Factory class to create base models based on the given sklearn-like model type."""
     @staticmethod
-    def init_model(model_type, input_size):
-        model_mapping = {
-            'xgboost': XGBModel,
-            'random_forest': RandomForestModel,
-            'ridge_torch': RidgeModelTorch,
-            'ridge': RidgeModel,
-            'pls': PLSModel, 
-            'mlp': MLPModel 
-        }
-    
+    def init_model(model_type, binarize=False):
+        if binarize:
+            model_mapping = {
+                'svm': SVCModel,
+                'xgboost': XGBClassifierModel
+            }
+        else:
+            model_mapping = {
+                'pls': PLSModel,
+                'ridge': RidgeModel,
+                'linear': LinearModel,
+                'xgboost': XGBRegressorModel,
+                'random_forest': RandomForestModel
+            }
+
         if model_type in model_mapping:
-            if model_type in ['mlp', 'ridge_torch']:
-                print('GPU model input size', input_size)
-                return model_mapping[model_type](input_dim=input_size)
-            else:
-                return model_mapping[model_type]()
+            return model_mapping[model_type]()
         else:
             raise ValueError(f"Model type '{model_type}' is not recognized.")
-

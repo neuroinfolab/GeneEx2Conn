@@ -1,48 +1,5 @@
-# Gene2Conn/sim/sim_run.py
-
-# imports
-from imports import * 
-
-# data load
-from data.data_load import load_transcriptome, load_connectome
-import data.data_load
-importlib.reload(data.data_load)
-
-# data utils
-from data.data_utils import (
-    reconstruct_connectome,
-    reconstruct_upper_triangle,
-    make_symmetric,
-    expand_X_symmetric,
-    expand_Y_symmetric,
-    expand_X_symmetric_shared,
-    expand_X_Y_symmetric_conn_only,
-    expand_shared_matrices,
-    expand_X_symmetric_w_conn, 
-    process_cv_splits, 
-    process_cv_splits_conn_only_model, 
-    expanded_inner_folds_combined_plus_indices,
-    expanded_inner_folds_combined_plus_indices_connectome
-)
-import data.data_utils
-importlib.reload(data.data_utils)
-
-# cross-validation classes
-from data.cv_split import (
-    RandomCVSplit, 
-    SchaeferCVSplit, 
-    CommunityCVSplit, 
-    SubnetworkCVSplit
-)
-
-# sim utility functions
-import sim.sim_utils
-from sim.sim_utils import grid_search_init, drop_test_network, find_best_params
-importlib.reload(sim.sim_utils)
-
-import sim.sim
+from env.imports import *
 from sim.sim import Simulation
-
 
 def open_pickled_results(file, added_dir='', backup=False): # Specify the path to your pickle file
     """
@@ -108,84 +65,91 @@ def save_sims(multi_model_results, feature_type, cv_type, model_type, use_shared
     return
 
 
-def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target='FC', feature_interactions=None, use_shared_regions=False, test_shared_regions=False, omit_subcortical=False, parcellation='S100', gene_list='0.2', resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse'), save_model_json=False, track_wandb=False):
+def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target='FC', binarize=False, feature_interactions=None, use_shared_regions=False, test_shared_regions=False, omit_subcortical=False, parcellation='S100', impute_strategy=None, sort_genes=None, gene_list='0.2', hemisphere='both', resolution=1.0, random_seed=42, save_sim=False, search_method=('random', 'mse', 5), save_model_json=False, track_wandb=False, skip_cv=False):
     """
     Runs a single simulation for a given feature type and model configuration.
 
-    This function initializes and runs a simulation for various types of features (e.g., transcriptome, functional, 
-    structural data) and model configurations (e.g., ridge regression, XGBoost, neural networks). It handles different 
-    scenarios based on input parameters such as cross-validation type, GPU acceleration, feature types, and shared region 
-    handling for connectome prediction tasks. 
-
     Parameters:
     ----------
-    feature_type : str
-        The type of feature used in the simulation. Options include: 
-        'transcriptome', 'transcriptomePCA', 'functional', 'structural', 'structural_spectralL', 'structural_spectralA', 'euclidean'.
+    feature_type : list of dict
+        List of feature dictionaries specifying the features to use.
+        Each dict maps feature name to parameters (or None if no parameters).
+        E.g. [{'transcriptome': None}, {'euclidean': None}]
     
     cv_type : str
-        The type of cross-validation method used (e.g., 'random', 'community').
+        Type of cross-validation to use. Options: 'random', 'community', 'schaefer', 'spatial'
     
     model_type : str
-        The machine learning model type used in the simulation. Options include: 
-        'ridge', 'random_forest', 'xgboost', 'dynamic neural net' etc.
+        Type of model to use. Options: 'linear', 'ridge', 'pls', 'xgboost', 'dynamic_mlp',
+        'random_forest', 'bilinear_lowrank', 'bilinear_SCM', 'shared_mlp_encoder',
+        'shared_linear_encoder', 'shared_transformer'
     
     use_gpu : bool
-        If True, the simulation will use GPU acceleration for models and computations where applicable.
+        Whether to use GPU acceleration where available
     
     connectome_target : str, optional
-        Target connectome type to predict. Options are 'FC' (functional) or 'SC' (structural).
+        Target connectome type to predict. Options: 'FC' (functional) or 'SC' (structural).
+        Default: 'FC'
     
-    summary_measure : str, optional
-        Summary measure used in the simulation.
-        For example:
-        - 'kronecker' for Kronecker product measure 
-        - 'strength_and_corr' for structural summary measures
-        - An integer value (e.g. '5', '10') specifying number of components to use from spectral embeddings
-        - A negative integer (e.g. '-5', '-10') to use last N components from spectral embeddings
+    binarize : bool, optional
+        Whether to binarize the connectome. Default: False
 
+    feature_interactions : bool, optional
+        Whether to include feature interactions. Default: None
+    
     use_shared_regions : bool, optional
-        Whether to include shared brain regions in the analysis. 
+        Whether to use shared regions between hemispheres. Default: False
     
     test_shared_regions : bool, optional
-        Whether to test on shared regions. 
+        Whether to test on shared regions. Default: False
+    
+    omit_subcortical : bool, optional
+        Whether to omit subcortical regions. Default: False
+    
+    parcellation : str, optional
+        Parcellation scheme to use. Default: 'S100'
 
-    include_conn_feats : bool, optional
-        Whether to include functional connectivity features in the analysis 
-        Note - will append connectivity features to the end of the feature vector. will not include connectivity to test regions. 
+    impute_strategy : str, optional
+        Imputation strategy to use. Default: None. Options: None, 'mirror', 'interpolate', 'mirror_interpolate'
 
+    sort_genes : str, optional
+        Sort genes based on reference genome order 'refgenome', or by mean expression across brain 'expression', or alphabetically (None). Default: 'expression'
+    
+    gene_list : str, optional
+        Gene list identifier to use. Default: '0.2'
+    
+    hemisphere : str, optional
+        Which hemisphere to use. Options: 'left', 'right', 'both'. Default: 'both'
+    
     resolution : float, optional
-        Resolution parameter for the community splits. 
+        Resolution parameter for community detection. Default: 1.0
     
     random_seed : int, optional
-        Seed for community splits. 
+        Random seed for reproducibility. Default: 42
     
     save_sim : bool, optional
-        If True, the simulation results will be saved to disk. 
+        Whether to save simulation results. Default: False
     
-    search_method : str, optional
-        The hyperparameter search method to use. Options include: 'random', 'grid', 'bayes'. 
-
+    search_method : tuple, optional
+        Hyperparameter search configuration as (method, metric, n_iter).
+        method: 'random', 'grid', 'bayes', 'wandb'
+        metric: 'mse', 'pearson', 'r2'
+        n_iter: number of search iterations
+        Default: ('random', 'mse', 5)
+    
     save_model_json : bool, optional
-        If True, the model JSON will be saved to disk. This is only applicable for XGBoost models.
+        Whether to save model architecture as JSON (XGBoost only). Default: False
+    
+    track_wandb : bool, optional
+        Whether to log metrics to Weights & Biases. Default: False
+    
+    skip_cv : bool, optional
+        Whether to skip cross-validation. Default: False
 
     Returns:
     -------
     single_model_results : list
-        A list containing the results of the simulation for the specified model type.
-
-    Example:
-    -------
-    single_sim_run(
-        feature_type=['transcriptomePCA'], 
-        cv_type='random', 
-        model_type='mlp', 
-        use_gpu=True, 
-        summary_measure='kronecker', 
-        resolution=1.0, 
-        random_seed=42, 
-        search_method='bayes'
-    )
+        List containing simulation results for the specified model configuration
     """
 
     # List to store each model types results
@@ -201,19 +165,28 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
                     resolution=resolution,
                     random_seed=random_seed,
                     use_shared_regions=use_shared_regions,
-                    predict_connectome_from_connectome=False,
-                    include_conn_feats=False,
                     test_shared_regions=test_shared_regions,
-                    # added in new parameters
                     omit_subcortical=omit_subcortical,
                     parcellation=parcellation,
+                    impute_strategy=impute_strategy,
+                    sort_genes=sort_genes,
                     gene_list=gene_list,
+                    hemisphere=hemisphere,
                     connectome_target=connectome_target,
-                    save_model_json=save_model_json
+                    binarize=binarize,
+                    save_model_json=save_model_json,
+                    skip_cv=skip_cv
                 )
     
-    sim.run_sim(search_method, track_wandb)
-    single_model_results.append(sim.results)
+    if search_method[0] == 'wandb':
+        sim.run_sim_torch(search_method, track_wandb)
+    else:
+        sim.run_sim(search_method, track_wandb)
+    
+    try: 
+        single_model_results.append(sim.results)
+    except:
+        print('No results to append')
     
     # Save sim data
     if save_sim:
@@ -221,3 +194,129 @@ def single_sim_run(feature_type, cv_type, model_type, use_gpu, connectome_target
     
     return single_model_results
 
+
+def run_simulation_set(model_types,
+                      feature_types,
+                      parcellations,
+                      connectome_targets,
+                      random_seeds,
+                      cv_types=['random', 'spatial'], 
+                      inner_cv_runs=3,
+                      skip_cv=False):
+    """
+    Run a set of simulations with different combinations of parameters.
+    
+    Args:
+        model_types (list): List of model types to test (e.g. ['dynamic_mlp', 'shared_transformer'])
+        feature_types (list): List of features to include (e.g. ['transcriptome', 'euclidean'])
+        parcellations (list): List of parcellation schemes (e.g. ['S100', 'S400'])
+        connectome_targets (list): List of connectome targets (e.g. ['FC', 'SC'])
+        random_seeds (list): List of random seeds for multiple runs
+        cv_types (list): List of cross-validation types, defaults to ['random', 'spatial']
+        inner_cv_runs (int): Number of inner cross-validation runs to perform
+        skip_cv (bool): Whether to skip cross validation, defaults to False
+    """
+    
+    for model in model_types:
+        for feat in feature_types:
+            for parc in parcellations:
+                current_hemisphere = 'both' if parc == 'S100' else 'left'
+                for target in connectome_targets:
+                    for cv in cv_types:
+                        for seed in random_seeds:
+                            if feat == 'transcriptome':
+                                feat_dict = [{'transcriptome': None}]
+                            elif feat == 'euclidean':
+                                feat_dict = [{'euclidean': None}]
+                            elif feat == 'transcriptome+euclidean':
+                                feat_dict = [
+                                    {'transcriptome': None},
+                                    {'euclidean': None}
+                                ]
+
+                            print(f"Running simulation with: {model}, {cv}, {parc}, {target}, {feat}, seed={seed}")
+                            if model == 'pls':
+                                single_sim_run(
+                                    cv_type=cv,
+                                    random_seed=seed,
+                                    model_type=model,
+                                    feature_type=feat_dict,
+                                    connectome_target=target,
+                                    use_gpu=False,
+                                    use_shared_regions=False,
+                                    test_shared_regions=False,
+                                    omit_subcortical=False,
+                                    parcellation=parc,
+                                    gene_list='0.2',
+                                    hemisphere=current_hemisphere,
+                                    search_method=('grid', 'mse', 10),
+                                    save_sim=False,
+                                    track_wandb=True,
+                                    skip_cv=skip_cv
+                                )
+                            elif model == 'xgboost':
+                                # Run single simulation
+                                single_sim_run(
+                                    cv_type=cv,
+                                    random_seed=seed,
+                                    model_type=model,
+                                    feature_type=feat_dict,
+                                    connectome_target=target,
+                                    use_gpu=True,
+                                    use_shared_regions=False,
+                                    test_shared_regions=False,
+                                    omit_subcortical=False,
+                                    parcellation=parc,
+                                    gene_list='0.2',
+                                    hemisphere=current_hemisphere,
+                                    search_method=('bayes', 'mse', 5),
+                                    save_sim=False,
+                                    track_wandb=True,
+                                    skip_cv=skip_cv
+                                )
+                            elif model == 'shared_transformer':   
+                                # Run single simulation
+                                single_sim_run(
+                                    cv_type=cv,
+                                    random_seed=seed,
+                                    model_type=model,
+                                    feature_type=feat_dict,
+                                    connectome_target=target,
+                                    use_gpu=True,
+                                    use_shared_regions=False,
+                                    test_shared_regions=False,
+                                    omit_subcortical=False,
+                                    parcellation=parc,
+                                    gene_list='0.2',
+                                    hemisphere=current_hemisphere,
+                                    search_method=('wandb', 'mse', inner_cv_runs),
+                                    save_sim=False,
+                                    track_wandb=True,
+                                    skip_cv=skip_cv
+                                )
+                            else: 
+                                # Run single simulation
+                                single_sim_run(
+                                    cv_type=cv,
+                                    random_seed=seed,
+                                    model_type=model,
+                                    feature_type=feat_dict,
+                                    connectome_target=target,
+                                    use_gpu=True,
+                                    use_shared_regions=False,
+                                    test_shared_regions=False,
+                                    omit_subcortical=False,
+                                    parcellation=parc,
+                                    gene_list='0.2',
+                                    hemisphere=current_hemisphere,
+                                    search_method=('wandb', 'mse', inner_cv_runs),
+                                    save_sim=False,
+                                    track_wandb=True,
+                                    skip_cv=skip_cv
+                                )
+                            
+                            # Clear GPU memory
+                            if torch.cuda.is_available():
+                                torch.cuda.empty_cache()
+                            # Clear CPU memory
+                            gc.collect()

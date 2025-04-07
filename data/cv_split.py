@@ -1,6 +1,4 @@
-# Gene2Conn/cv_split/cv_split.py
-
-from imports import *
+from env.imports import *
 
 class RandomCVSplit:
     """
@@ -57,6 +55,12 @@ class RandomCVSplit:
         for train_index, test_index in self.get_splits():
             print("TRAIN:", train_index, "TEST:", test_index)
 
+    def visualize_splits_3d(self, coords, edge_threshold=0.5, valid_genes=None, gene_name=None):
+        """Display each fold's train/test split in 3D space."""
+        visualize_splits_3d(self.get_splits(), 
+                            coords, self.Y, self.X, 
+                            edge_threshold, valid_genes, gene_name,
+                            "Random Split")
 
 
 class SchaeferCVSplit(BaseCrossValidator):
@@ -137,7 +141,7 @@ class SchaeferCVSplit(BaseCrossValidator):
             
             print("HELD OUT NETWORK:", held_out_network)
             print("TRAIN:", train_indices, "TEST:", test_indices)
-
+            
 
 class CommunityCVSplit(BaseCrossValidator):
     """
@@ -226,6 +230,142 @@ class CommunityCVSplit(BaseCrossValidator):
         plt.title('Reordered Connectivity Matrix by Community Structure')
         plt.show()
 
+    def visualize_splits_3d(self, coords, edge_threshold=0.5, valid_genes=None, gene_name=None):
+        """Display each fold's train/test split in 3D space."""
+        visualize_splits_3d(self.split(), 
+                            coords, self.Y, self.X, 
+                            edge_threshold, valid_genes, gene_name,
+                            "Community Split")
+
+
+class SpatialCVSplit(BaseCrossValidator):
+    """
+    Custom cross-validation class that creates spatially coherent networks,
+    then uses these for train/test splits.
+    
+    Parameters:
+    X (array): Input features
+    Y (array): Target values 
+    coords (array): 3D coordinates for each region
+    num_splits (int): Number of networks/splits to create
+    random_seed (int): Random seed for reproducibility
+    """
+    
+    def __init__(self, X, Y, coords, num_splits, random_seed=42):
+        self.X = X
+        self.Y = Y
+        self.coords = coords
+        self.num_splits = num_splits
+        self.random_seed = random_seed
+        self.rng = np.random.RandomState(random_seed)
+        
+        # Create networks first, then generate splits from them
+        self.networks = self.create_spatial_networks()
+        self.splits = self.create_splits_from_networks()
+        self.folds = self.create_folds()
+
+    def create_spatial_networks(self):
+        """
+        Create spatially coherent networks by iteratively selecting seed points
+        and their closest unassigned neighbors.
+        """
+        n_regions = len(self.X)
+        regions_per_network = n_regions // self.num_splits
+        remaining_regions = set(range(n_regions))
+        networks = {}
+        
+        for network_idx in range(self.num_splits):
+            # Select random seed from remaining regions
+            if remaining_regions:
+                seed_idx = self.rng.choice(list(remaining_regions))
+            else:
+                print(f"Warning: No remaining regions for network {network_idx + 1}")
+                break
+                
+            # Calculate distances from seed to all remaining points
+            seed_coords = self.coords[seed_idx]
+            distances = {}
+            for idx in remaining_regions:
+                dist = np.sqrt(np.sum((self.coords[idx] - seed_coords)**2))
+                distances[idx] = dist
+            
+            # Sort remaining regions by distance to seed
+            sorted_regions = sorted(distances.items(), key=lambda x: x[1])
+            
+            # Determine number of regions to assign to this network
+            if network_idx == self.num_splits - 1:
+                # Last network gets all remaining regions
+                n_to_assign = len(remaining_regions)
+            else:
+                n_to_assign = min(regions_per_network, len(remaining_regions))
+            
+            # Assign closest n_to_assign regions to this network
+            network_regions = [sorted_regions[i][0] for i in range(n_to_assign)]
+            networks[str(network_idx + 1)] = network_regions
+            
+            # Update remaining regions
+            remaining_regions -= set(network_regions)
+            
+        # Verify coverage
+        all_assigned = set().union(*[set(regions) for regions in networks.values()])
+        coverage = len(all_assigned) / n_regions * 100
+        network_sizes = [len(regions) for regions in networks.values()]
+        
+        print(f"Network coverage: {coverage:.1f}% of regions")
+        print(f"Network sizes: {network_sizes}")
+        
+        return networks
+
+    def create_splits_from_networks(self):
+        """Create train/test splits based on the networks."""
+        splits = []
+        for network_idx in range(self.num_splits):
+            # Test set is the current network
+            test_indices = np.array(self.networks[str(network_idx + 1)])
+            
+            # Train set is all other networks combined
+            train_indices = np.array([
+                idx for net_id, regions in self.networks.items()
+                if net_id != str(network_idx + 1)
+                for idx in regions
+            ])
+            
+            splits.append((train_indices, test_indices))
+            
+        return splits
+
+    def create_folds(self):
+        """Create CV folds from the splits."""
+        folds = []
+        for train_indices, test_indices in self.splits:
+            folds.append((self.X[train_indices], self.X[test_indices],
+                         self.Y[train_indices], self.Y[test_indices]))
+        return folds
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        """Return the number of cross-validation splits."""
+        return len(self.splits)
+
+    def split(self, X=None, y=None, groups=None):
+        """Generate indices to split data into training and test sets."""
+        for train_indices, test_indices in self.splits:
+            yield train_indices, test_indices
+
+    def display_splits(self):
+        """Display the train/test indices for each fold"""
+        for fold_idx, (train_indices, test_indices) in enumerate(self.splits, 1):
+            print(f"Fold {fold_idx}:")
+            print("TRAIN:", train_indices)
+            print("TEST:", test_indices)
+            print()
+
+    def visualize_splits_3d(self, edge_threshold=0.5, valid_genes=None, gene_name=None):
+        """Display each fold's train/test split in 3D space."""
+        visualize_splits_3d(self.split(), 
+                            self.coords, self.Y, self.X, 
+                            edge_threshold, valid_genes, gene_name,
+                            "Spatial Split")
+
 
 class SubnetworkCVSplit(BaseCrossValidator):
     """
@@ -266,13 +406,7 @@ class SubnetworkCVSplit(BaseCrossValidator):
         for train_indices, test_indices in self.folds:
             yield train_indices, test_indices
 
-
-class ModularNetworkSplit:
-    def __init__(self, data, networks):
-        self.data = data
-        self.networks = networks
-    
-    def get_splits(self):
-        # Implement the logic for network-based splits
-        pass
+    def visualize_splits_3d(self, coords):
+        """Display each fold's train/test split in 3D space."""
+        visualize_splits_3d(self.split(), coords, "Subnetwork Split")
 

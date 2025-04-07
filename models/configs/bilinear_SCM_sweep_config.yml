@@ -1,0 +1,43 @@
+name: bilinear_SCM
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+### TRANSCRIPTOME PCA, 100 parc full brain
+parameters:
+  input_dim:
+    value: !!int 0
+  learning_rate:
+    distribution: log_uniform_values
+    min: 0.0005
+    max: 0.005
+  batch_size:
+    distribution: int_uniform
+    min: 256
+    max: 512
+  regularization:
+    distribution: categorical
+    values: ['l2'] # l2 in line with literature
+  lambda_reg:
+    distribution: log_uniform_values
+    min: 0.0005
+    max: 0.5
+  epochs:
+    distribution: int_uniform
+    min: 150
+    max: 250
+
+best_parameters: # 01/28 best
+  input_dim:
+    value: !!int 0 
+  learning_rate:
+    values: [0.002]
+  batch_size:
+    values: [324] 
+  regularization:
+    values: ['l2']
+  lambda_reg:
+    values: [0.1]
+  epochs:
+    values: [300]
