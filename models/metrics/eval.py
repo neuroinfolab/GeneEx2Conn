@@ -6,6 +6,8 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from matplotlib.colors import ListedColormap
 from scipy.optimize import curve_fit
 from scipy.stats import binned_statistic
+from IPython import get_ipython
+
 
 # Evaluation funcs that preserve connectome properties 
 def connectome_correlation(Y_pred, Y_ground_truth, include_diag=False, output=False):
@@ -112,6 +114,13 @@ def logloss_cupy(y_true, y_pred):
     cp.cuda.Stream.null.synchronize()
     return loss.item()
 
+def in_jupyter_notebook():
+    try:
+        if 'IPKernelApp' in get_ipython().config:
+            return True
+    except:
+        pass
+    return False
 
 class Metrics:
     def __init__(self, Y, indices, Y_true, Y_pred, square=False, binarize=False, network_labels=None, distances=None):
@@ -130,14 +139,18 @@ class Metrics:
 
         self.compute_metrics()
         
-        try: 
-            self.visualize_predictions_full()
-            self.visualize_predictions_subset()
-        except: 
-            print('No full or subset visualizations for this model')
-        if not self.binarize:
-            self.visualize_predictions_scatter()
-            #self.visualize_spatial_autocorr()
+        if in_jupyter_notebook():
+            plt.show()
+            try:
+                self.visualize_predictions_full()
+                self.visualize_predictions_subset()
+            except: 
+                print('No full or subset visualizations for this model')
+            if not self.binarize:
+                self.visualize_predictions_scatter()
+        else:
+            plt.close()
+
 
     def visualize_spatial_autocorr(self):
         """Plot spatial autocorrelation between distance and FC predictions"""
