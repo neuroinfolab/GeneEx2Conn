@@ -61,31 +61,31 @@ from sim.sim_utils import (
     train_sweep,
     train_sweep_torch,
     load_sweep_config, 
-    load_best_parameters,
-    log_wandb_metrics
+    load_best_parameters
+    # log_wandb_metrics
 )
 
 
 class Simulation:
-    def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, resolution=1.0,random_seed=42,
-                 omit_subcortical=False, parcellation='S100', impute_strategy='mirror_interpolate', sort_genes='expression', gene_list='0.2', hemisphere='both',
-                 use_shared_regions=False, test_shared_regions=False, connectome_target='FC', binarize=False, save_model_json=False, skip_cv=False):        
+    def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, resolution=1.0, random_seed=42,
+                 omit_subcortical=False, parcellation='S100', impute_strategy='mirror_interpolate', sort_genes='expression', 
+                 gene_list='0.2', hemisphere='both', use_shared_regions=False, test_shared_regions=False, 
+                 connectome_target='FC', binarize=False, skip_cv=False):        
         """
         Initialization of simulation parameters
         """
+        self.feature_type = feature_type
         self.cv_type = cv_type
         self.model_type = model_type
         self.gpu_acceleration = gpu_acceleration
-        self.feature_type = feature_type
         self.resolution = resolution
-        self.random_seed=random_seed
+        self.random_seed = random_seed
         self.omit_subcortical, self.parcellation, self.impute_strategy, self.sort_genes, self.gene_list, self.hemisphere = omit_subcortical, parcellation, impute_strategy, sort_genes, gene_list, hemisphere
         self.use_shared_regions = use_shared_regions
         self.test_shared_regions = test_shared_regions
         self.connectome_target = connectome_target.upper()
         self.binarize = binarize
         self.skip_cv = skip_cv
-        self.save_model_json = save_model_json
         self.results = []
 
     
@@ -292,66 +292,81 @@ class Simulation:
         network_dict = self.cv_obj.networks
 
         for fold_idx, (train_indices, test_indices) in enumerate(self.cv_obj.split(self.X, self.Y)):
-            if fold_idx == 3:
-                train_region_pairs = expand_X_symmetric(train_indices.reshape(-1, 1)).astype(int)
-                test_region_pairs = expand_X_symmetric(test_indices.reshape(-1, 1)).astype(int)
-    
-                train_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
-                test_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])
-                
-                innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
-                input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
-                best_model, best_val_score = self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
-                train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
-                    
-                train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
-                test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
-                train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
-                test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
-    
-                # Evaluate on the test fold 
-                evaluator = ModelEvaluatorTorch(
-                                              region_pair_dataset=self.region_pair_dataset,
-                                              model=best_model,
-                                              Y=self.Y,
-                                              train_loader=train_loader,
-                                              train_indices=train_indices,
-                                              train_indices_expanded=train_indices_expanded,
-                                              test_loader=test_loader,
-                                              test_indices=test_indices,
-                                              test_indices_expanded=test_indices_expanded,
-                                              network_labels=self.network_labels,
-                                              train_shared_regions=self.use_shared_regions,
-                                              test_shared_regions=self.test_shared_regions)
-
-                train_metrics = evaluator.get_train_metrics()
-                test_metrics = evaluator.get_test_metrics()
-                print("\nTRAIN METRICS:", train_metrics)
-                print("TEST METRICS:", test_metrics)
-                print('BEST VAL SCORE', best_val_score)
-                print('BEST MODEL HYPERPARAMS', best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model))
-    
-                if track_wandb:
-                    log_wandb_metrics(
-                        self.feature_type, self.model_type, self.connectome_target, self.cv_type, 
-                        fold_idx,
-                        train_metrics, 
-                        test_metrics, 
-                        best_val_score, 
-                        best_model, 
-                        train_history, 
-                        model_classes=MODEL_CLASSES,
-                        parcellation=self.parcellation, 
-                        hemisphere=self.hemisphere, 
-                        omit_subcortical=self.omit_subcortical, 
-                        gene_list=self.gene_list,
-                        binarize=self.binarize,
-                        impute_strategy=self.impute_strategy,
-                        sort_genes=self.sort_genes,
-                        seed=self.random_seed
-                    )
         
-        print_system_usage() # Display CPU and RAM utilization 
+            train_region_pairs = expand_X_symmetric(train_indices.reshape(-1, 1)).astype(int)
+            test_region_pairs = expand_X_symmetric(test_indices.reshape(-1, 1)).astype(int)
+
+            train_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
+            test_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])
+            
+            innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
+            input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
+            best_model, best_val_score = self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
+            
+            if track_wandb:
+                feature_str = "+".join(str(k) if v is None else f"{k}_{v}" 
+                                for feat in self.feature_type 
+                                for k,v in feat.items())
+                run_name = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}_fold{fold_idx}_final_eval"
+                final_eval_run = wandb.init(project="gx2conn",
+                                            name=run_name,
+                                            tags=["final_eval", 
+                                                  f'cv_type_{self.cv_type}', 
+                                                  f'outerfold_{fold_idx}',
+                                                  f'model_{self.model_type}',
+                                                  f"split_{self.cv_type}{self.random_seed}", 
+                                                  f'feature_type_{feature_str}',
+                                                  f'target_{self.connectome_target}',
+                                                  f'parcellation_{self.parcellation}',
+                                                  f'hemisphere_{self.hemisphere}',
+                                                  f'omit_subcortical_{self.omit_subcortical}',
+                                                  f'gene_list_{self.gene_list}',
+                                                  f"binarize_{self.binarize}",
+                                                  f"impute_strategy_{self.impute_strategy}",
+                                                  f"sort_genes_{self.sort_genes}"],
+                                            reinit=True)
+
+                if self.model_type in MODEL_CLASSES:
+                    wandb.watch(best_model, log='all')
+                    train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
+                    for epoch, (train_loss, val_loss) in enumerate(zip(train_history['train_loss'], train_history['val_loss'])):
+                        wandb.log({'train_mse_loss': train_loss, 'test_mse_loss': val_loss})
+            else:
+                train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
+
+            train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
+            test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
+            train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
+            test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
+
+            # Evaluate on the test fold
+            evaluator = ModelEvaluatorTorch(region_pair_dataset=self.region_pair_dataset,
+                                            model=best_model,
+                                            Y=self.Y,
+                                            train_loader=train_loader,
+                                            train_indices=train_indices,
+                                            train_indices_expanded=train_indices_expanded,
+                                            test_loader=test_loader,
+                                            test_indices=test_indices,
+                                            test_indices_expanded=test_indices_expanded,
+                                            network_labels=self.network_labels,
+                                            train_shared_regions=self.use_shared_regions,
+                                            test_shared_regions=self.test_shared_regions)
+
+            train_metrics = evaluator.get_train_metrics()
+            test_metrics = evaluator.get_test_metrics()
+            print("\nTRAIN METRICS:", train_metrics)
+            print("TEST METRICS:", test_metrics)
+            print('BEST VAL SCORE', best_val_score)
+            print('BEST MODEL HYPERPARAMS', best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model))
+
+            if track_wandb:
+                wandb.log({'final_train_metrics': train_metrics, 'final_test_metrics': test_metrics, 'best_val_loss': best_val_score, 'config': best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model)})
+                final_eval_run.finish()
+                wandb.finish()
+                print("Final evaluation metrics logged successfully.")
+
+        print_system_usage() # Display CPU and RAM utilization
         GPUtil.showUtilization() # Display GPU utilization
 
     

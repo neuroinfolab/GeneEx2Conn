@@ -1,16 +1,10 @@
 import sys
 import os
 path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-print(f"Adding to path: {path}")
 sys.path.append(path)
 
 from env.imports import *
 from sim.sim import Simulation
-print(os.environ.get("CUDA_VISIBLE_DEVICES"))
-print(f"Available GPUs: {torch.cuda.device_count()}")
-for i in range(torch.cuda.device_count()):
-    print(f"GPU {i}: {torch.cuda.get_device_name(i)} - Memory Allocated: {torch.cuda.memory_allocated(i)/1024**3:.2f} GB")
-print(torch.cuda.is_available())
 
 
 def single_sim_run(
@@ -146,7 +140,6 @@ def single_sim_run(
     
     elapsed_time = time.time() - start_time
     print(f'Simulation completed in {elapsed_time:.2f} seconds ({elapsed_time/60:.2f} minutes)')
-
     return
 
 def load_config(config_path):
@@ -162,8 +155,12 @@ if __name__ == "__main__":
     config_path = sys.argv[1]
     config = load_config(config_path)
 
-    results = single_sim_run(**config)
+    print(torch.cuda.is_available())    
+    print(os.environ.get("CUDA_VISIBLE_DEVICES"))
+    for i in range(torch.cuda.device_count()):
+        print(f"GPU {i}: {torch.cuda.get_device_name(i)} - Memory Allocated: {torch.cuda.memory_allocated(i)/1024**3:.2f} GB")
 
+    results = single_sim_run(**config)
 
 
 

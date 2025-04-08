@@ -16,6 +16,8 @@ notebooks/quick_experiments/
 slurm-*
 *alexander-ratzan-new-york-university
 *.netrc
+sim/logs/
+sim/logs/*
 
 !glass/cv_split_s400_structural_connectivity_spatial_split_10-3.gif
 !glass/cv_split_s400_structural_connectivity_random_split_4.gif

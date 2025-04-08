@@ -22,16 +22,14 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
     patience_counter = 0  # Counts epochs without improvement
 
     for epoch in range(epochs):
-        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, scaler=scaler)
+        start_time = time.time() if (epoch + 1) % 5 == 0 else None
 
+        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, scaler=scaler)
         train_history["train_loss"].append(train_loss)
 
         if val_loader:
             val_loss = evaluate(model, val_loader, criterion, device, scheduler)
             train_history["val_loss"].append(val_loss)
-
-            if verbose and (epoch + 1) % 5 == 0:
-                print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
 
             # Early stopping logic
             if val_loss < best_val_loss:
@@ -42,22 +40,27 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
             else:
                 patience_counter += 1  # Increment counter if no improvement
 
-            # Early stopping if patience threshold reached
-            if patience_counter >= patience:
-                print(f"\nEarly stopping triggered at epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}")
+            if patience_counter >= patience or epoch == epochs - 1:
                 model.load_state_dict(best_model_state)  # Rewind to best model
-                break
-            elif epoch == epochs - 1: # always rewind to best model at end of training
-                model.load_state_dict(best_model_state)  # Rewind to best model
-                print("Model state dict loaded from best model")
-                
-        elif verbose and (epoch + 1) % 5 == 0:
-            print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}")
+                predictions, targets = model.predict(val_loader)
+                pearson_corr = pearsonr(predictions, targets)[0]
+                if patience_counter >= patience:
+                    print(f"\nEarly stopping triggered at epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}, Pearson Correlation: {pearson_corr:.4f}")
+                else:
+                    print(f"\nReached final epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}, Pearson Correlation: {pearson_corr:.4f}")
+                break            
+        
+        if verbose and (epoch + 1) % 5 == 0:
+            epoch_time = time.time() - start_time
+            try: 
+                print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Time: {epoch_time:.2f}s")
+            except: 
+                print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Time: {epoch_time:.2f}s")
 
     return train_history
 
 def train_epoch(model, train_loader, criterion, optimizer, device, scaler=None):
-    """Combined training function that handles both regular and mixed precision training"""
+    """Combined training function for regular and mixed precision training"""
     model.train()
     total_train_loss = 0
     
@@ -103,7 +106,6 @@ def evaluate(model, val_loader, criterion, device, scheduler=None):
             batch_X = batch_X.to(device)
             batch_y = batch_y.to(device)
             batch_coords = batch_coords.to(device)
-            
 
             if hasattr(model, 'include_coords'):
                 predictions = model(batch_X, batch_coords).squeeze()
