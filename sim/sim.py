@@ -65,6 +65,8 @@ from sim.sim_utils import (
     # log_wandb_metrics
 )
 
+absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
+
 
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, resolution=1.0, random_seed=42,
@@ -219,7 +221,7 @@ class Simulation:
     def run_innercv_wandb_torch(self, input_dim, train_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
         """Inner cross-validation with W&B support for deep learning models"""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')
+        sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
         sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
         
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
@@ -292,7 +294,7 @@ class Simulation:
         network_dict = self.cv_obj.networks
 
         for fold_idx, (train_indices, test_indices) in enumerate(self.cv_obj.split(self.X, self.Y)):
-        
+            
             train_region_pairs = expand_X_symmetric(train_indices.reshape(-1, 1)).astype(int)
             test_region_pairs = expand_X_symmetric(test_indices.reshape(-1, 1)).astype(int)
 
@@ -502,7 +504,7 @@ class Simulation:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Load sweep config
-        sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')
+        sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
         sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
         
         if self.skip_cv: 
