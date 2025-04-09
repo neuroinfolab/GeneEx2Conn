@@ -218,7 +218,7 @@ class Simulation:
 
     def run_innercv_wandb_torch(self, input_dim, train_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
         """Inner cross-validation with W&B support for deep learning models"""
-        device = torch.device("cuda")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')
         sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
         
@@ -499,7 +499,7 @@ class Simulation:
             self.use_shared_regions,
             self.test_shared_regions)
 
-        device = torch.device("cuda")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Load sweep config
         sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')

@@ -42,6 +42,8 @@ metric:
 parameters:
   input_dim: 
     value: !!int 0
+  binarize: 
+    value: !!int 0
   activation:
     values: ['none']
   learning_rate:
@@ -60,8 +62,10 @@ parameters:
     values: [100, 150]
 
 # BEST
-best_parameters: # best 01/28 - should rerun bayes
+best_parameters:
   input_dim: 
+    value: !!int 0
+  binarize: 
     value: !!int 0
   activation:
     values: ['none'] 
@@ -80,4 +84,4 @@ best_parameters: # best 01/28 - should rerun bayes
   reduced_dim:
     values: [10]
   epochs:
-    values: [120]
+    values: [150]

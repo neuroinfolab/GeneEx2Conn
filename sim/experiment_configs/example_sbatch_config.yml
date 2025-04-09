@@ -17,7 +17,7 @@ sort_genes: 'expression'
 gene_list: '0.2'
 
 # Cross-validation
-cv_type: spatial
+cv_type: random
 resolution: 1.0
 random_seed: 42
 search_method: ['wandb', 'mse', 3]

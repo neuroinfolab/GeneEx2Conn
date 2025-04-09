@@ -1,6 +1,7 @@
 from env.imports import *
 
 relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data'
+absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'
 
 
 def _apply_pca(data, var_thresh=0.95):
@@ -51,7 +52,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             region_labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in pd.read_csv('./data/enigma/schaef114_regions.txt', header=None).values.flatten().tolist()]
             genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r1_schaefer_{parcellation[1:]}.csv") # from https://github.com/saratheriver/enigma-extra/tree/master/ahba
         elif parcellation == 'S400':
-            AHBA_UKBB_path = relative_data_path + '/Penn_UKBB_data/AHBA_population_MH/'
+            AHBA_UKBB_path = absolute_data_path + '/Penn_UKBB_data/AHBA_population_MH/'
             if impute_strategy == 'mirror':
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean_mirror.csv'))
             elif impute_strategy == 'interpolate':
@@ -81,13 +82,13 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
                         set(abagen.fetch_gene_group('layers')))
 
         # Temporarily subset all sorting methods to ref genome for experiments
-        human_refgenome = pd.read_csv(relative_data_path + '/human_refgenome/human_refgenome_ordered.csv')
+        human_refgenome = pd.read_csv(absolute_data_path + '/human_refgenome/human_refgenome_ordered.csv')
         ordered_genes = human_refgenome['gene_id'].tolist()
         gene_order_dict = {gene: idx for idx, gene in enumerate(ordered_genes)}
         valid_genes = [gene for gene in genes_list if gene in gene_order_dict and gene in genes_data.columns]
         
         if sort_genes == 'refgenome': # this may drop some genes if the gene list symbol does not directly match to the gene_id of the reference genome (ususally drops <5% of genes)
-            human_refgenome = pd.read_csv(relative_data_path + '/human_refgenome/human_refgenome_ordered.csv')
+            human_refgenome = pd.read_csv(absolute_data_path + '/human_refgenome/human_refgenome_ordered.csv')
             ordered_genes = human_refgenome['gene_id'].tolist()
             gene_order_dict = {gene: idx for idx, gene in enumerate(ordered_genes)}
             # Filter and sort genes based on reference genome order
@@ -135,35 +136,6 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             return genes_data, valid_genes
         
         return genes_data
-    
-    '''
-    # Dataset paths configuration
-    dataset_configs = {
-        'GTEx': {
-            'path': '/region_map_pickles/RxG_data_gtex_mean_gtex_ahba_space.pkl',
-            'transform': lambda x: np.array(x)
-        },
-        'AHBA in GTEx': {
-            'path': '/region_map_pickles/RxG_data_ahba_mean_gtex_ahba_space.pkl',
-            'transform': lambda x: np.array(x)
-        },
-        'UTSW': {
-            'path': '/region_map_pickles/RxG_data_utsmc_mean_ahba_utsmc_space.pkl',
-            'transform': lambda x: np.array(np.log1p(x))
-        },
-        'AHBA in UTSW': {
-            'path': '/region_map_pickles/RxG_data_ahba_mean_ahba_utsmc_space.pkl',
-            'transform': lambda x: np.array(x)
-        }
-    }
-
-    if dataset in dataset_configs:
-        config = dataset_configs[dataset]
-        with open(relative_data_path + config['path'], 'rb') as f:
-            data = pickle.load(f)
-            return config['transform'](data)
-    raise ValueError(f"Unknown dataset: {dataset}")
-    '''
 
 def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', measure='FC', spectral=None, hemisphere='both', include_labels=False, diag=0, binarize=False):
     """
@@ -171,7 +143,7 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
     
     Args:
         parcellation (str): Brain parcellation ('S100', 'S456'). Default: 'S100'
-        dataset (str): Dataset to load ('AHBA', 'GTEx', 'UTSW'). Default: 'AHBA'
+        dataset (str): Dataset to load. Default: 'AHBA'
         omit_subcortical (bool): Exclude subcortical regions. Default: True
         measure (str): Connectivity type ('FC', 'SC'). Default: 'FC'
         spectral (str): Decomposition type ('L', 'A', None). Default: None
@@ -241,17 +213,6 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
         
         return matrix
 
-    '''
-    replication_dataset_paths = {
-        'GTEx': '/region_map_pickles/HCP_Connectome_GTEX_Regions.pkl',
-        'UTSW': '/region_map_pickles/HCP_Connectome_UTSMC_Regions.pkl'} 
-    # Load other datasets
-    if dataset in replication_dataset_paths:
-        with open(relative_data_path + replication_dataset_paths[dataset], 'rb') as f:
-            return np.array(pickle.load(f))
-    raise ValueError(f"Unknown dataset: {dataset}")
-    '''
-
 def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
     """
     Get MNI coordinates for brain regions in specified parcellation.
@@ -263,11 +224,11 @@ def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
     """
     if parcellation == 'S100':
         region_labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in pd.read_csv('./data/enigma/schaef114_regions.txt', header=None).values.flatten().tolist()]
-        hcp_schaef = pd.read_csv(relative_data_path + '/atlas_info/schaef114.csv')
+        hcp_schaef = pd.read_csv(absolute_data_path + '/atlas_info/schaef114.csv')
         coordinates = hcp_schaef[['mni_x', 'mni_y', 'mni_z']].values
     elif parcellation == 'S400':
         region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t').iterrows()]
-        UKBB_S456_atlas_info_path = relative_data_path + '/atlas_info/atlas-4S456Parcels_dseg_reformatted.csv'
+        UKBB_S456_atlas_info_path = absolute_data_path + '/atlas_info/atlas-4S456Parcels_dseg_reformatted.csv'
         UKBB_S456_atlas_info = pd.read_csv(UKBB_S456_atlas_info_path)
         # Store MNI coordinates from atlas info as list of [x,y,z] coordinates
         mni_coords = [[x, y, z] for x, y, z in zip(UKBB_S456_atlas_info['mni_x'], 

@@ -24,7 +24,7 @@ class BilinearLoss(nn.Module):
 
 
 class BilinearLowRank(nn.Module):
-    def __init__(self, input_dim, reduced_dim, activation='none', learning_rate=0.01, epochs=100, 
+    def __init__(self, input_dim, binarize=False, reduced_dim=10, activation='none', learning_rate=0.01, epochs=100, 
                  batch_size=128, regularization='l1', lambda_reg=1.0, shared_weights=True):
         super().__init__()
         self.learning_rate = learning_rate
@@ -50,18 +50,17 @@ class BilinearLowRank(nn.Module):
         else:  # 'none'
             self.activation = nn.Identity()
 
-        
-        # self.patience = 20
-        # self.scheduler = ReduceLROnPlateau( 
-        #     self.optimizer, 
-        #     mode='min', 
-        #     factor=0.3,  # Reduce LR by 70%
-        #     patience=20,  # Reduce LR after patience epochs of no improvement
-        #     threshold=0.1,  # Threshold to detect stagnation
-        #     cooldown=1,  # Reduce cooldown period
-        #     min_lr=1e-6,  # Prevent LR from going too low
-        #     verbose=True
-        # )
+        self.patience = 20
+        self.scheduler = ReduceLROnPlateau( 
+            self.optimizer, 
+            mode='min', 
+            factor=0.3,  # Reduce LR by 70%
+            patience=20,  # Reduce LR after patience epochs of no improvement
+            threshold=0.1,  # Threshold to detect stagnation
+            cooldown=1,  # Reduce cooldown period
+            min_lr=1e-6,  # Prevent LR from going too low
+            verbose=True
+        )
         self.criterion = BilinearLoss(self.parameters(), regularization=regularization, lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate)
 
@@ -90,10 +89,10 @@ class BilinearLowRank(nn.Module):
         test_dataset = Subset(dataset, test_indices)
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
-        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
 
 class BilinearSCM(nn.Module):
-    def __init__(self, input_dim, learning_rate=0.01, epochs=100, 
+    def __init__(self, input_dim, binarize=False,learning_rate=0.01, epochs=100, 
                  batch_size=128, regularization='l2', lambda_reg=1.0, bias=True):
         super().__init__()
         self.learning_rate = learning_rate
