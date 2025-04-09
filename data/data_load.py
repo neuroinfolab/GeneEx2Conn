@@ -169,7 +169,7 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
             elif measure == 'SC':
                 matrix = np.log1p(loadmat('./data/HCP1200/4S456_DTI_count.mat')['connectivity'])
                 matrix = matrix / matrix.max()
-     
+       
         # Add diagonal as 1 if specified (diagonal is ignored in edge-wise reconstruction)
         if diag == 1:
             matrix = matrix + np.eye(matrix.shape[0])

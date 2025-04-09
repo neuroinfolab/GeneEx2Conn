@@ -2,7 +2,6 @@ from env.imports import *
 import torch.backends.cudnn as cudnn
 from torch.cuda.amp import autocast, GradScaler
 import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, verbose=True):
@@ -16,7 +15,7 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
     cudnn.benchmark = True  # Auto-tune GPU kernels
     scaler = GradScaler()  # Enable FP16 training
     scaler = None
-
+    
     best_val_loss = float("inf")  # Track the best validation loss
     best_model_state = None  # Store the best model state
     patience_counter = 0  # Counts epochs without improvement

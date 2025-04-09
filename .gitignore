@@ -16,6 +16,8 @@ notebooks/quick_experiments/
 slurm-*
 *alexander-ratzan-new-york-university
 *.netrc
+sim/sim_results/
+sim/sim_results/*
 sim/logs/
 sim/logs/*
 

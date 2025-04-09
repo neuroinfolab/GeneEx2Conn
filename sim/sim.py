@@ -20,15 +20,17 @@ from data.data_utils import (
 )
 
 from models.base_models import ModelBuild, BaseModel
-from models.dynamic_mlp import DynamicMLP
 from models.bilinear import BilinearLowRank, BilinearSCM
+from models.pls import PLSModel
+from models.dynamic_mlp import DynamicMLP
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
 from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionCLSModel, CrossAttentionModel
 
 MODEL_CLASSES = {
-    'dynamic_mlp': DynamicMLP,
     'bilinear_lowrank': BilinearLowRank,
     'bilinear_SCM': BilinearSCM,
+    'pls': PLSModel,
+    'dynamic_mlp': DynamicMLP,
     'shared_mlp_encoder': SharedMLPEncoderModel,
     'shared_linear_encoder': SharedLinearEncoderModel,
     'shared_transformer': SharedSelfAttentionModel,
@@ -113,7 +115,6 @@ class Simulation:
         valid_indices_values = np.where(valid_indices)[0]
         valid2true_index_mapping = dict(enumerate(valid_indices_values))
         self.valid2true_index_mapping = valid2true_index_mapping
-
       
         # Subset all data using valid indices
         self.X = self.X[valid_indices]
@@ -222,12 +223,20 @@ class Simulation:
         """Inner cross-validation with W&B support for deep learning models"""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-        sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
+        
+        if self.model_type == 'pls':
+            sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize, pls_indices=train_indices)
+        else:
+            sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
         
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
 
-        if self.skip_cv: 
-            best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
+        if self.skip_cv:
+            if self.model_type == 'pls':
+                best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize, pls_indices=train_indices)
+            else:
+                best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
+
             best_val_loss = 0.0 # no CV --> no best val loss
         else:
             def train_sweep_wrapper(config=None):

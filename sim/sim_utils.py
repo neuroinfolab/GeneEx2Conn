@@ -51,7 +51,7 @@ def print_system_usage():
 
 
 # CONFIG LOADING
-def load_sweep_config(file_path, input_dim, binarize):
+def load_sweep_config(file_path, input_dim, binarize, pls_indices=None):
     """
     Load a sweep config file and update the input_dim parameter.
     """
@@ -59,12 +59,16 @@ def load_sweep_config(file_path, input_dim, binarize):
         config = yaml.safe_load(file)
     
     config['parameters']['input_dim']['value'] = input_dim
+    
     if binarize is not None:
         config['parameters']['binarize']['value'] = binarize
 
+    if pls_indices is not None:
+        config['parameters']['encoder_indices']['value'] = pls_indices
+
     return config
 
-def load_best_parameters(yaml_file_path, input_dim, binarize):
+def load_best_parameters(yaml_file_path, input_dim, binarize, pls_indices=None):
     with open(yaml_file_path, 'r') as file:
         config = yaml.safe_load(file)
     
@@ -76,8 +80,12 @@ def load_best_parameters(yaml_file_path, input_dim, binarize):
                    for key, value in best_parameters.items()}
     
     best_config['input_dim'] = input_dim    
+    
     if binarize is not None:
         best_config['binarize'] = binarize
+    
+    if pls_indices is not None:
+        best_config['encoder_indices'] = pls_indices
 
     return best_config
 

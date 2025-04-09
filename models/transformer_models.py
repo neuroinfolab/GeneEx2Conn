@@ -117,37 +117,6 @@ class SharedSelfAttentionModel(nn.Module):
         output = self.output_layer(deep_output)
 
         return output.squeeze()
-
-    '''
-    def predict(self, X):
-        """Make predictions in memory-efficient batches."""
-        self.eval()
-        X = torch.as_tensor(X, dtype=torch.float32)
-        predictions = []
-        
-        # Create dataloader for batched prediction
-        predict_loader = DataLoader(
-            TensorDataset(X),
-            batch_size=self.batch_size // 2, # reduce batch size by double to avoid memory issues
-            shuffle=False,
-            pin_memory=True  # More efficient GPU memory transfer
-        )
-        with torch.no_grad():
-            for batch in predict_loader: 
-                batch = batch[0].to(self.device, non_blocking=True) # Move batch to device and make prediction
-                batch_preds = self(batch)
-                predictions.append(batch_preds.cpu().numpy()) # Move predictions back to CPU and store
-            torch.cuda.empty_cache()  # Clear unused memory on the GPU
-    
-        return np.concatenate(predictions, axis=0)
-
-    def fit(self, X_train, y_train, X_test=None, y_test=None, verbose=True):
-        train_loader = create_data_loader(X_train, y_train, self.batch_size, self.device)
-        val_loader = None
-        if X_test is not None and y_test is not None:
-            val_loader = create_data_loader(X_test, y_test, self.batch_size, self.device)
-        return train_model(self, train_loader, val_loader, self.epochs, self.criterion, self.optimizer, scheduler=None, verbose=verbose)
-    '''
     
     def predict(self, loader):
         self.eval()
