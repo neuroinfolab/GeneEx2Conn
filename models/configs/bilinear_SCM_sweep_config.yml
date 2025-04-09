@@ -8,6 +8,8 @@ metric:
 parameters:
   input_dim:
     value: !!int 0
+  binarize:
+    value: !!int 0
   learning_rate:
     distribution: log_uniform_values
     min: 0.0005
@@ -28,13 +30,15 @@ parameters:
     min: 150
     max: 250
 
-best_parameters: # 01/28 best
+best_parameters:
   input_dim:
     value: !!int 0 
+  binarize:
+    value: !!int 0
   learning_rate:
     values: [0.002]
   batch_size:
-    values: [324] 
+    values: [324]
   regularization:
     values: ['l2']
   lambda_reg:
