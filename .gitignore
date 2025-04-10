@@ -20,6 +20,7 @@ sim/sim_results/
 sim/sim_results/*
 sim/logs/
 sim/logs/*
+*.sh
 
 !glass/cv_split_s400_structural_connectivity_spatial_split_10-3.gif
 !glass/cv_split_s400_structural_connectivity_random_split_4.gif

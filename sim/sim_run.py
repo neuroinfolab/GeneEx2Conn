@@ -29,7 +29,8 @@ def single_sim_run(
     track_wandb=False,
     skip_cv=False,
     model_type='dynamic_mlp',
-    use_gpu=True
+    use_gpu=True, 
+    null_model=False
 ):
     """
     Runs a single simulation for a given feature type and model configuration.
@@ -111,6 +112,9 @@ def single_sim_run(
     use_gpu : bool
         Whether to use GPU acceleration where available
 
+    null_model : bool
+        Whether to generate a spatial null model of the transcriptome
+
     Returns:
     -------
     single_model_results : list
@@ -134,7 +138,8 @@ def single_sim_run(
                     random_seed=random_seed,
                     model_type=model_type,
                     gpu_acceleration=use_gpu,
-                    skip_cv=skip_cv
+                    skip_cv=skip_cv,
+                    null_model=null_model
                 )
     
     if search_method[0] == 'wandb':

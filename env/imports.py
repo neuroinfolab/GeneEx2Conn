@@ -35,11 +35,6 @@ from matplotlib.patches import Patch
 import umap
 import umap.umap_ as umap
 from mpl_toolkits.mplot3d import Axes3D
-import nichord
-from nichord.chord import plot_chord
-from nichord.glassbrain import plot_glassbrain
-from nichord.combine import combine_imgs, plot_and_combine
-from nichord.coord_labeler import get_idx_to_label
 
 # stats 
 import scipy
@@ -119,7 +114,7 @@ from skopt.plots import plot_objective, plot_histogram
 # gene ontology
 import gseapy as gp
 
-# enigma toolbox and data
+# neuro data and toolboxes
 from enigmatoolbox.datasets import fetch_ahba
 from enigmatoolbox.datasets import load_sc, load_sc_as_one, load_fc, load_fc_as_one
 from enigmatoolbox.utils.parcellation import parcel_to_surface
@@ -127,3 +122,11 @@ from enigmatoolbox.plotting import plot_cortical
 from enigmatoolbox.permutation_testing import rotate_parcellation
 from nilearn import plotting
 import abagen
+import nichord
+from nichord.chord import plot_chord
+from nichord.glassbrain import plot_glassbrain
+from nichord.combine import combine_imgs, plot_and_combine
+from nichord.coord_labeler import get_idx_to_label
+import netneurotools
+from netneurotools import stats as nnstats
+import nibabel as nib
