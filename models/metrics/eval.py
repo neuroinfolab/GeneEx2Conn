@@ -146,8 +146,11 @@ class Metrics:
                 self.visualize_predictions_subset()
             except: 
                 print('No full or subset visualizations for this model')
-            if not self.binarize:
-                self.visualize_predictions_scatter()
+            try: 
+                if not self.binarize:
+                    self.visualize_predictions_scatter()
+            except: 
+                print('No scatter plot visualization for this model')
         else:
             plt.close()
 

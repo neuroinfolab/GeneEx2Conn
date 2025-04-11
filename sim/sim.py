@@ -259,7 +259,8 @@ class Simulation:
                     seed=self.random_seed,
                     binarize=self.binarize,
                     impute_strategy=self.impute_strategy,
-                    sort_genes=self.sort_genes
+                    sort_genes=self.sort_genes,
+                    null_model=self.null_model
                 )
             
             # Initialize sweep
@@ -334,7 +335,8 @@ class Simulation:
                                                   f'gene_list_{self.gene_list}',
                                                   f"binarize_{self.binarize}",
                                                   f"impute_strategy_{self.impute_strategy}",
-                                                  f"sort_genes_{self.sort_genes}"],
+                                                  f"sort_genes_{self.sort_genes}",
+                                                  f"null_model_{self.null_model}"],
                                             reinit=True)
 
                 if self.model_type in MODEL_CLASSES:
@@ -638,16 +640,19 @@ class Simulation:
                     binarize=self.binarize,
                     impute_strategy=self.impute_strategy,
                     sort_genes=self.sort_genes,
-                    seed=self.random_seed
+                    seed=self.random_seed,
+                    null_model=self.null_model
                 )
 
             # Extract feature importances and model JSON
-            feature_importances_, model_json = extract_feature_importances(
+            '''
+            feature_importances_ = extract_feature_importances(
                 self.model_type, 
                 best_model, 
                 self.save_model_json
             )
-
+            '''
+            
             # Save results to pickle file - consider removing this
             self.results.append({
                 'model_parameters': best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model),
@@ -655,9 +660,9 @@ class Simulation:
                 'best_val_score': best_val_score,
                 'test_metrics': test_metrics,
                 'y_true': Y_test.get() if self.gpu_acceleration else Y_test,
-                'y_pred': best_model.predict(X_test),
-                'feature_importances': feature_importances_,
-                'model_json': model_json
+                'y_pred': best_model.predict(X_test)
+                # 'feature_importances': feature_importances_,
+                # 'model_json': model_json
             })
 
             print_system_usage() # Display CPU and RAM utilization 
