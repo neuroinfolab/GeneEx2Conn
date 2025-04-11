@@ -70,7 +70,7 @@ class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, resolution=1.0, random_seed=42,
                  omit_subcortical=False, parcellation='S100', impute_strategy='mirror_interpolate', sort_genes='expression', 
                  gene_list='0.2', hemisphere='both', use_shared_regions=False, test_shared_regions=False, 
-                 connectome_target='FC', binarize=False, skip_cv=False):        
+                 connectome_target='FC', binarize=False, skip_cv=False, species="human"):        
         """
         Initialization of simulation parameters
         """
@@ -87,22 +87,29 @@ class Simulation:
         self.binarize = binarize
         self.skip_cv = skip_cv
         self.results = []
+        self.species = species
 
     
     def load_data(self):
         """
         Load transcriptome and connectome data
         """
-        self.X = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes)        
-        self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA=True, hemisphere=self.hemisphere)
-        self.Y_sc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None, hemisphere=self.hemisphere)
-        self.Y_sc_binary = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
-        self.Y_sc_spectralL = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L', hemisphere=self.hemisphere)
-        self.Y_sc_spectralA = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='A', hemisphere=self.hemisphere)
-        self.Y_fc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', hemisphere=self.hemisphere)
-        self.Y_fc_binary = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', binarize=True, hemisphere=self.hemisphere)
-        self.coords = load_coords(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
-        self.labels, self.network_labels = load_network_labels(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
+        dataset = "AHBA"
+        network_dataset = "HCP"
+        if self.species == "c_elegans":
+            dataset = "c_elegans"
+            network_dataset = "c_elegans"
+        
+        self.X = load_transcriptome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes)        
+        self.X_pca = load_transcriptome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA=True, hemisphere=self.hemisphere)
+        self.Y_sc = load_connectome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None, hemisphere=self.hemisphere)
+        self.Y_sc_binary = load_connectome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
+        self.Y_sc_spectralL = load_connectome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L', hemisphere=self.hemisphere)
+        self.Y_sc_spectralA = load_connectome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='A', hemisphere=self.hemisphere)
+        self.Y_fc = load_connectome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', hemisphere=self.hemisphere)
+        self.Y_fc_binary = load_connectome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', binarize=True, hemisphere=self.hemisphere)
+        self.coords = load_coords(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
+        self.labels, self.network_labels = load_network_labels(dataset=network_dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
 
         # Find rows that are not all NaN - necessary for gene expression data with unsampled regions
         valid_indices = ~np.isnan(self.X).all(axis=1)
@@ -123,7 +130,6 @@ class Simulation:
         self.Y_fc = self.Y_fc[valid_indices][:, valid_indices]
         self.Y_fc_binary = self.Y_fc_binary[valid_indices][:, valid_indices]
         self.coords = self.coords[valid_indices]
-        
         self.labels = [self.labels[i] for i in range(len(self.labels)) if valid_indices[i]]
         self.network_labels = self.network_labels[valid_indices]
 

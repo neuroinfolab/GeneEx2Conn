@@ -29,7 +29,8 @@ def single_sim_run(
     track_wandb=False,
     skip_cv=False,
     model_type='dynamic_mlp',
-    use_gpu=True
+    use_gpu=True,
+    species="human"
 ):
     """
     Runs a single simulation for a given feature type and model configuration.
@@ -134,7 +135,8 @@ def single_sim_run(
                     random_seed=random_seed,
                     model_type=model_type,
                     gpu_acceleration=use_gpu,
-                    skip_cv=skip_cv
+                    skip_cv=skip_cv,
+                    species=species
                 )
     
     if search_method[0] == 'wandb':

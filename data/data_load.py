@@ -46,6 +46,11 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
     Returns
         np.ndarray: Processed gene expression data
     """
+    if dataset == "c_elegans":
+        genes_data = pd.read_csv(f"./data/c_elegans/Ad_aggregate_unthresholded_TPM.csv", header=None, skiprows=1).iloc[:,1:].T
+        if run_PCA:
+            genes_data = _apply_pca(genes_data)
+        return np.array(genes_data)
     if dataset == 'AHBA':
         # Choose parcellation
         if parcellation == 'S100':
@@ -151,6 +156,15 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
     Returns:
         np.ndarray: Processed connectome data
     """
+    if dataset == 'c_elegans':
+        if measure == 'FC':
+            matrix = pd.read_csv(f"./data/c_elegans/functional_connectivity.csv",  header=None, skiprows=1).iloc[:,1:]
+            # Fill Nans with 0
+            matrix = matrix.fillna(0)
+            return np.array(matrix)
+        elif measure == 'SC':
+            matrix = pd.read_csv(f"./data/c_elegans/Witvliet_synapse_8.csv", header=None, skiprows=1).iloc[:,1:]
+            return np.array(matrix)
     if dataset == 'AHBA':
         # Load relevant data and corresponding region labels from parcellation
         if parcellation == 'S100':
@@ -213,7 +227,7 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
         
         return matrix
 
-def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
+def load_coords(dataset='AHBA', parcellation='S100', omit_subcortical=True, hemisphere='both'):
     """
     Get MNI coordinates for brain regions in specified parcellation.
 
@@ -222,6 +236,9 @@ def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
         omit_subcortical (bool): Exclude subcortical regions. Default: True
         hemisphere (str): 'both', 'left', or 'right'. Default: 'both'
     """
+    if dataset == 'c_elegans':
+        coordinates = pd.read_csv(f"./data/c_elegans/coordinates.csv", header=None, skiprows=1)
+        return coordinates.values
     if parcellation == 'S100':
         region_labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in pd.read_csv('./data/enigma/schaef114_regions.txt', header=None).values.flatten().tolist()]
         hcp_schaef = pd.read_csv(absolute_data_path + '/atlas_info/schaef114.csv')
@@ -259,6 +276,10 @@ def load_network_labels(parcellation='S100', omit_subcortical=False, dataset='HC
         dataset (str): Dataset to load ('HCP', 'UKBB'). Default: 'HCP'
         hemisphere (str): Brain hemisphere ('both', 'left', 'right'). Default: 'both'
     """
+    if dataset == 'c_elegans':
+        labels = pd.read_csv('./data/c_elegans/labels.csv', header=None, skiprows=1)
+        network_labels = pd.read_csv('./data/c_elegans/labels.csv', header=None, skiprows=1)
+        return labels.values, network_labels.values
     if parcellation == 'S100': 
         schaef156_atlas_info = pd.read_csv('./data/UKBB/schaefer156_atlas_info.txt', sep='\t')
             
