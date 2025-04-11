@@ -64,7 +64,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             else:
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
             genes_data = genes_data.drop('label', axis=1)
-            region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t').iterrows()]
+            region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv').iterrows()]
         
         # Choose gene list
         if gene_list == '0.2' or gene_list == '1':
@@ -172,7 +172,7 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
                 matrix[matrix < 0] = 0 # a handful of values are slightly negative so set to 0
                 matrix = matrix / matrix.max()
         elif parcellation == 'S400' or parcellation == 'S456':
-            region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t').iterrows()]
+            region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv').iterrows()]
             if measure == 'FC':
                 matrix = np.array(pd.read_csv('./data/UKBB/UKBB_S456_FC_mu.csv'))
             elif measure == 'SC':
@@ -236,10 +236,8 @@ def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
         hcp_schaef = pd.read_csv(absolute_data_path + '/atlas_info/schaef114.csv')
         coordinates = hcp_schaef[['mni_x', 'mni_y', 'mni_z']].values
     elif parcellation == 'S400':
-        region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t').iterrows()]
-        UKBB_S456_atlas_info_path = absolute_data_path + '/atlas_info/atlas-4S456Parcels_dseg_reformatted.csv'
-        UKBB_S456_atlas_info = pd.read_csv(UKBB_S456_atlas_info_path)
-        # Store MNI coordinates from atlas info as list of [x,y,z] coordinates
+        region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv').iterrows()]
+        UKBB_S456_atlas_info = pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv')
         mni_coords = [[x, y, z] for x, y, z in zip(UKBB_S456_atlas_info['mni_x'], 
                                               UKBB_S456_atlas_info['mni_y'],
                                               UKBB_S456_atlas_info['mni_z'])]
@@ -269,10 +267,8 @@ def load_network_labels(parcellation='S100', omit_subcortical=False, dataset='HC
         hemisphere (str): Brain hemisphere ('both', 'left', 'right'). Default: 'both'
     """
     if parcellation == 'S100': 
-        schaef156_atlas_info = pd.read_csv('./data/UKBB/schaefer156_atlas_info.txt', sep='\t')
-            
+        schaef156_atlas_info = pd.read_csv('./data/UKBB/atlas-4S156Parcels_dseg_reformatted.csv')       
         schaef156_atlas_info.loc[schaef156_atlas_info['atlas_name'] == 'Cerebellum', 'network_label'] = 'Cerebellum'
-
         schaef156_atlas_info.loc[(schaef156_atlas_info['network_label'].isna()) & 
                                 (schaef156_atlas_info['atlas_name'] != 'Cerebellum'), 'network_label'] = 'Subcortical'
 
@@ -287,7 +283,7 @@ def load_network_labels(parcellation='S100', omit_subcortical=False, dataset='HC
         network_labels = schaef156_atlas_info['network_label'].values
 
     elif parcellation == 'S400':
-        schaef456_atlas_info = pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t')
+        schaef456_atlas_info = pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv')
         schaef456_atlas_info.loc[schaef456_atlas_info['atlas_name'] == 'Cerebellum', 'network_label'] = 'Cerebellum'
         schaef456_atlas_info.loc[(schaef456_atlas_info['network_label'].isna()) & 
                                 (schaef456_atlas_info['atlas_name'] != 'Cerebellum'), 'network_label'] = 'Subcortical'
