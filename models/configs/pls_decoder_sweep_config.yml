@@ -1,4 +1,4 @@
-name: pls
+name: pls_decoder
 method: random
 metric:
   name: mean_val_loss

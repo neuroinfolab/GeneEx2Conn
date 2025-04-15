@@ -21,7 +21,7 @@ from data.data_utils import (
 
 from models.base_models import ModelBuild, BaseModel
 from models.bilinear import BilinearLowRank, BilinearSCM
-from models.pls import PLSStepModel, PLSDecoderModel
+from models.pls import PLSTwoStepModel, PLSDecoderModel
 from models.dynamic_mlp import DynamicMLP
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
 from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionCLSModel, CrossAttentionModel
@@ -29,7 +29,7 @@ from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttent
 MODEL_CLASSES = {
     'bilinear_lowrank': BilinearLowRank,
     'bilinear_SCM': BilinearSCM,
-    'pls_twostep': PLSStepModel,
+    'pls_twostep': PLSTwoStepModel,
     'pls_decoder': PLSDecoderModel,
     'dynamic_mlp': DynamicMLP,
     'shared_mlp_encoder': SharedMLPEncoderModel,
@@ -278,7 +278,10 @@ class Simulation:
 
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]
-        if self.model_type == 'pls':
+        if self.model_type == 'pls_twostep':
+            print('train_indices shape:', train_indices.shape)
+            print('test_indices shape:', test_indices.shape)
+            
             best_model = ModelClass(**best_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=self.region_pair_dataset).to(device)
         else:
             best_model = ModelClass(**best_config).to(device)
@@ -341,7 +344,10 @@ class Simulation:
 
                 if self.model_type in MODEL_CLASSES:
                     wandb.watch(best_model, log='all')
-                    train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
+                    if self.model_type == 'pls_twostep':
+                        train_history = best_model.fit(self.region_pair_dataset, train_indices, test_indices)
+                    else:
+                        train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
                     for epoch, (train_loss, val_loss) in enumerate(zip(train_history['train_loss'], train_history['val_loss'])):
                         wandb.log({'train_mse_loss': train_loss, 'test_mse_loss': val_loss})
             else:

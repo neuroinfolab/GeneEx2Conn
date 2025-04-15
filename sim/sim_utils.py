@@ -441,7 +441,7 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
         test_indices_expanded = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])    
 
         # Initialize model dynamically based on sweep config
-        if model_type == 'pls':
+        if model_type == 'pls_twostep':
             model = ModelClass(**sweep_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=dataset).to(device)
         else:
             model = ModelClass(**sweep_config).to(device)

@@ -1,0 +1,34 @@
+name: pls_twostep
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+# SMALL GRID 
+parameters:
+  input_dim: 
+    value: !!int 0
+  binarize: 
+    value: !!int 0
+  n_components_l:
+    values: [2, 3, 5, 7, 8, 9, 10, 15, 20, 30]
+  n_components_k:
+    values: [2, 3, 5, 7, 8, 9, 10, 15, 20, 30]
+  max_iter:
+    values: [1000]
+  scale:
+    values: [True]
+
+best_parameters:
+  input_dim: 
+    value: !!int 0
+  binarize: 
+    value: !!int 0
+  n_components_l:
+    values: [10]
+  n_components_k:
+    values: [10]
+  max_iter:
+    values: [1000]
+  scale:
+    values: [True]

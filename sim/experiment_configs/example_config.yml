@@ -15,7 +15,7 @@ binarize: false
 impute_strategy: 'mirror_interpolate'
 sort_genes: 'expression'
 gene_list: '0.2'
-null_model: 'spin'
+null_model: 'none'
 
 # Cross-validation
 cv_type: random
@@ -23,8 +23,8 @@ resolution: 1.0
 random_seed: 42
 search_method: ['wandb', 'mse', 3]
 track_wandb: true
-skip_cv: true
+skip_cv: false
 
 # Model
-model_type: pls
+model_type: pls_twostep
 use_gpu: true

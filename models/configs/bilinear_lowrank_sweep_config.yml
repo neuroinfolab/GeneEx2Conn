@@ -84,4 +84,4 @@ best_parameters:
   reduced_dim:
     values: [10]
   epochs:
-    values: [100]
+    values: [5]
