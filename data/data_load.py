@@ -96,19 +96,16 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             valid_genes.sort(key=lambda x: gene_order_dict[x])
             genes_data = np.array(genes_data[valid_genes])
         elif sort_genes == 'expression':
-            #valid_genes = [gene for gene in genes_list if gene in genes_data.columns]
             genes_data = np.array(genes_data[valid_genes])
             mean_expr = np.nanmean(genes_data, axis=0)
             sort_idx = np.argsort(mean_expr)
             genes_data = genes_data[:, sort_idx]
             valid_genes = [valid_genes[i] for i in sort_idx]
         elif sort_genes == 'random':
-            #valid_genes = [gene for gene in genes_list if gene in genes_data.columns]
             random_genes = np.random.permutation(valid_genes)
             genes_data = np.array(genes_data[random_genes])
             valid_genes = random_genes
         else:
-            #valid_genes = [gene for gene in genes_list if gene in genes_data.columns]
             genes_data = np.array(genes_data[valid_genes])
 
         # Apply PCA if specified
@@ -136,13 +133,15 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             return genes_data, valid_genes
         
         if null_model == 'spin':
+            print('spinning gene expression')
             lh_annot, rh_annot = netneurotools.datasets.fetch_schaefer2018('fsaverage', data_dir='data/UKBB', verbose=1)['400Parcels7Networks']
             coords, hemi = netneurotools.freesurfer.find_parcel_centroids(lhannot=lh_annot, rhannot=rh_annot, surf='sphere')
             spins, cost = nnstats.gen_spinsamples(coords, hemi, n_rotate=1, seed=random_seed, return_cost=True)
+            # print('brain spin cost: ', cost)
             spin_indices = spins[:, 0]
-            print('brain spin cost: ', cost)
             genes_data = genes_data[spin_indices]
         elif null_model == 'random':
+            print('permuting gene expression')
             rng = np.random.default_rng(random_seed)
             genes_data = rng.permutation(genes_data)
         

@@ -11,7 +11,7 @@ parameters:
   binarize: 
     value: !!int 0
   decoder:
-    values: ['linear'] #, 'linear'] , 'bilinear']
+    values: ['linear', 'bilinear', 'mlp'] #, 'linear'] , 'bilinear']
   n_components:
     values: [2, 3, 5, 7, 8, 9, 10, 15, 20, 30]
   max_iter:
@@ -19,7 +19,7 @@ parameters:
   scale:
     values: [True]
   optimize_encoder:
-    values: [False] # True/False
+    values: [True, False]
   hidden_dims:
     values:     
     - [128, 64]
@@ -40,7 +40,7 @@ best_parameters:
   binarize: 
     value: !!int 0
   decoder:
-    values: ['linear']
+    values: ['mlp']
   n_components:
     values: [10]
   max_iter:
@@ -48,12 +48,12 @@ best_parameters:
   scale:
     values: [True]
   optimize_encoder:
-    values: [True]
+    values: [False]
   hidden_dims:
     values:     
     - [128, 64]
   learning_rate:
-    values: [0.0001]
+    values: [0.00009]
   batch_size:
     values: [512]
   dropout_rate:

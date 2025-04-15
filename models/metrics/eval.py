@@ -154,64 +154,13 @@ class Metrics:
         else:
             plt.close()
 
-    '''
-    def visualize_spatial_autocorr(self):
-        """Plot spatial autocorrelation between distance and FC predictions"""
-        # Define exponential decay function
-        def exp_decay(x, SA_inf, SA_lambda):
-            return SA_inf + (1 - SA_inf) * np.exp(-x / SA_lambda)
-
-        # Create distance bins
-        bin_size_mm = 10
-        bin_edges = np.arange(0, self.distances.max() + bin_size_mm, bin_size_mm)
-        
-        # Calculate binned statistics for true values
-        bin_means_true, bin_edges, _ = binned_statistic(self.distances, self.Y_true_flat, 
-                                                       statistic='mean', bins=bin_edges)
-        bin_std_true, _, _ = binned_statistic(self.distances, self.Y_true_flat,
-                                             statistic='std', bins=bin_edges)
-        
-        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-        print(f"# of NaNs in bin_means_true: {np.sum(np.isnan(bin_means_true))}")
-        print(f"bin_means_true: {bin_means_true}")
-        print(f"bin_centers: {bin_centers}")
-
-        # Fit exponential decay for true and predicted
-        popt_true, _ = curve_fit(exp_decay, bin_centers, bin_means_true,
-                                p0=[0, 10], bounds=([-1, 0], [1, 100]))
-
-        plt.figure(figsize=(12,8))
-        
-        # Plot true values
-        plt.errorbar(bin_centers, bin_means_true, yerr=bin_std_true, 
-                    color='blue', fmt='o', label='True FC', alpha=0.7)
-        plt.plot(bin_centers, exp_decay(bin_centers, *popt_true), 
-                'b-', label=f'True Fit (λ={popt_true[1]:.2f})')
-        
-        # Generate predictions using exponential decay
-        distance_based_pred = exp_decay(self.distances, *popt_true)
-        
-        # Print metrics comparing distance-based prediction to true values
-        print("\nDistance-based prediction metrics:")
-        print(f"MSE: {mean_squared_error(self.Y_true_flat, distance_based_pred):.4f}")
-        print(f"MAE: {mean_absolute_error(self.Y_true_flat, distance_based_pred):.4f}")
-        print(f"R2: {r2_score(self.Y_true_flat, distance_based_pred):.4f}")
-        print(f"Pearson r: {pearsonr(self.Y_true_flat, distance_based_pred)[0]:.4f}")
-
-        plt.xlabel('Distance (mm)')
-        plt.ylabel('FC Strength')
-        plt.title('Spatial Autocorrelation of FC')
-        plt.legend()
-        plt.show()
-    '''
-
     def get_distance_based_correlations(self, distances, y_true, y_pred):
         """
         Calculate correlations for different distance ranges.
         """
         # Calculate fixed distance cutoffs for short/mid/long range
         dist_min = 0
-        dist_max = 175 / 3
+        dist_max = 175
         dist_range = dist_max - dist_min
         dist_33 = dist_min + (dist_range / 3)
         dist_67 = dist_min + (2 * dist_range / 3)

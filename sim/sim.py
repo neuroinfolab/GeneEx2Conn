@@ -21,7 +21,7 @@ from data.data_utils import (
 
 from models.base_models import ModelBuild, BaseModel
 from models.bilinear import BilinearLowRank, BilinearSCM
-from models.pls import PLSModel
+from models.pls import PLSStepModel, PLSDecoderModel
 from models.dynamic_mlp import DynamicMLP
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
 from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionCLSModel, CrossAttentionModel
@@ -29,7 +29,8 @@ from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttent
 MODEL_CLASSES = {
     'bilinear_lowrank': BilinearLowRank,
     'bilinear_SCM': BilinearSCM,
-    'pls': PLSModel,
+    'pls_twostep': PLSStepModel,
+    'pls_decoder': PLSDecoderModel,
     'dynamic_mlp': DynamicMLP,
     'shared_mlp_encoder': SharedMLPEncoderModel,
     'shared_linear_encoder': SharedLinearEncoderModel,
@@ -184,7 +185,7 @@ class Simulation:
         self.features = features 
         print('features', self.features)
 
-        X = []
+        X_all = []
         for feature in features:
             if 'spectral' in feature:
                 feature_type = '_'.join(feature.split('_')[:-1])  # take provided number of spectral components
@@ -204,21 +205,21 @@ class Simulation:
     
                 feature_X = feature_dict[feature]
             
-            X.append(feature_X)
+            X_all.append(feature_X)
         
-        self.X = np.hstack(X)
+        self.X_all = np.hstack(X_all)
         print('X generated... expanding to pairwise dataset')
 
         # Create custom dataset for region pair data
         self.region_pair_dataset = RegionPairDataset(
-            self.X, 
+            self.X_all, 
             self.Y,
             self.coords,
             self.valid2true_index_mapping
         )
 
 
-    def run_innercv_wandb_torch(self, input_dim, train_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
+    def run_innercv_wandb_torch(self, input_dim, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
         """Inner cross-validation with W&B support for deep learning models"""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -278,7 +279,7 @@ class Simulation:
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]
         if self.model_type == 'pls':
-            best_model = ModelClass(**best_config, encoder_indices=train_indices).to(device)
+            best_model = ModelClass(**best_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=self.region_pair_dataset).to(device)
         else:
             best_model = ModelClass(**best_config).to(device)
             
@@ -310,7 +311,7 @@ class Simulation:
             
             innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
             input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
-            best_model, best_val_score, best_config, sweep_id = self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
+            best_model, best_val_score, best_config, sweep_id = self.run_innercv_wandb_torch(input_dim, train_indices, test_indices, innercv_network_dict, fold_idx, search_method)
             
             if track_wandb:
                 feature_str = "+".join(str(k) if v is None else f"{k}_{v}" 

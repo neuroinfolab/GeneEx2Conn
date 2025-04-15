@@ -50,6 +50,9 @@ class BilinearLowRank(nn.Module):
         else:  # 'none'
             self.activation = nn.Identity()
 
+        self.criterion = BilinearLoss(self.parameters(), regularization=regularization, lambda_reg=lambda_reg)
+        self.optimizer = Adam(self.parameters(), lr=learning_rate)
+        
         self.patience = 20
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
@@ -61,10 +64,8 @@ class BilinearLowRank(nn.Module):
             min_lr=1e-6,  # Prevent LR from going too low
             verbose=True
         )
-        self.criterion = BilinearLoss(self.parameters(), regularization=regularization, lambda_reg=lambda_reg)
-        self.optimizer = Adam(self.parameters(), lr=learning_rate)
-
-    def forward(self, x): 
+    
+    def forward(self, x):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         out1 = self.activation(self.linear(x_i))
         out2 = self.activation(self.linear(x_j) if self.shared_weights else self.linear2(x_j))
