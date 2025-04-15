@@ -64,7 +64,6 @@ from sim.sim_utils import (
     train_sweep_torch,
     load_sweep_config, 
     load_best_parameters
-    # log_wandb_metrics
 )
 
 absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
@@ -97,8 +96,8 @@ class Simulation:
         """
         Load transcriptome and connectome data
         """
-        self.X = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes, null_model=self.null_model)        
-        self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA=True, hemisphere=self.hemisphere, null_model=self.null_model)
+        self.X = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes, null_model=self.null_model, random_seed=self.random_seed)        
+        self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA=True, hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
         self.Y_sc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None, hemisphere=self.hemisphere)
         self.Y_sc_binary = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
         self.Y_sc_spectralL = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L', hemisphere=self.hemisphere)
@@ -222,26 +221,21 @@ class Simulation:
     def run_innercv_wandb_torch(self, input_dim, train_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
         """Inner cross-validation with W&B support for deep learning models"""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-        
-        if self.model_type == 'pls':
-            sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize, pls_indices=train_indices)
-        else:
-            sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
+        sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
+        sweep_id = None
         
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
 
         if self.skip_cv:
-            if self.model_type == 'pls':
-                best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize, pls_indices=train_indices)
-            else:
-                best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
-
+            best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
             best_val_loss = 0.0 # no CV --> no best val loss
         else:
             def train_sweep_wrapper(config=None):
                 return train_sweep_torch(
                     config=config,
+                    train_indices=train_indices,
                     model_type=self.model_type,
                     feature_type=self.feature_type,
                     connectome_target=self.connectome_target,
@@ -276,16 +270,19 @@ class Simulation:
             best_run = sweep.best_run()
             wandb.teardown()
 
-            best_val_loss = best_run.summary.mean_val_loss # this can be changed to another metric
+            best_val_loss = best_run.summary.mean_val_loss # this can be changed to another metric like pearson
             best_config = best_run.config
-
+        
         print('BEST CONFIG', best_config)
 
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]
-        best_model = ModelClass(**best_config).to(device)
+        if self.model_type == 'pls':
+            best_model = ModelClass(**best_config, encoder_indices=train_indices).to(device)
+        else:
+            best_model = ModelClass(**best_config).to(device)
             
-        return best_model, best_val_loss
+        return best_model, best_val_loss, best_config, sweep_id
 
 
     def run_sim_torch(self, search_method=('random', 'mse', 5), track_wandb=False):
@@ -313,7 +310,7 @@ class Simulation:
             
             innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
             input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
-            best_model, best_val_score = self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
+            best_model, best_val_score, best_config, sweep_id = self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
             
             if track_wandb:
                 feature_str = "+".join(str(k) if v is None else f"{k}_{v}" 
@@ -322,6 +319,8 @@ class Simulation:
                 run_name = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}_fold{fold_idx}_final_eval"
                 final_eval_run = wandb.init(project="gx2conn",
                                             name=run_name,
+                                            group=f"sweep_{sweep_id}" if not self.skip_cv else None,
+                                            config=best_config,
                                             tags=["final_eval", 
                                                   f'cv_type_{self.cv_type}', 
                                                   f'outerfold_{fold_idx}',
@@ -368,13 +367,16 @@ class Simulation:
 
             train_metrics = evaluator.get_train_metrics()
             test_metrics = evaluator.get_test_metrics()
+
             print("\nTRAIN METRICS:", train_metrics)
             print("TEST METRICS:", test_metrics)
             print('BEST VAL SCORE', best_val_score)
             print('BEST MODEL HYPERPARAMS', best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model))
 
             if track_wandb:
-                wandb.log({'final_train_metrics': train_metrics, 'final_test_metrics': test_metrics, 'best_val_loss': best_val_score, 'config': best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model)})
+                wandb.log({'final_train_metrics': train_metrics, 
+                           'final_test_metrics': test_metrics, 
+                           'best_val_loss': best_val_score})
                 final_eval_run.finish()
                 wandb.finish()
                 print("Final evaluation metrics logged successfully.")

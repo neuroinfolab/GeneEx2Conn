@@ -154,7 +154,7 @@ class Metrics:
         else:
             plt.close()
 
-
+    '''
     def visualize_spatial_autocorr(self):
         """Plot spatial autocorrelation between distance and FC predictions"""
         # Define exponential decay function
@@ -203,7 +203,32 @@ class Metrics:
         plt.title('Spatial Autocorrelation of FC')
         plt.legend()
         plt.show()
+    '''
+
+    def get_distance_based_correlations(self, distances, y_true, y_pred):
+        """
+        Calculate correlations for different distance ranges.
+        """
+        # Calculate fixed distance cutoffs for short/mid/long range
+        dist_min = 0
+        dist_max = 175 / 3
+        dist_range = dist_max - dist_min
+        dist_33 = dist_min + (dist_range / 3)
+        dist_67 = dist_min + (2 * dist_range / 3)
         
+        # Create masks for different ranges
+        short_mask = distances <= dist_33
+        mid_mask = (distances > dist_33) & (distances <= dist_67)
+        long_mask = distances > dist_67
+        
+        # Calculate correlations for each range
+        overall_corr = pearsonr(y_true, y_pred)[0]
+        short_range_corr = pearsonr(y_true[short_mask], y_pred[short_mask])[0]
+        mid_range_corr = pearsonr(y_true[mid_mask], y_pred[mid_mask])[0]
+        long_range_corr = pearsonr(y_true[long_mask], y_pred[long_mask])[0]
+        
+        return overall_corr, short_range_corr, mid_range_corr, long_range_corr
+    
     def compute_metrics(self):
         if self.binarize: # Compute classification metrics
             self.accuracy = accuracy_score(self.Y_true_flat, self.Y_pred_flat)
@@ -216,6 +241,14 @@ class Metrics:
             self.mae = mean_absolute_error(self.Y_true_flat, self.Y_pred_flat)
             self.r2 = r2_score(self.Y_true_flat, self.Y_pred_flat)
             self.pearson_corr = pearsonr(self.Y_true_flat, self.Y_pred_flat)[0]
+            try: 
+                self.overall_r, self.short_r, self.mid_r, self.long_r = self.get_distance_based_correlations(
+                self.distances, 
+                self.Y_true_flat, 
+                self.Y_pred_flat)
+            except: 
+                print('No distance-based correlations for this model')
+            
             if self.square: # Compute geodesic distance if test data is a square connectome
                 Y_pred_connectome = reconstruct_connectome(self.Y_pred, symmetric=True)
                 Y_pred_connectome_asymmetric = reconstruct_connectome(self.Y_pred, symmetric=False)
@@ -236,12 +269,17 @@ class Metrics:
                 'mse': self.mse,
                 'mae': self.mae,
                 'r2': self.r2,
-                'pearson_corr': self.pearson_corr
+                'pearson_r': self.pearson_corr,
+                'short_r': self.short_r,
+                'mid_r': self.mid_r,
+                'long_r': self.long_r
+            
             }
         if self.square:
             metrics['geodesic_distance'] = self.geodesic_distance
         return metrics
-        
+
+    
     def visualize_predictions_scatter(self):
         # Set global visualization parameters
         TITLE_SIZE = 14
@@ -251,28 +289,16 @@ class Metrics:
         TICK_SIZE = 20
         
         plt.figure(figsize=(10, 7))        
-        # Get min and max across both true and predicted values
+        
         min_val = min(self.Y_true_flat.min(), self.Y_pred_flat.min())
         max_val = max(self.Y_true_flat.max(), self.Y_pred_flat.max())
-        
-        # Calculate fixed distance cutoffs for short/mid/long range
-        dist_min = self.distances.min()
-        dist_max = self.distances.max()
-        dist_range = dist_max - dist_min
-        dist_33 = dist_min + (dist_range / 3)
-        dist_67 = dist_min + (2 * dist_range / 3)
-        
-        # Create masks for different ranges
-        short_mask = self.distances <= dist_33
-        mid_mask = (self.distances > dist_33) & (self.distances <= dist_67)
-        long_mask = self.distances > dist_67
-        
-        # Calculate ICCs for each range
-        overall_r = pearsonr(self.Y_true_flat, self.Y_pred_flat)[0]
-        short_r = pearsonr(self.Y_true_flat[short_mask], self.Y_pred_flat[short_mask])[0]
-        mid_r = pearsonr(self.Y_true_flat[mid_mask], self.Y_pred_flat[mid_mask])[0]
-        long_r = pearsonr(self.Y_true_flat[long_mask], self.Y_pred_flat[long_mask])[0]
-        
+
+        # Get correlations for different distance ranges using helper function
+        overall_r, short_r, mid_r, long_r = self.get_distance_based_correlations(
+            self.distances, 
+            self.Y_true_flat, 
+            self.Y_pred_flat
+        )
         # Create distance-based colormap
         norm = plt.Normalize(self.distances.min(), self.distances.max())
         cmap = plt.cm.viridis  # Using viridis colormap for distance gradient

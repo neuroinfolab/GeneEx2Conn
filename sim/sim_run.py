@@ -1,7 +1,7 @@
 import sys
 import os
 relative_root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-print('relative_root_path', relative_root_path)
+# print('relative_root_path', relative_root_path)
 absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
 print('absolute_root_path', absolute_root_path)
 sys.path.append(absolute_root_path)
@@ -30,7 +30,7 @@ def single_sim_run(
     skip_cv=False,
     model_type='dynamic_mlp',
     use_gpu=True, 
-    null_model=False
+    null_model='none'
 ):
     """
     Runs a single simulation for a given feature type and model configuration.
@@ -112,9 +112,9 @@ def single_sim_run(
     use_gpu : bool
         Whether to use GPU acceleration where available
 
-    null_model : bool
+    null_model : str
         Whether to generate a spatial null model of the transcriptome
-
+        Options: 'none', 'random', 'spatial'
     Returns:
     -------
     single_model_results : list

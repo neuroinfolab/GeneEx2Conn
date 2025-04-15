@@ -51,7 +51,7 @@ def print_system_usage():
 
 
 # CONFIG LOADING
-def load_sweep_config(file_path, input_dim, binarize, pls_indices=None):
+def load_sweep_config(file_path, input_dim, binarize):
     """
     Load a sweep config file and update the input_dim parameter.
     """
@@ -63,12 +63,9 @@ def load_sweep_config(file_path, input_dim, binarize, pls_indices=None):
     if binarize is not None:
         config['parameters']['binarize']['value'] = binarize
 
-    if pls_indices is not None:
-        config['parameters']['encoder_indices']['value'] = list(pls_indices)
-
     return config
 
-def load_best_parameters(yaml_file_path, input_dim, binarize, pls_indices=None):
+def load_best_parameters(yaml_file_path, input_dim, binarize):
     with open(yaml_file_path, 'r') as file:
         config = yaml.safe_load(file)
     
@@ -84,9 +81,6 @@ def load_best_parameters(yaml_file_path, input_dim, binarize, pls_indices=None):
     if binarize is not None:
         best_config['binarize'] = binarize
     
-    if pls_indices is not None:
-        best_config['encoder_indices'] = list(pls_indices)
-
     return best_config
 
 
@@ -382,7 +376,7 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
     run.finish()
     return mean_metrics['mean_val_loss']
 
-def train_sweep_torch(config, model_type, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, impute_strategy, sort_genes, null_model):
+def train_sweep_torch(config, model_type, train_indices, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, impute_strategy, sort_genes, null_model):
     """
     Training function for W&B sweeps for deep learning models.
     
@@ -408,7 +402,23 @@ def train_sweep_torch(config, model_type, feature_type, connectome_target, datas
         project="gx2conn",
         name=run_name,
         group=f"sweep_{sweep_id}",
-        tags=["inner cross validation", f'cv_type_{cv_type}', f"fold{outer_fold_idx}", f"model_{model_type}", f"split_{cv_type}{seed}", f'feature_type_{feature_str}', f'target_{connectome_target}', f"parcellation_{parcellation}",  f"hemisphere_{hemisphere}", f"omit_subcortical_{omit_subcortical}", f"gene_list_{gene_list}", f"binarize_{binarize}", f"impute_strategy_{impute_strategy}", f"sort_genes_{sort_genes}", f"null_model_{null_model}"],
+        tags=[
+            "inner cross validation",
+            f'cv_type_{cv_type}',
+            f"fold{outer_fold_idx}",
+            f"model_{model_type}",
+            f"split_{cv_type}{seed}",
+            f'feature_type_{feature_str}',
+            f'target_{connectome_target}',
+            f"parcellation_{parcellation}",
+            f"hemisphere_{hemisphere}",
+            f"omit_subcortical_{omit_subcortical}",
+            f"gene_list_{gene_list}",
+            f"binarize_{binarize}",
+            f"impute_strategy_{impute_strategy}",
+            f"sort_genes_{sort_genes}",
+            f"null_model_{null_model}"
+        ],
         reinit=True
     )
     sweep_config = wandb.config
@@ -431,7 +441,10 @@ def train_sweep_torch(config, model_type, feature_type, connectome_target, datas
         test_indices_expanded = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])    
 
         # Initialize model dynamically based on sweep config
-        model = ModelClass(**sweep_config).to(device)
+        if model_type == 'pls':
+            model = ModelClass(**sweep_config, encoder_indices=train_indices).to(device)
+        else:
+            model = ModelClass(**sweep_config).to(device)
 
         # Train model
         history = model.fit(dataset, train_indices_expanded, test_indices_expanded)
@@ -460,9 +473,8 @@ def train_sweep_torch(config, model_type, feature_type, connectome_target, datas
         inner_fold_metrics['final_val_loss'].append(history['val_loss'][-1])
         inner_fold_metrics['final_train_pearson'].append(train_pearson)
         inner_fold_metrics['final_val_pearson'].append(val_pearson)
-
-        # Only run CV on the first inner fold to test more parameters
-        break
+        
+        break  # Only run CV on the first inner fold to test more parameters
 
     # Log mean metrics across folds
     mean_metrics = {

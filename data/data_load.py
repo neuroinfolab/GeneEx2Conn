@@ -1,6 +1,4 @@
 from env.imports import *
-from netneurotools import freesurfer as nnsurf
-from netneurotools import stats as nnstats
 
 relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data'
 absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'
@@ -29,7 +27,7 @@ def _apply_pca(data, var_thresh=0.95):
         return data_pca
 
 
-def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='expression', return_valid_genes=False, null_model=False):
+def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='expression', return_valid_genes=False, null_model='none', random_seed=42):
     """
     Load transcriptome data with optional PCA reduction.
     
@@ -44,7 +42,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         hemisphere (str): Brain hemisphere ('both', 'left', 'right'). Default: 'both'
         impute_strategy (str): How to impute missing values ('mirror', 'interpolate', 'mirror_interpolate'). Default: None (otherwise: 'mirror_interpolate' recommended)
         sort_genes (str): Sort genes based on reference genome order 'refgenome', or by mean expression across brain 'expression', or alphabetically (None). Default: 'expression'
-        null_model (bool): Shuffle gene expresstion data as in spin test null model. Default: False
+        null_model (str): Shuffle gene expression data as in spin test null model. Default: none, spin, random
     Returns
         np.ndarray: Processed gene expression data
     """
@@ -137,12 +135,16 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             print("valid genes", valid_genes)
             return genes_data, valid_genes
         
-        if null_model:
+        if null_model == 'spin':
             lh_annot, rh_annot = netneurotools.datasets.fetch_schaefer2018('fsaverage', data_dir='data/UKBB', verbose=1)['400Parcels7Networks']
             coords, hemi = netneurotools.freesurfer.find_parcel_centroids(lhannot=lh_annot, rhannot=rh_annot, surf='sphere')
-            spins, cost = nnstats.gen_spinsamples(coords, hemi, n_rotate=1, seed=42, return_cost=True)
+            spins, cost = nnstats.gen_spinsamples(coords, hemi, n_rotate=1, seed=random_seed, return_cost=True)
             spin_indices = spins[:, 0]
+            print('brain spin cost: ', cost)
             genes_data = genes_data[spin_indices]
+        elif null_model == 'random':
+            rng = np.random.default_rng(random_seed)
+            genes_data = rng.permutation(genes_data)
         
         return genes_data
 

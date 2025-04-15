@@ -1,6 +1,8 @@
 from env.imports import *
 from models.train_val import train_model
 from data.data_load import load_transcriptome, load_connectome
+from models.bilinear import BilinearLoss
+
 
 class PLSEncoder(nn.Module):
     def __init__(self, train_indices, n_components=10, max_iter=1000, scale=True, optimize_encoder=False):
@@ -11,7 +13,7 @@ class PLSEncoder(nn.Module):
         self.scale = scale
         
         # Load full data
-        parcellation, omit_subcortical, hemisphere = 'S400', False, 'both'
+        parcellation, omit_subcortical, hemisphere = 'S400', True, 'both'
         X_full = load_transcriptome(parcellation=parcellation, omit_subcortical=omit_subcortical, hemisphere=hemisphere)
         Y_full = load_connectome(parcellation=parcellation, omit_subcortical=omit_subcortical, measure='FC', hemisphere=hemisphere)
         
@@ -54,7 +56,7 @@ class PLSEncoder(nn.Module):
 
 class PLSModel(nn.Module):
     def __init__(self, input_dim, encoder_indices,
-                 binarize=False, n_components=10, max_iter=1000, scale=True, optimize_encoder=False, hidden_dims=[128, 64],
+                 decoder='mlp',binarize=False, n_components=10, max_iter=1000, scale=True, optimize_encoder=False, hidden_dims=[128, 64],
                  dropout_rate=0.2, learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100):
         super().__init__()
         
@@ -70,44 +72,59 @@ class PLSModel(nn.Module):
             max_iter=max_iter,
             scale=scale,
             optimize_encoder=optimize_encoder)
-        
-        # Build MLP layers
-        prev_dim = n_components * 2  # Doubled because we concatenate two region encodings
-        deep_layers = []
-        for hidden_dim in hidden_dims:
-            deep_layers.extend([
-                nn.Linear(prev_dim, hidden_dim),
-                nn.ReLU(),
-                nn.BatchNorm1d(hidden_dim),
-                nn.Dropout(dropout_rate)
-            ])
-            prev_dim = hidden_dim
-            
-        self.deep_layers = nn.Sequential(*deep_layers)
-        self.output_layer = nn.Linear(prev_dim, 1)
             
         self.criterion = nn.BCEWithLogitsLoss() if binarize else nn.MSELoss()
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        self.scheduler = None
         self.patience = 20
-        self.scheduler = ReduceLROnPlateau( 
-            self.optimizer, 
-            mode='min', 
-            factor=0.3,  # Reduce LR by 70%
-            patience=20,  # Reduce LR after patience epochs of no improvement
-            threshold=0.1,  # Threshold to detect stagnation
-            cooldown=1,  # Reduce cooldown period
-            min_lr=1e-6,  # Prevent LR from going too low
-            verbose=True)
+
+        # Initialize decoder
+        if decoder == 'mlp':
+            prev_dim = n_components * 2  # Doubled because we concatenate two region encodings
+            deep_layers = []
+            for hidden_dim in hidden_dims:
+                deep_layers.extend([
+                    nn.Linear(prev_dim, hidden_dim),
+                    nn.ReLU(),
+                    nn.BatchNorm1d(hidden_dim),
+                    nn.Dropout(dropout_rate)
+                ])
+                prev_dim = hidden_dim
+            self.deep_layers = nn.Sequential(*deep_layers)
+            self.output_layer = nn.Linear(prev_dim, 1)
+            self.patience = 20
+            self.scheduler = ReduceLROnPlateau( 
+                self.optimizer, 
+                mode='min', 
+                factor=0.3,  # Reduce LR by 70%
+                patience=20,  # Reduce LR after patience epochs of no improvement
+                threshold=0.1,  # Threshold to detect stagnation
+                cooldown=1,  # Reduce cooldown period
+                min_lr=1e-6,  # Prevent LR from going too low
+                verbose=True)
+        elif decoder == 'linear':
+            self.linear = nn.Linear(n_components * 2, 1)
+        elif decoder == 'bilinear':
+            self.bilinear = nn.Bilinear(n_components, n_components, 1)            
 
     def forward(self, x):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         
         encoded_i = self.encoder(x_i)
         encoded_j = self.encoder(x_j)
-        concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
-        
-        deep_output = self.deep_layers(concatenated_embedding)
-        output = self.output_layer(deep_output)
+
+        if hasattr(self, 'deep_layers'):
+            concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
+            deep_output = self.deep_layers(concatenated_embedding)
+            output = self.output_layer(deep_output)
+        elif hasattr(self, 'bilinear'):
+            output = self.bilinear(encoded_i, encoded_j)
+        elif hasattr(self, 'linear'):
+            concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
+            output = self.linear(concatenated_embedding)
+        else:
+            raise ValueError(f"Decoder {self.decoder} not supported")
+            
         return output.squeeze()
     
     def predict(self, loader):

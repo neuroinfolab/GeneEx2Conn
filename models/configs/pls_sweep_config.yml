@@ -10,36 +10,37 @@ parameters:
     value: !!int 0
   binarize: 
     value: !!int 0
-  encoder_indices:
-    value: !!int 0
+  decoder:
+    values: ['linear'] #, 'linear'] , 'bilinear']
   n_components:
-    values: [2, 3, 5, 7, 10, 15, 20, 30]
+    values: [2, 3, 5, 7, 8, 9, 10, 15, 20, 30]
   max_iter:
     values: [1000]
   scale:
-    values: [True, False]
+    values: [True]
+  optimize_encoder:
+    values: [False] # True/False
   hidden_dims:
     values:     
     - [128, 64]
-    - [256, 128]
   learning_rate:
-    values: [0.0001, 0.00009]
+    values: [0.0001, 0.00009, 0.00001]
   batch_size:
-    values: [256, 512]
+    values: [512]
   dropout_rate:
-    values: [0.1, 0.2, 0.3]
+    values: [0.0, 0.2]
   weight_decay:
-    values: [0.0, 0.0001, 0.001]
+    values: [0.0, 0.001, 0.0001]
   epochs:
-    values: [100, 150]
+    values: [50, 100, 150]
 
 best_parameters:
   input_dim: 
     value: !!int 0
   binarize: 
     value: !!int 0
-  encoder_indices:
-    value: !!int 0
+  decoder:
+    values: ['linear']
   n_components:
     values: [10]
   max_iter:
