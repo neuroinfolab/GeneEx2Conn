@@ -1,6 +1,7 @@
 from env.imports import *
 from models.train_val import train_model
 from data.data_load import load_transcriptome, load_connectome
+from data.data_utils import expand_X_symmetric, expand_Y_symmetric
 
 
 class PLSEncoder(nn.Module):
@@ -39,7 +40,6 @@ class PLSEncoder(nn.Module):
     def forward(self, x):
         x_scores = torch.matmul(x, self.x_projector)
         return x_scores
-
 
 class PLSDecoderModel(nn.Module):
     def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset, decoder='mlp',
@@ -133,9 +133,9 @@ class PLSDecoderModel(nn.Module):
         targets = np.concatenate(targets)
         return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
     
-    def fit(self, dataset, train_indices, test_indices, verbose=True):
-        train_dataset = Subset(dataset, train_indices)
-        test_dataset = Subset(dataset, test_indices)
+    def fit(self, dataset, expanded_train_indices, expanded_test_indices, verbose=True):
+        train_dataset = Subset(dataset, expanded_train_indices)
+        test_dataset = Subset(dataset, expanded_test_indices)
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
@@ -151,8 +151,6 @@ class PLSGene2Conn(nn.Module):
         
         X_train = X[train_indices]
         Y_train = Y[train_indices][:, train_indices]
-        print(f"X_train shape: {X_train.shape}")
-        print(f"Y_train shape: {Y_train.shape}")
 
         self.pls_model = PLSRegression(n_components=n_components, max_iter=max_iter, scale=scale)
         self.pls_model.fit(X_train, Y_train)
@@ -171,8 +169,6 @@ class PLSConn2Conn(nn.Module):
         
         Y_train = Y[train_indices][:, train_indices]
         Y_intermediate = Y[train_indices][:, test_indices]
-        print(f"Y_train shape: {Y_train.shape}")
-        print(f"Y_intermediate shape: {Y_intermediate.shape}")
 
         self.pls_model = PLSRegression(n_components=n_components, max_iter=max_iter, scale=scale)
         self.pls_model.fit(Y_train, Y_intermediate)
@@ -184,7 +180,6 @@ class PLSConn2Conn(nn.Module):
 class PLSTwoStepModel(nn.Module):
     def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset, n_components_l=10, n_components_k=10, max_iter=1000, scale=True, binarize=False,):
         super().__init__()
-        
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         self.X = region_pair_dataset.X.numpy()
@@ -199,11 +194,7 @@ class PLSTwoStepModel(nn.Module):
     
     def forward(self, X):
         Y_train_pred = self.pls_step1(X)
-        print(f"Y_train_pred shape: {Y_train_pred.shape}")
-        
         Y_test_pred = self.pls_step2(Y_train_pred)
-        print(f"Y_test_pred shape: {Y_test_pred.shape}")
-
         return Y_test_pred
     
     def predict(self, X, indices, train=False):
@@ -211,11 +202,13 @@ class PLSTwoStepModel(nn.Module):
             Y_pred = self.pls_step1(self.X[indices])
         else:
             Y_pred = self(X[indices])
+        
         Y_true = self.Y[indices][:, indices]
         
-        # Remove diagonal elements
-        Y_pred_no_diag = Y_pred[~np.eye(Y_pred.shape[0], dtype=bool)]
-        Y_true_no_diag = Y_true[~np.eye(Y_true.shape[0], dtype=bool)]
+        # Expand Y matrices symmetrically
+        Y_pred_no_diag = expand_Y_symmetric(Y_pred)
+        Y_true_no_diag = expand_Y_symmetric(Y_true)
+        
         return Y_pred_no_diag, Y_true_no_diag
     
     def fit(self, dataset, train_indices, test_indices, verbose=True):        

@@ -128,6 +128,7 @@ class Metrics:
         self.distances = distances
         self.indices = indices
         self.network_labels = network_labels
+
         # convert cupy arrays to numpy arrays if necessary
         self.Y_true = getattr(Y_true, 'get', lambda: Y_true)()
         self.Y_pred = getattr(Y_pred, 'get', lambda: Y_pred)()
@@ -382,6 +383,45 @@ class Metrics:
         plt.tight_layout()
         plt.show()
 
+class ModelEvaluatorTorch:
+    def __init__(self, region_pair_dataset, model, Y, train_loader, train_indices, train_indices_expanded, test_loader, test_indices, test_indices_expanded, network_labels, train_shared_regions, test_shared_regions):        
+        self.region_pair_dataset = region_pair_dataset
+        self.X = region_pair_dataset.X.numpy()
+        self.train_distances_expanded = self.region_pair_dataset.distances_expanded[train_indices_expanded]
+        self.test_distances_expanded = self.region_pair_dataset.distances_expanded[test_indices_expanded]    
+        
+        self.model = model
+        self.train_loader = train_loader
+        self.train_indices = train_indices
+        print(f"train_indices: {self.train_indices}")
+        self.test_loader = test_loader
+        self.test_indices = test_indices
+        print(f"test_indices: {self.test_indices}")
+        self.network_labels = network_labels
+        self.train_shared_regions = train_shared_regions
+        self.test_shared_regions = test_shared_regions
+        self.Y = Y
+
+        self.binarize = len(np.unique(Y)) == 2
+        
+        self.train_metrics = self.evaluate(self.train_loader, self.train_indices, self.train_distances_expanded, not self.train_shared_regions, train=True)
+        self.test_metrics = self.evaluate(self.test_loader, self.test_indices, self.test_distances_expanded, not self.test_shared_regions, train=False)
+
+    def evaluate(self, loader, indices, distances, square, train=False):
+        try: 
+            self.Y_pred, self.Y_true = self.model.predict(loader)            
+        except: 
+            self.Y_pred, self.Y_true = self.model.predict(self.X, indices, train)
+
+        return Metrics(self.Y, indices, self.Y_true, self.Y_pred, square, self.binarize, self.network_labels, distances).get_metrics()
+
+    def get_train_metrics(self):
+        return self.train_metrics
+
+    def get_test_metrics(self):
+        return self.test_metrics
+    
+
 class ModelEvaluator:
     def __init__(self, model, Y, train_indices, test_indices, network_labels, X_train, Y_train, X_test, Y_test, train_shared_regions, test_shared_regions):        
         self.Y = Y
@@ -407,46 +447,6 @@ class ModelEvaluator:
     def evaluate(self, X, Y, indices, square):
         self.Y_pred = self.model.predict(X)        
         return Metrics(self.Y, indices, Y, self.Y_pred, square, self.binarize, self.network_labels).get_metrics()
-
-    def get_train_metrics(self):
-        return self.train_metrics
-
-    def get_test_metrics(self):
-        return self.test_metrics
-
-class ModelEvaluatorTorch:
-    def __init__(self, region_pair_dataset, model, Y, train_loader, train_indices, train_indices_expanded, test_loader, test_indices, test_indices_expanded, network_labels, train_shared_regions, test_shared_regions):        
-        self.region_pair_dataset = region_pair_dataset
-        self.X = region_pair_dataset.X.numpy()
-        self.train_distances_expanded = self.region_pair_dataset.distances_expanded[train_indices_expanded]
-        self.test_distances_expanded = self.region_pair_dataset.distances_expanded[test_indices_expanded]    
-        
-        self.model = model
-        self.train_loader = train_loader
-        self.train_indices = train_indices
-        self.test_loader = test_loader
-        self.test_indices = test_indices
-        self.network_labels = network_labels
-        self.train_shared_regions = train_shared_regions
-        self.test_shared_regions = test_shared_regions
-        self.Y = Y
-
-        self.binarize = len(np.unique(Y)) == 2
-        
-        self.train_metrics = self.evaluate(self.train_loader, self.train_indices, self.train_distances_expanded, not self.train_shared_regions, train=True)
-        self.test_metrics = self.evaluate(self.test_loader, self.test_indices, self.test_distances_expanded, not self.test_shared_regions, train=False)
-
-    def evaluate(self, loader, indices, distances, square, train=False):
-        try: 
-            self.Y_pred, self.Y_true = self.model.predict(loader)
-            print(f"Y_pred shape: {self.Y_pred.shape}")
-            print(f"Y_true shape: {self.Y_true.shape}")
-        except: 
-            self.Y_pred, self.Y_true = self.model.predict(self.X, indices, train)
-            print(f"Y_pred shape: {self.Y_pred.shape}")
-            print(f"Y_true shape: {self.Y_true.shape}")
-
-        return Metrics(self.Y, indices, self.Y_true, self.Y_pred, square, self.binarize, self.network_labels, distances).get_metrics()
 
     def get_train_metrics(self):
         return self.train_metrics

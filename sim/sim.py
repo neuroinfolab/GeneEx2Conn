@@ -278,10 +278,7 @@ class Simulation:
 
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]
-        if self.model_type == 'pls_twostep':
-            print('train_indices shape:', train_indices.shape)
-            print('test_indices shape:', test_indices.shape)
-            
+        if 'pls' in self.model_type:
             best_model = ModelClass(**best_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=self.region_pair_dataset).to(device)
         else:
             best_model = ModelClass(**best_config).to(device)
@@ -351,7 +348,10 @@ class Simulation:
                     for epoch, (train_loss, val_loss) in enumerate(zip(train_history['train_loss'], train_history['val_loss'])):
                         wandb.log({'train_mse_loss': train_loss, 'test_mse_loss': val_loss})
             else:
-                train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
+                if self.model_type == 'pls_twostep':
+                        train_history = best_model.fit(self.region_pair_dataset, train_indices, test_indices)
+                else: 
+                    train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
 
             train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
             test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
