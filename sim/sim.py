@@ -219,17 +219,14 @@ class Simulation:
         )
 
 
-    def run_innercv_wandb_torch(self, input_dim, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
+    def run_innercv_wandb_torch(self, input_dim, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3), sweep_id=None):
         """Inner cross-validation with W&B support for deep learning models"""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-        sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
-        sweep_id = None
         
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
 
         if self.skip_cv:
+            sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
             best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
             best_val_loss = 0.0 # no CV --> no best val loss
         else:
@@ -258,10 +255,6 @@ class Simulation:
                     null_model=self.null_model
                 )
             
-            # Initialize sweep
-            sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
-            print('sweep_id', sweep_id)
-
             # Run sweep
             wandb.agent(sweep_id, function=train_sweep_wrapper, count=search_method[2])
 
@@ -301,6 +294,15 @@ class Simulation:
         
         network_dict = self.cv_obj.networks
 
+        # Initialize sweep once for all inner folds if not skipping CV
+        sweep_id = None
+        if not self.skip_cv and (search_method[0] == 'wandb' or track_wandb):
+            input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
+            sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
+            sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
+            sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
+            print('Initialized sweep with ID:', sweep_id)
+
         for fold_idx, (train_indices, test_indices) in enumerate(self.cv_obj.split(self.X, self.Y)):
             
             train_region_pairs = expand_X_symmetric(train_indices.reshape(-1, 1)).astype(int)
@@ -311,7 +313,7 @@ class Simulation:
             
             innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
             input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
-            best_model, best_val_score, best_config, sweep_id = self.run_innercv_wandb_torch(input_dim, train_indices, test_indices, innercv_network_dict, fold_idx, search_method)
+            best_model, best_val_score, best_config, _ = self.run_innercv_wandb_torch(input_dim, train_indices, test_indices, innercv_network_dict, fold_idx, search_method, sweep_id)
             
             if track_wandb:
                 feature_str = "+".join(str(k) if v is None else f"{k}_{v}" 

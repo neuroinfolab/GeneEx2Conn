@@ -11,11 +11,11 @@ hemisphere: 'both'
 connectome_target: 'FC'
 binarize: false
 
-# Gene expression 
+# Gene expression
 impute_strategy: 'mirror_interpolate'
 sort_genes: 'expression'
 gene_list: '0.2'
-null_model: false
+null_model: 'none'
 
 # Cross-validation
 cv_type: random

@@ -13,7 +13,7 @@ parameters:
   n_components_l:
     values: [2, 3, 5, 7, 8, 9, 10, 15, 20, 30]
   n_components_k:
-    values: [2, 3, 5, 7, 8, 9, 10, 15, 20, 30]
+    values: [2, 3, 5, 7, 8, 9, 10]
   max_iter:
     values: [1000]
   scale:
@@ -25,9 +25,9 @@ best_parameters:
   binarize: 
     value: !!int 0
   n_components_l:
-    values: [15]
+    values: [10]
   n_components_k:
-    values: [15]
+    values: [5]
   max_iter:
     values: [1000]
   scale:

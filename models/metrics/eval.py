@@ -393,10 +393,8 @@ class ModelEvaluatorTorch:
         self.model = model
         self.train_loader = train_loader
         self.train_indices = train_indices
-        print(f"train_indices: {self.train_indices}")
         self.test_loader = test_loader
         self.test_indices = test_indices
-        print(f"test_indices: {self.test_indices}")
         self.network_labels = network_labels
         self.train_shared_regions = train_shared_regions
         self.test_shared_regions = test_shared_regions

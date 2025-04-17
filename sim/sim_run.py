@@ -1,5 +1,6 @@
 import sys
 import os
+import argparse
 relative_root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # print('relative_root_path', relative_root_path)
 absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
@@ -159,13 +160,27 @@ def load_config(config_path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python -m sim.sim_run <config.yml>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='Run simulation with config file and optional overrides')
+    parser.add_argument('config', help='Path to config file')
+    parser.add_argument('--model_type', help='Override model type from config')
+    parser.add_argument('--n_cvs', type=int, help='Override number of CVs from config')
+    args = parser.parse_args()
 
-    config_path = sys.argv[1]
-    config = load_config(config_path)
+    config = load_config(args.config)
+    
+    # Override config values if command line arguments are provided
+    if args.model_type:
+        config['model_type'] = args.model_type
+    
+    if args.n_cvs is not None:
+        # Update the search_method tuple with new n_cvs value
+        search_method = config.get('search_method', ('wandb', 'mse', 5))
+        config['search_method'] = (search_method[0], search_method[1], args.n_cvs)
 
+    print(f"Running simulation with config: {args.config}")
+    print(f"Model type: {config['model_type']}")
+    print(f"Search method: {config['search_method']}")
+    
     print(torch.cuda.is_available())    
     print(os.environ.get("CUDA_VISIBLE_DEVICES"))
     for i in range(torch.cuda.device_count()):
