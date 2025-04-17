@@ -4,6 +4,296 @@ from matplotlib.lines import Line2D
 from ipywidgets import interact
 import ipywidgets as widgets
 import imageio
+from data.data_load import load_transcriptome, load_network_labels, load_connectome
+
+def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subcortical=False, 
+                  hemisphere='both', add_network_labels=False, add_hemisphere_labels=False,
+                  title=None, fontsize=24, figsize=(12, 10)):
+    """
+    Function to plot the connectome with either network or hemisphere labels.
+    
+    Parameters:
+    -----------
+    parcellation (str): Brain parcellation ('S100', 'S400'). Default: 'S100'
+    dataset (str): Dataset to load. Default: 'AHBA'
+    measure (str): Connectivity type ('FC', 'SC'). Default: 'FC'
+    omit_subcortical (bool): Exclude subcortical regions. Default: False
+    hemisphere (str): Brain hemisphere ('both', 'left', 'right'). Default: 'both'
+    add_network_labels (bool): Whether to add network labels. Default: False
+    add_hemisphere_labels (bool): Whether to add hemisphere labels. Default: False
+    title (str): Title for the plot. Default: None
+    fontsize (int): Font size for labels. Default: 20
+    figsize (tuple): Figure size. Default: (12, 10)
+    """
+    if add_network_labels and add_hemisphere_labels:
+        raise ValueError("Cannot display both network and hemisphere labels. Please choose one.")
+    
+    # Load the connectome data
+    Y = load_connectome(
+        parcellation=parcellation,
+        dataset=dataset,
+        measure=measure,
+        omit_subcortical=omit_subcortical,
+        hemisphere=hemisphere
+    )
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=figsize, dpi=300)
+    
+    # Set up colormap scaling based on measure type
+    if measure == 'SC':
+        vmin, vmax = 0, 1
+        cmap = 'Reds'
+    else:  # FC
+        vmin, vmax = -0.8, 0.8
+        cmap = 'RdBu_r'
+    
+    # Create the heatmap
+    cax = ax.imshow(Y, cmap=cmap, vmin=vmin, vmax=vmax)
+    
+    if add_network_labels:
+        # Get network labels
+        _, network_labels = load_network_labels(
+            parcellation=parcellation,
+            omit_subcortical=omit_subcortical,
+            hemisphere=hemisphere
+        )
+        
+        # Draw lines between different adjacent labels
+        prev_label = network_labels[0]
+        for i in range(1, len(network_labels)):
+            if network_labels[i] != prev_label:
+                ax.axhline(y=i-0.5, color='black', linewidth=0.5)
+                ax.axvline(x=i-0.5, color='black', linewidth=0.5)
+                prev_label = network_labels[i]
+        
+        # Create tick positions and labels
+        tick_positions = []
+        tick_labels = []
+        start_idx = 0
+        prev_label = network_labels[0]
+        
+        for i in range(1, len(network_labels)):
+            if network_labels[i] != prev_label:
+                tick_positions.append((start_idx + i - 1) / 2)
+                tick_labels.append(prev_label)
+                start_idx = i
+                prev_label = network_labels[i]
+        
+        # Add the last group
+        tick_positions.append((start_idx + len(network_labels) - 1) / 2)
+        tick_labels.append(prev_label)
+        
+        # Add network labels
+        plt.xticks(tick_positions, tick_labels, rotation=45, ha='right', fontsize=fontsize-4)
+        plt.yticks(tick_positions, tick_labels, fontsize=fontsize-4)
+        
+    elif add_hemisphere_labels:
+        # Remove default ticks
+        ax.set_xticks([])
+        ax.set_yticks([])
+        
+        # Add hemisphere labels on left axis only
+        if parcellation == 'S100':
+            if omit_subcortical:
+                ticks = [25, 75]
+                labels = ['LH', 'RH']
+                lines = [0, 50, 100]
+            else:
+                ticks = [25, 75, 107]
+                labels = ['LH', 'RH', 'SCTX']
+                lines = [0, 50, 100, 114]
+        elif parcellation == 'S400':
+            if omit_subcortical:
+                ticks = [100, 300]
+                labels = ['LH', 'RH']
+                lines = [0, 200, 400]
+            else:
+                ticks = [100, 300, 423]
+                labels = ['LH', 'RH', 'SCTX']
+                lines = [0, 200, 400, 456]
+        
+        # Add labels on left axis only
+        left_ay = ax.secondary_yaxis('left')
+        left_ay.set_yticks(ticks, labels)
+        left_ay.tick_params('y', length=0, labelsize=fontsize)
+        
+        # Add lines
+        left_ay_lines = ax.secondary_yaxis('left')
+        left_ay_lines.set_yticks(lines, labels=[])
+        left_ay_lines.tick_params('y', length=20, width=1.5)
+    
+    # Set default title based on measure if not provided
+    if title is None:
+        title = 'Structural Connectivity' if measure == 'SC' else 'Functional Connectivity'
+    plt.title(title, fontsize=fontsize)
+    
+    # Add colorbar
+    plt.tight_layout()
+    cbar = plt.colorbar(cax, shrink=0.8, pad=0.02)
+    cbar.set_label('Connectivity Strength', fontsize=fontsize-2)
+    cbar.ax.tick_params(labelsize=fontsize-2)
+    
+    plt.show()
+
+
+def plot_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, 
+                      omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', 
+                      sort_genes='expression', null_model='none', random_seed=42, 
+                      cmap='viridis', title='Allen Human Brain Atlas Gene Expression', fontsize=20, 
+                      add_hemisphere_labels=True, add_network_labels=True):
+    """
+    Function to plot the transcriptome
+    """
+    # Load the transcriptome data
+    X = load_transcriptome(
+        parcellation=parcellation,
+        gene_list=gene_list,
+        dataset=dataset,
+        run_PCA=run_PCA,
+        omit_subcortical=omit_subcortical,
+        hemisphere=hemisphere,
+        impute_strategy=impute_strategy,
+        sort_genes=sort_genes,
+        null_model=null_model,
+        random_seed=random_seed
+    )
+    
+    # Create the plot with high resolution
+    fig, ax = plt.subplots(figsize=(12, 8), dpi=300)
+    cax = ax.imshow(X, aspect=10, cmap=cmap)
+    
+    # Add title
+    plt.title(title, fontsize=fontsize)
+    
+    # Add labels
+    plt.xlabel(f'Genes (n={X.shape[1]})', fontsize=fontsize)
+    
+    # Remove default ticks
+    ax.set_xticks([])
+    ax.set_yticks([])
+    
+    # Add hemisphere labels if requested
+    if add_hemisphere_labels:
+        # Add region labels on left y-axis
+        left_ay = ax.secondary_yaxis('left')
+        
+        # Determine the number of regions and their distribution
+        n_regions = X.shape[0]
+        
+        if parcellation == 'S100':
+            if omit_subcortical:
+                left_ay.set_yticks([25, 75], labels=['LH', 'RH'])
+                left_ay_lines = ax.secondary_yaxis('left')
+                left_ay_lines.set_yticks([0, 50, 100], labels=[])
+            else:
+                left_ay.set_yticks([25, 75, 107], labels=['LH', 'RH', 'SCTX'])
+                left_ay_lines = ax.secondary_yaxis('left')
+                left_ay_lines.set_yticks([0, 50, 100, 114], labels=[])
+        elif parcellation == 'S400':
+            if omit_subcortical:
+                left_ay.set_yticks([100, 300], labels=['LH', 'RH'])
+                left_ay_lines = ax.secondary_yaxis('left')
+                left_ay_lines.set_yticks([0, 200, 400], labels=[])
+            else:
+                left_ay.set_yticks([100, 300, 423], labels=['LH', 'RH', 'SCTX'])
+                left_ay_lines = ax.secondary_yaxis('left')
+                left_ay_lines.set_yticks([0, 200, 400, 456], labels=[])
+        
+        # Configure the left y-axis
+        left_ay.tick_params('y', length=0, labelsize=fontsize)
+        left_ay_lines.tick_params('y', length=20, width=1.5)
+        
+        # Add network labels if requested
+        if add_network_labels:
+            # Add network labels on right y-axis
+            _, network_labels = load_network_labels(parcellation=parcellation, omit_subcortical=omit_subcortical, hemisphere=hemisphere)
+            
+            # Get unique network labels and their positions
+            unique_networks = []
+            network_positions = []
+            prev_network = network_labels[0]
+            start_pos = 0
+            
+            for i, network in enumerate(network_labels):
+                if network != prev_network:
+                    unique_networks.append(prev_network)
+                    network_positions.append((start_pos + i - 1) / 2)
+                    start_pos = i
+                    prev_network = network
+            
+            # Add final network
+            unique_networks.append(prev_network)
+            network_positions.append((start_pos + len(network_labels) - 1) / 2)
+            
+            # Add network labels on right y-axis
+            right_ay = ax.secondary_yaxis('right')
+            right_ay.set_yticks(network_positions, labels=unique_networks)
+            right_ay.tick_params('y', length=0, labelsize=fontsize-6)
+    
+            # Add colorbar last to ensure it doesn't overlap with y-axis labels
+            plt.tight_layout()  # Adjust layout before adding colorbar
+            cbar = plt.colorbar(cax, shrink=0.5, pad=0.13)  # Add small padding
+            cbar.set_label('Expression Level', fontsize=fontsize-2)
+            cbar.ax.tick_params(labelsize=fontsize-2)
+        
+    plt.tight_layout()  # Adjust layout before adding colorbar
+    cbar = plt.colorbar(cax, shrink=0.5)
+    cbar.set_label('Expression Level', fontsize=fontsize-2)
+    cbar.ax.tick_params(labelsize=fontsize-2)
+    
+    plt.show()
+
+def plot_connectome_with_labels(Y, labels):
+    """
+    Function to plot the connectome with network labels.
+    
+    Parameters:
+    Y (ndarray): Connectivity matrix.
+    labels (list): List of region labels with network information.
+    """
+    networks = ['Vis', 'SomMot', 'DorsAttn', 'SalVentAttn', 'Limbic', 'Cont', 'Default', 'Subcortical']
+    
+    # Create a new ordering of nodes based on network
+    new_order = []
+    network_indices = {network: [] for network in networks}
+    
+    for idx, label in enumerate(labels):
+        for network in networks:
+            if network in label:
+                network_indices[network].append(idx)
+                break
+        else:  # Handle Subcortical case
+            if label.startswith(('L', 'R')):
+                network_indices['Subcortical'].append(idx)
+    
+    for network in networks:
+        new_order.extend(network_indices[network])
+    
+    # Map the original indices to the new ordering
+    index_map = {old_idx: new_idx for new_idx, old_idx in enumerate(new_order)}
+    
+    # Reorder the matrix
+    Y_reordered = Y[np.ix_(new_order, new_order)]
+    
+    # Visualize the reordered matrix
+    fig, ax = plt.subplots(figsize=(10, 10))
+    cax = ax.imshow(Y_reordered, cmap='viridis', vmin=0, vmax=np.max(Y))
+
+    # Add red boxes around networks and place labels to the right
+    start = 0
+    for network in networks:
+        size = len(network_indices[network])
+        if size > 0:
+            rect = patches.Rectangle((start, start), size, size, linewidth=2, edgecolor='red', facecolor='none')
+            ax.add_patch(rect)
+            ax.text(start + size + 2, start + size / 2, network, ha='left', va='center', fontsize=16, color='yellow')
+            start += size
+    
+    #plt.title('Reordered Connectivity Matrix by Network Structure', fontsize=16)
+    plt.xlabel('Regions', fontsize=14)
+    plt.ylabel('Regions', fontsize=14)
+    plt.show()
 
 def get_gene_expression_colors(X, valid_genes=None, gene_name=None):
     """
@@ -374,98 +664,3 @@ def visualize_3d(X, Y, coords, edge_threshold=0.5, valid_genes=None, gene_name=N
     plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95)
     
     plt.show()
-
-
-def plot_connectome(Y):
-    """
-    Function to plot the connectome without network labels.
-    
-    Parameters:
-    Y (ndarray): Connectivity matrix.
-    """
-    # Visualize the matrix
-    fig, ax = plt.subplots(figsize=(10, 10))
-    cax = ax.imshow(Y, cmap='Reds', vmin=0, vmax=1)
-    
-    # Add colorbar
-    plt.colorbar(cax, shrink=0.8)
-    
-    #plt.title('Connectivity Matrix', fontsize=16)
-    plt.xlabel('Regions', fontsize=14)
-    plt.ylabel('Regions', fontsize=14)
-    plt.show()
-
-
-def plot_transcriptome(X):
-    """
-    Function to plot the transcriptome data.
-    
-    Parameters:
-    X (ndarray): Transcriptome data matrix.
-    """
-    fig, ax = plt.subplots(figsize=(15, 10))
-    cax = ax.imshow(X, aspect=40, cmap='viridis')
-    
-    # Add colorbar
-    plt.colorbar(cax, shrink=0.5)
-    
-    #plt.title('Transcriptome Data', fontsize=16)
-    plt.xlabel('Genes', fontsize=14)
-    plt.ylabel('Regions', fontsize=14)
-    plt.show()
-
-def plot_connectome_with_labels(Y, labels):
-    """
-    Function to plot the connectome with network labels.
-    
-    Parameters:
-    Y (ndarray): Connectivity matrix.
-    labels (list): List of region labels with network information.
-    """
-    networks = ['Vis', 'SomMot', 'DorsAttn', 'SalVentAttn', 'Limbic', 'Cont', 'Default', 'Subcortical']
-    
-    # Create a new ordering of nodes based on network
-    new_order = []
-    network_indices = {network: [] for network in networks}
-    
-    for idx, label in enumerate(labels):
-        for network in networks:
-            if network in label:
-                network_indices[network].append(idx)
-                break
-        else:  # Handle Subcortical case
-            if label.startswith(('L', 'R')):
-                network_indices['Subcortical'].append(idx)
-    
-    for network in networks:
-        new_order.extend(network_indices[network])
-    
-    # Map the original indices to the new ordering
-    index_map = {old_idx: new_idx for new_idx, old_idx in enumerate(new_order)}
-    
-    # Reorder the matrix
-    Y_reordered = Y[np.ix_(new_order, new_order)]
-    
-    # Visualize the reordered matrix
-    fig, ax = plt.subplots(figsize=(10, 10))
-    cax = ax.imshow(Y_reordered, cmap='viridis', vmin=0, vmax=np.max(Y))
-
-    # Add red boxes around networks and place labels to the right
-    start = 0
-    for network in networks:
-        size = len(network_indices[network])
-        if size > 0:
-            rect = patches.Rectangle((start, start), size, size, linewidth=2, edgecolor='red', facecolor='none')
-            ax.add_patch(rect)
-            ax.text(start + size + 2, start + size / 2, network, ha='left', va='center', fontsize=16, color='yellow')
-            start += size
-    
-    #plt.title('Reordered Connectivity Matrix by Network Structure', fontsize=16)
-    plt.xlabel('Regions', fontsize=14)
-    plt.ylabel('Regions', fontsize=14)
-    plt.show()
-
-
-
-
-

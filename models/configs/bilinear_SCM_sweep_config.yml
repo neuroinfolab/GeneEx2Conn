@@ -4,31 +4,21 @@ metric:
   name: mean_val_loss
   goal: minimize
 
-### TRANSCRIPTOME PCA, 100 parc full brain
 parameters:
   input_dim:
     value: !!int 0
   binarize:
     value: !!int 0
   learning_rate:
-    distribution: log_uniform_values
-    min: 0.0005
-    max: 0.005
+    values: [0.00009, 0.0005, 0.001, 0.002]
   batch_size:
-    distribution: int_uniform
-    min: 256
-    max: 512
+    values: [256, 400, 512]
   regularization:
-    distribution: categorical
     values: ['l2'] # l2 in line with literature
   lambda_reg:
-    distribution: log_uniform_values
-    min: 0.0005
-    max: 0.5
+    values: [0, 0.001, 0.01, 0.1]
   epochs:
-    distribution: int_uniform
-    min: 150
-    max: 250
+    values: [100, 150, 200]
 
 best_parameters:
   input_dim:
