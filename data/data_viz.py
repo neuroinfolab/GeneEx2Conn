@@ -132,8 +132,7 @@ def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subc
     plt.tight_layout()
     cbar = plt.colorbar(cax, shrink=0.8, pad=0.02)
     cbar.set_label('Connectivity Strength', fontsize=fontsize-2)
-    cbar.ax.tick_params(labelsize=fontsize-2)
-    
+    cbar.ax.tick_params(labelsize=fontsize-2)    
     plt.show()
 
 
@@ -236,13 +235,20 @@ def plot_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             cbar = plt.colorbar(cax, shrink=0.5, pad=0.13)  # Add small padding
             cbar.set_label('Expression Level', fontsize=fontsize-2)
             cbar.ax.tick_params(labelsize=fontsize-2)
-        
-    plt.tight_layout()  # Adjust layout before adding colorbar
-    cbar = plt.colorbar(cax, shrink=0.5)
-    cbar.set_label('Expression Level', fontsize=fontsize-2)
-    cbar.ax.tick_params(labelsize=fontsize-2)
+        else:
+            plt.tight_layout()  # Adjust layout before adding colorbar
+            cbar = plt.colorbar(cax, shrink=0.5)
+            cbar.set_label('Expression Level', fontsize=fontsize-2)
+            cbar.ax.tick_params(labelsize=fontsize-2)
+    else: 
+        plt.tight_layout()  # Adjust layout before adding colorbar
+        cbar = plt.colorbar(cax, shrink=0.5)
+        cbar.set_label('Expression Level', fontsize=fontsize-2)
+        cbar.ax.tick_params(labelsize=fontsize-2)
     
     plt.show()
+
+
 
 def plot_connectome_with_labels(Y, labels):
     """
