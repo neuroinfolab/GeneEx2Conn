@@ -139,56 +139,25 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             print('spinning gene expression')
             lh_annot, rh_annot = netneurotools.datasets.fetch_schaefer2018('fsaverage', data_dir='data/UKBB', verbose=1)['400Parcels7Networks']
             coords, hemi = netneurotools.freesurfer.find_parcel_centroids(lhannot=lh_annot, rhannot=rh_annot, surf='sphere')
-            spins, cost = nnstats.gen_spinsamples(coords, hemi, n_rotate=1, seed=random_seed, return_cost=True, method='vasa')
+            spins, cost = nnstats.gen_spinsamples(coords, hemi, n_rotate=1, seed=random_seed, method='vasa',return_cost=True)
             # (method=original (Bloch) may give duplicates; Vasa, Hungarian will not)
             spin_indices = spins[:, 0]
             if omit_subcortical:
                 genes_data = genes_data[spin_indices]
             else:
-                full_coords = load_coords(parcellation=parcellation, omit_subcortical=False)
-                n_cortical = (genes_data.shape[0] // 100) * 100
-                cortical = genes_data[:n_cortical][spin_indices]
-                subcortical = genes_data[n_cortical:]
-                subcort_coords = full_coords[n_cortical:]
-                
-                # Attempt 1
-                # Compute inverse-distance weight matrix
-                D = cdist(subcort_coords, subcort_coords)
-                np.fill_diagonal(D, np.inf)
+                all_region_coords = load_coords(parcellation=parcellation, omit_subcortical=False)
+                n_cortical_regions = (genes_data.shape[0] // 100) * 100
+                cortical_genes_data_spun = genes_data[:n_cortical_regions][spin_indices]
+                subcortical_genes_data = genes_data[n_cortical_regions:]
+                subcortical_coords = all_region_coords[n_cortical_regions:]
 
-                # Build inverse-distance weight matrix
-                W = 1 / D
+                x_coords = subcortical_coords[:, 0]
+                hemi_subcort = np.zeros_like(x_coords)
+                hemi_subcort[x_coords > 0] = 1
 
-                # Sparsify: keep only top k neighbors
-                k = 10
-                for i in range(W.shape[0]):
-                    sorted_idx = np.argsort(W[i])[::-1]
-                    W[i, sorted_idx[k:]] = 0
-
-                # Make symmetric and row-normalize
-                W = (W + W.T) / 2
-                W = W / W.sum(axis=1, keepdims=True)
-
-                plt.imshow(W)
-
-                # Attempt 2
-                # Use RBF (Gaussian) kernel to compute spatial affinity matrix
-                # W2 = compute_affinity(subcort_coords, kernel='gaussian', sparsity=0.1, pre_sparsify=False, non_negative=True, gamma=None)
-                # print(W2)
-                # plt.subplot(122)
-                # plt.imshow(W2)
-                # plt.title('RBF Kernel Matrix') 
-                # plt.colorbar()
-                # plt.tight_layout()
-                
-                
-                
-                msr = MoranRandomization(n_rep=1, procedure='singleton', spectrum='nonzero', joint=False, tol=1e-10, random_state=random_seed)
-                msr.fit(W)
-
-                subcortical_null = msr.randomize(subcortical)[0]
-                genes_data = np.vstack([cortical, subcortical_null])
-                
+                subcortical_spins, _ = nnstats.gen_spinsamples(subcortical_coords, hemi_subcort,n_rotate=1, method='vasa', seed=random_seed, return_cost=True)
+                subcortical_genes_data_spun = subcortical_genes_data[subcortical_spins[:, 0]]
+                genes_data = np.vstack([cortical_genes_data_spun, subcortical_genes_data_spun])                
         elif null_model == 'random':
             print('permuting gene expression')
             rng = np.random.default_rng(random_seed)
