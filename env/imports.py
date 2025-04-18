@@ -127,7 +127,4 @@ from nichord.chord import plot_chord
 from nichord.glassbrain import plot_glassbrain
 from nichord.combine import combine_imgs, plot_and_combine
 from nichord.coord_labeler import get_idx_to_label
-import netneurotools
-from netneurotools import stats as nnstats
-from netneurotools import freesurfer as nnsurf
 import nibabel as nib

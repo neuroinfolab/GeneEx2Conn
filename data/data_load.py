@@ -1,8 +1,11 @@
 from env.imports import *
-import brainspace
-from brainspace.gradient.kernels import compute_affinity
-from brainspace.null_models import MoranRandomization
+
+# import brainspace
+# from brainspace.gradient.kernels import compute_affinity
+# from brainspace.null_models import MoranRandomization
 from scipy.spatial.distance import cdist
+
+
 relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data'
 absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'
 
@@ -28,7 +31,6 @@ def _apply_pca(data, var_thresh=0.95):
         data_pca[valid_rows] = data_pca_valid[:, :n_components]
         
         return data_pca
-
 
 def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='expression', return_valid_genes=False, null_model='none', random_seed=42):
     """
@@ -138,8 +140,9 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         if null_model == 'spin':
             print('spinning gene expression')
             lh_annot, rh_annot = netneurotools.datasets.fetch_schaefer2018('fsaverage', data_dir='data/UKBB', verbose=1)['400Parcels7Networks']
-            coords, hemi = netneurotools.freesurfer.find_parcel_centroids(lhannot=lh_annot, rhannot=rh_annot, surf='sphere')
+            coords, hemi = netneurotools.freesurfer.find_fsaverage_centroids(lhannot=lh_annot, rhannot=rh_annot, surf='sphere')
             spins, cost = nnstats.gen_spinsamples(coords, hemi, n_rotate=1, seed=random_seed, method='vasa',return_cost=True)
+
             # (method=original (Bloch) may give duplicates; Vasa, Hungarian will not)
             spin_indices = spins[:, 0]
             if omit_subcortical:

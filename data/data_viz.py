@@ -6,6 +6,11 @@ import ipywidgets as widgets
 import imageio
 from data.data_load import load_transcriptome, load_network_labels, load_connectome
 
+import netneurotools
+from netneurotools.datasets import fetch_schaefer2018
+from netneurotools.plotting import plot_fsaverage
+
+
 def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subcortical=False, 
                   hemisphere='both', add_network_labels=False, add_hemisphere_labels=False,
                   title=None, fontsize=24, figsize=(12, 10)):
@@ -140,7 +145,7 @@ def plot_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
                       omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', 
                       sort_genes='expression', null_model='none', random_seed=42, 
                       cmap='viridis', title='Allen Human Brain Atlas Gene Expression', fontsize=20, 
-                      add_hemisphere_labels=True, add_network_labels=True):
+                      add_hemisphere_labels=True, add_network_labels=True, jupyter=True):
     """
     Function to plot the transcriptome
     """
@@ -246,8 +251,13 @@ def plot_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         cbar.set_label('Expression Level', fontsize=fontsize-2)
         cbar.ax.tick_params(labelsize=fontsize-2)
     
-    plt.show()
-
+    if jupyter:
+        plt.show()
+    else:
+        # Save to glass folder
+        save_path = os.path.join('glass', 'transcriptome.png')
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.close()
 
 
 def plot_connectome_with_labels(Y, labels):
