@@ -5,6 +5,16 @@ from env.imports import *
 # from brainspace.null_models import MoranRandomization
 from scipy.spatial.distance import cdist
 
+import nibabel as nib
+
+import netneurotools
+from netneurotools.datasets import fetch_schaefer2018
+from netneurotools.plotting import plot_fsaverage
+from netneurotools import datasets as nndata
+from netneurotools import freesurfer as nnsurf
+from netneurotools import stats as nnstats
+
+
 
 relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data'
 absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'
@@ -139,8 +149,10 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         
         if null_model == 'spin':
             print('spinning gene expression')
-            lh_annot, rh_annot = netneurotools.datasets.fetch_schaefer2018('fsaverage', data_dir='data/UKBB', verbose=1)['400Parcels7Networks']
-            coords, hemi = netneurotools.freesurfer.find_fsaverage_centroids(lhannot=lh_annot, rhannot=rh_annot, surf='sphere')
+            lh_annot, rh_annot = nndata.fetch_schaefer2018('fsaverage', data_dir='data/UKBB', verbose=1)['400Parcels7Networks']
+            # https://netneurotools.readthedocs.io/en/stable/generated/netneurotools.freesurfer.find_parcel_centroids.html#netneurotools.freesurfer.find_parcel_centroids
+            coords, hemi = nnsurf.find_parcel_centroids(lhannot=lh_annot, rhannot=rh_annot, version='fsaverage', surf='sphere')
+            # https://netneurotools.readthedocs.io/en/stable/generated/netneurotools.stats.gen_spinsamples.html
             spins, cost = nnstats.gen_spinsamples(coords, hemi, n_rotate=1, seed=random_seed, method='vasa',return_cost=True)
 
             # (method=original (Bloch) may give duplicates; Vasa, Hungarian will not)

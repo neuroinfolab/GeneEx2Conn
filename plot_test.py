@@ -28,23 +28,55 @@ plot_transcriptome(
 #from netneurotools.freesurfer import find_fsaverage_centroids
 import neuromaps
 from neuromaps import datasets, images, plotting
+from neuromaps import images, nulls
+from neuromaps import datasets, plotting, resampling
 
-# Fetch fsaverage surface atlas
-fsaverage = datasets.fetch_fsaverage(density='41k', verbose=1)
+# # Directory structure
+# DATA_DIR = '/scratch/asr655/neuroinformatics/GeneEx2Conn/data'
+# GLASS_DIR = '/scratch/asr655/neuroinformatics/GeneEx2Conn/glass'
 
-# Generate dummy cortical data (left and right hemispheres)
-data_lh = np.random.rand(41962)  # vertices for fsaverage 41k
-data_rh = np.random.rand(41962)  
+# # Fetch ABAGEN PC1 annotation from neuromaps
+# abagen_pc1 = datasets.fetch_annotation(source='abagen', desc='pc1', space='fsaverage', den='41k')
+# print(abagen_pc1)
 
-# Plot and save
-fig = plotting.plot_surf_template(
-    (data_lh, data_rh),
-    template='fsaverage',
-    density='41k',
+# # Load PC1 data
+# # lh_pc1, rh_pc1 = abagen_pc1  # These are GIFTI image paths
+
+# # Resample if necessary (we'll stick with fsaverage for this test)
+# # Note: This assumes both hemispheres are in the correct format and resolution
+
+# # Plot PC1 values on the fsaverage surface and save
+# plotting.plot_surf(
+#     (abagen_pc1),
+#     template='fsaverage',
+#     surf='inflated',
+#     hemi='both',
+#     layout='row',
+#     show=False,
+#     save=os.path.join(GLASS_DIR, 'abagen_pc1_fsaverage.png')
+# )
+
+# print("Saved PC1 visualization to:", os.path.join(GLASS_DIR, 'abagen_pc1_fsaverage.png'))
+
+from neuromaps.datasets import fetch_annotation
+from neuromaps.plotting import plot_hemispheres
+
+# Set the path to your 'glass' directory
+glass_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn/glass'
+
+# Fetch the Abagen PC1 annotation in fsaverage space with 10k density
+abagen_pc1 = fetch_annotation(source='abagen', desc='genepc1', space='fsaverage', den='10k')
+
+# Plot the left and right hemispheres
+fig, axes = plot_hemispheres(
+    abagen_pc1,
     surf='inflated',
-    mask_medial=True,
-    cmap='viridis'
+    colorbar=True,
+    cmap='viridis',
+    size=(800, 400)
 )
 
-# Save the figure
-fig.savefig('/scratch/asr655/neuroinformatics/GeneEx2Conn/glass/test_surface_plot.png')
+# Save the figure to the 'glass' directory
+output_path = os.path.join(glass_dir, 'abagen_pc1_surface.png')
+plt.savefig(output_path, dpi=300, bbox_inches='tight')
+plt.close()
