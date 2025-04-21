@@ -6,9 +6,7 @@ import ipywidgets as widgets
 import imageio
 from data.data_load import load_transcriptome, load_network_labels, load_connectome
 
-import netneurotools
-from netneurotools.datasets import fetch_schaefer2018
-from netneurotools.plotting import plot_fsaverage
+
 
 
 def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subcortical=False, 

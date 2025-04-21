@@ -384,16 +384,22 @@ def expand_shared_matrices(X_train, X_train2, Y_train2, Y_train_feats1=np.nan, Y
 def expand_X_symmetric(X):
     """
     Expands the X matrix symmetrically by combining features from pairs of regions.
+    For each pair of regions, creates two rows by concatenating their features in both orders.
 
     Parameters:
-    X (numpy.ndarray): Input matrix of gene expressions.
+    X (numpy.ndarray): Input matrix of gene expressions, shape (num_regions, num_genes)
+                      where num_regions is the number of brain regions and 
+                      num_genes is the number of gene features per region
 
     Returns:
-    numpy.ndarray: Expanded symmetric matrix.
+    numpy.ndarray: Expanded symmetric matrix, shape (region pairs * 2, 2 * num_genes)
+                  where region pairs = (num_regions choose 2)
+                  Each row contains concatenated features from two regions
+                  For each region pair (i,j), creates rows [features_i|features_j] and [features_j|features_i]
     """
     num_regions, num_genes = X.shape
     region_combinations = list(combinations(range(num_regions), 2))
-    num_combinations = len(region_combinations)
+    num_combinations = len(region_combinations)  # Equal to (num_regions * (num_regions-1))/2
 
     expanded_X = np.zeros((num_combinations * 2, 2 * num_genes))
     
@@ -409,16 +415,20 @@ def expand_Y_symmetric(Y):
     Expands the Y matrix symmetrically by extracting pairwise connectivity values.
 
     Parameters:
-    Y (numpy.ndarray): Input matrix of connectome values.
+    Y (numpy.ndarray): Input matrix of connectome values, shape (num_regions, num_regions)
+                      where num_regions is the number of brain regions
 
     Returns:
-    numpy.ndarray: Expanded symmetric vector.
+    numpy.ndarray: Expanded symmetric vector, shape (region pairs * 2,)
+                  where region pairs = (num_regions choose 2) = (num_regions * (num_regions-1))/2
+                  For each region pair (i,j), contains both Y[i,j] and Y[j,i] values
+                  Total length is num_regions * (num_regions-1)
     """
     num_regions = Y.shape[0]
     region_combinations = list(combinations(range(num_regions), 2))
-    num_combinations = len(region_combinations)
+    num_combinations = len(region_combinations)  # Equal to (num_regions * (num_regions-1))/2
     
-    expanded_Y = np.zeros(num_combinations * 2)
+    expanded_Y = np.zeros(num_combinations * 2)  # Length = num_regions * (num_regions-1)
     
     for i, (region1, region2) in enumerate(region_combinations):
         expanded_Y[i * 2] = Y[region1, region2]
