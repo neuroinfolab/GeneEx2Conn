@@ -170,7 +170,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
                 hemi_subcort = np.zeros_like(x_coords)
                 hemi_subcort[x_coords > 0] = 1
 
-                subcortical_spins, _ = nnstats.gen_spinsamples(subcortical_coords, hemi_subcort,n_rotate=1, method='vasa', seed=random_seed, return_cost=True)
+                subcortical_spins, _ = nnstats.gen_spinsamples(subcortical_coords, hemi_subcort, n_rotate=1, method='vasa', seed=random_seed, return_cost=True)
                 subcortical_genes_data_spun = subcortical_genes_data[subcortical_spins[:, 0]]
                 genes_data = np.vstack([cortical_genes_data_spun, subcortical_genes_data_spun])                
         elif null_model == 'random':
