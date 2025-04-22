@@ -170,6 +170,8 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
                 hemi_subcort = np.zeros_like(x_coords)
                 hemi_subcort[x_coords > 0] = 1
 
+                # To compare spatial overlap between subcortical maps, we employed a similar approach with the exception that subcortical labels were randomly shuffled as opposed to being projected onto spheres.
+                # https://enigma-toolbox.readthedocs.io/en/latest/pages/08.spintest/
                 subcortical_spins, _ = nnstats.gen_spinsamples(subcortical_coords, hemi_subcort, n_rotate=1, method='vasa', seed=random_seed, return_cost=True)
                 subcortical_genes_data_spun = subcortical_genes_data[subcortical_spins[:, 0]]
                 genes_data = np.vstack([cortical_genes_data_spun, subcortical_genes_data_spun])                
