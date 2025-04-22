@@ -84,8 +84,13 @@ class PLSDecoderModel(nn.Module):
             self.output_layer = nn.Linear(prev_dim, 1)
         elif decoder == 'linear':
             self.linear = nn.Linear(n_components * 2, 1)
+            nn.init.xavier_uniform_(self.linear.weight)
+            nn.init.zeros_(self.linear.bias)
         elif decoder == 'bilinear':
             self.bilinear = nn.Bilinear(n_components, n_components, 1)
+
+        print(f"Decoder: {decoder}")
+        print(f"Number of parameters: {sum(p.numel() for p in self.parameters())}")
 
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)            
         self.patience = 20
