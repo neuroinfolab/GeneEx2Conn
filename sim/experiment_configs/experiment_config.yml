@@ -22,9 +22,9 @@ cv_type: random
 resolution: 1.0
 random_seed: 42
 search_method: ['wandb', 'mse', 2]
-track_wandb: true
-skip_cv: false
+track_wandb: false
+skip_cv: true
 
 # Model
-model_type: bilinear_lowrank
+model_type: pls_lineardecoder
 use_gpu: true

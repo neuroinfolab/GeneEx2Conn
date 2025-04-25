@@ -74,16 +74,19 @@ def train_epoch(model, train_loader, criterion, optimizer, device, scaler=None):
             with autocast():
                 if hasattr(model, 'include_coords'):
                     predictions = model(batch_X, batch_coords).squeeze()
+                elif hasattr(model, 'optimize_encoder'):
+                    predictions = model(batch_X, batch_idx).squeeze()
                 else:
                     predictions = model(batch_X).squeeze()
                 loss = criterion(predictions, batch_y)
-            
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
         else: # Regular training path
             if hasattr(model, 'include_coords'):
                 predictions = model(batch_X, batch_coords).squeeze()
+            elif hasattr(model, 'optimize_encoder'):
+                    predictions = model(batch_X, batch_idx).squeeze()
             else:
                 predictions = model(batch_X).squeeze()
             loss = criterion(predictions, batch_y)
@@ -108,6 +111,8 @@ def evaluate(model, val_loader, criterion, device, scheduler=None):
 
             if hasattr(model, 'include_coords'):
                 predictions = model(batch_X, batch_coords).squeeze()
+            elif hasattr(model, 'optimize_encoder'):
+                predictions = model(batch_X, batch_idx).squeeze()
             else:
                 predictions = model(batch_X).squeeze()
                 

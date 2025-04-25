@@ -1,0 +1,52 @@
+name: pls_decoder
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+# SMALL GRID 
+parameters:
+  input_dim: 
+    value: !!int 0
+  binarize: 
+    value: !!int 0
+  decoder:
+    values: ['mlp'] # ['linear', 'bilinear', 'mlp']
+  n_components:
+    values: [5, 8, 10, 12, 15, 20, 25]
+  max_iter:
+    values: [1000]
+  scale:
+    values: [True]
+  optimize_encoder:
+    values: [False]
+  learning_rate:
+    values: [0.0003, 0.0001, 0.00001]
+  batch_size:
+    values: [256, 512]
+  weight_decay:
+    values: [0.001, 0.0001, 0.00001]
+  epochs:
+    values: [75, 100, 125]
+
+best_parameters:
+  input_dim: 
+    value: !!int 0
+  binarize: 
+    value: !!int 0
+  n_components:
+    values: [10]
+  max_iter:
+    values: [1000]
+  scale:
+    values: [True]
+  optimize_encoder:
+    values: [False]
+  learning_rate:
+    values: [0.004]
+  batch_size:
+    values: [128]
+  weight_decay:
+    values: [0.0]
+  epochs:
+    values: [100]

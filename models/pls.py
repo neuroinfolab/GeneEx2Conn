@@ -5,92 +5,98 @@ from data.data_utils import expand_X_symmetric, expand_Y_symmetric
 
 
 class PLSEncoder(nn.Module):
-    def __init__(self, train_indices, test_indices, X, Y, n_components=10, max_iter=1000, scale=True, optimize_encoder=False):
+    def __init__(self, train_indices, test_indices, region_pair_dataset, n_components=10, max_iter=1000, scale=True, optimize_encoder=False, device=None):
         super().__init__()
         
         self.n_components = n_components
         self.max_iter = max_iter
         self.scale = scale
-        
+        self.optimize_encoder = optimize_encoder
+        self.region_pair_dataset = region_pair_dataset
+        self.device = device
+        self.X = region_pair_dataset.X
+        self.Y = region_pair_dataset.Y
+
         # Subset to train indices
-        X_train = X[train_indices]
-        Y_train = Y[train_indices][:, train_indices]
+        X_train = self.X[train_indices]
+        Y_train = self.Y[train_indices][:, train_indices]
         print(f"X_train shape: {X_train.shape}")
         print(f"Y_train shape: {Y_train.shape}")
 
-        # Fit PLS model
+        # Fit PLS model only on train data
         self.pls_model = PLSRegression(n_components=n_components, max_iter=max_iter, scale=scale)
         self.pls_model.fit(X_train, Y_train)
         
         # Save projection matrices as torch parameters
         # x_weights_ for predictive importance, x_loadings_ for correlation-based interpretability, x_rotations_ for learned orthonormal projection
-        if optimize_encoder == True:
+        if self.optimize_encoder == True:
             # Optimize on x_weights_ since more aligned with biological interpretation and prediction task
-            self.x_projector = nn.Parameter(torch.FloatTensor(self.pls_model.x_weights_), requires_grad=True)
-            print(f"x_projector shape: {self.x_projector.shape}")
-            self.x_loadings = nn.Parameter(torch.FloatTensor(self.pls_model.x_loadings_), requires_grad=True)
-            print(f"x_loadings shape: {self.x_loadings.shape}")
+            self.x_projector = nn.Parameter(torch.FloatTensor(self.pls_model.x_weights_).to(self.device), requires_grad=True)
+            self.x_loadings = nn.Parameter(torch.FloatTensor(self.pls_model.x_loadings_).to(self.device), requires_grad=True)
         else: 
             # This is fixed like what is done in the literature and how sklearn projects, https://github.com/scikit-learn/scikit-learn/blob/98ed9dc73/sklearn/cross_decomposition/_pls.py#L564
-            self.x_projector = nn.Parameter(torch.FloatTensor(self.pls_model.x_rotations_), requires_grad=False)
-            print(f"x_projector shape: {self.x_projector.shape}")
-            self.x_loadings = nn.Parameter(torch.FloatTensor(self.pls_model.x_loadings_), requires_grad=False)
-            print(f"x_loadings shape: {self.x_loadings.shape}")
-    
-    def forward(self, x):
-        x_scores = torch.matmul(x, self.x_projector)
-        return x_scores
+            self.x_projector = nn.Parameter(torch.FloatTensor(self.pls_model.x_rotations_).to(self.device), requires_grad=False)
+            self.x_loadings = nn.Parameter(torch.FloatTensor(self.pls_model.x_loadings_).to(self.device), requires_grad=False)
+            X_tensor = torch.FloatTensor(self.X).to(self.device)
+            self.cached_projection = torch.matmul(X_tensor, self.x_projector) # shape: full dataset x num components
+            print(f"cached_projection shape: {self.cached_projection.shape}")
+        
+        print(f"x_projector shape: {self.x_projector.shape}")
+        print(f"x_loadings shape: {self.x_loadings.shape}")
+        
+    def forward(self, x, expanded_idx):
+        if self.optimize_encoder == True:
+            x_i, x_j = torch.chunk(x, 2, dim=1)
+            x_scores_i = torch.matmul(x_i, self.x_projector)
+            x_scores_j = torch.matmul(x_j, self.x_projector)
+        else:
+            # implementation to use precomputed projection
+            # idxs = expanded_idx.view(-1).tolist()  # always gives list of ints
+            # region_pairs = np.array([self.region_pair_dataset.expanded_idx_to_valid_pair[idx] for idx in idxs])
+            # region_i = region_pairs[:, 0]
+            # region_j = region_pairs[:, 1]
+            # x_scores_i = self.cached_projection[region_i]
+            # x_scores_j = self.cached_projection[region_j]
 
-class PLSDecoderModel(nn.Module):
-    def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset, decoder='mlp',
-                 binarize=False, n_components=10, max_iter=1000, scale=True, optimize_encoder=False, hidden_dims=[128, 64],
-                 dropout_rate=0.2, learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100):
+            # slightly faster on v100 
+            x_i, x_j = torch.chunk(x, 2, dim=1)
+            x_scores_i = torch.matmul(x_i, self.x_projector)
+            x_scores_j = torch.matmul(x_j, self.x_projector)
+        
+        return x_scores_i, x_scores_j
+
+class PLS_LinearDecoderModel(nn.Module):
+    def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset,
+                 binarize=False, n_components=10, max_iter=1000, scale=True, optimize_encoder=False, 
+                 learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100):
         super().__init__()
         
         self.binarize = binarize
         self.batch_size = batch_size
         self.epochs = epochs
+        self.optimize_encoder = optimize_encoder
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
-        self.X = region_pair_dataset.X
-        self.Y = region_pair_dataset.Y
         
         # Initialize PLS encoder
         self.encoder = PLSEncoder(
             train_indices=train_indices,
             test_indices=test_indices,
-            X=self.X,
-            Y=self.Y,
+            region_pair_dataset=region_pair_dataset,
             n_components=n_components,
             max_iter=max_iter,
             scale=scale,
-            optimize_encoder=optimize_encoder)
+            optimize_encoder=optimize_encoder, 
+            device=self.device)
             
         self.criterion = nn.MSELoss() # nn.BCEWithLogitsLoss() if binarize else 
 
-        # Initialize decoder
-        if decoder == 'mlp':
-            prev_dim = n_components * 2  # Doubled because we concatenate two region encodings
-            deep_layers = []
-            for hidden_dim in hidden_dims:
-                deep_layers.extend([
-                    nn.Linear(prev_dim, hidden_dim),
-                    nn.ReLU(),
-                    nn.BatchNorm1d(hidden_dim),
-                    nn.Dropout(dropout_rate)
-                ])
-                prev_dim = hidden_dim
-            self.deep_layers = nn.Sequential(*deep_layers)
-            self.output_layer = nn.Linear(prev_dim, 1)
-        elif decoder == 'linear':
-            self.linear = nn.Linear(n_components * 2, 1)
-            nn.init.xavier_uniform_(self.linear.weight)
-            nn.init.zeros_(self.linear.bias)
-        elif decoder == 'bilinear':
-            self.bilinear = nn.Bilinear(n_components, n_components, 1)
-
-        print(f"Decoder: {decoder}")
-        print(f"Number of parameters: {sum(p.numel() for p in self.parameters())}")
+        # Initialize decoder        
+        self.linear = nn.Linear(n_components * 2, 1)
+        nn.init.xavier_uniform_(self.linear.weight)
+        nn.init.zeros_(self.linear.bias)
+        # elif decoder == 'bilinear':
+        #    self.bilinear = nn.Bilinear(n_components, n_components, 1)
+        print(f"Total number of parameters: {sum(p.numel() for p in self.parameters())}")
 
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)            
         self.patience = 20
@@ -104,24 +110,10 @@ class PLSDecoderModel(nn.Module):
             min_lr=1e-6,  # Prevent LR from going too low
             verbose=True)
         
-    def forward(self, x):
-        x_i, x_j = torch.chunk(x, chunks=2, dim=1)
-        
-        encoded_i = self.encoder(x_i)
-        encoded_j = self.encoder(x_j)
-
-        if hasattr(self, 'deep_layers'):
-            concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
-            deep_output = self.deep_layers(concatenated_embedding)
-            output = self.output_layer(deep_output)
-        elif hasattr(self, 'bilinear'):
-            output = self.bilinear(encoded_i, encoded_j)
-        elif hasattr(self, 'linear'):
-            concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
-            output = self.linear(concatenated_embedding)
-        else:
-            raise ValueError(f"Decoder {self.decoder} not supported")
-        
+    def forward(self, x, idx):
+        encoded_i, encoded_j = self.encoder(x, idx)
+        concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
+        output = self.linear(concatenated_embedding)
         return output.squeeze()
     
     def predict(self, loader):
@@ -129,9 +121,91 @@ class PLSDecoderModel(nn.Module):
         predictions = []
         targets = []
         with torch.no_grad():
-            for batch_X, batch_y, _, _ in loader:
+            for batch_X, batch_y, _, batch_idx in loader:
                 batch_X = batch_X.to(self.device)
-                batch_preds = self(batch_X).cpu().numpy()
+                batch_preds = self(batch_X, batch_idx).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
+    
+    def fit(self, dataset, expanded_train_indices, expanded_test_indices, verbose=True):
+        train_dataset = Subset(dataset, expanded_train_indices)
+        test_dataset = Subset(dataset, expanded_test_indices)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+
+
+class PLS_MLPDecoderModel(nn.Module):
+    def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset,
+                 binarize=False, n_components=10, max_iter=1000, scale=True, optimize_encoder=False, hidden_dims=[128, 64],
+                 dropout_rate=0.2, learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100):
+        super().__init__()
+        
+        self.binarize = binarize
+        self.batch_size = batch_size
+        self.epochs = epochs
+        self.optimize_encoder = optimize_encoder
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Initialize PLS encoder
+        self.encoder = PLSEncoder(
+            train_indices=train_indices,
+            test_indices=test_indices,
+            region_pair_dataset=region_pair_dataset,
+            n_components=n_components,
+            max_iter=max_iter,
+            scale=scale,
+            optimize_encoder=optimize_encoder, 
+            device=self.device)
+            
+        self.criterion = nn.MSELoss() # nn.BCEWithLogitsLoss() if binarize else 
+
+        # Initialize decoder
+        prev_dim = n_components * 2  # Doubled because we concatenate two region encodings
+        deep_layers = []
+        for hidden_dim in hidden_dims:
+            deep_layers.extend([
+                nn.Linear(prev_dim, hidden_dim),
+                nn.ReLU(),
+                nn.BatchNorm1d(hidden_dim),
+                nn.Dropout(dropout_rate)
+            ])
+            prev_dim = hidden_dim
+        self.deep_layers = nn.Sequential(*deep_layers)
+        self.output_layer = nn.Linear(prev_dim, 1)
+    
+        print(f"Total number of parameters: {sum(p.numel() for p in self.parameters())}")
+
+        self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)            
+        self.patience = 20
+        self.scheduler = ReduceLROnPlateau( 
+            self.optimizer, 
+            mode='min', 
+            factor=0.3,  # Reduce LR by 70%
+            patience=20,  # Reduce LR after patience epochs of no improvement
+            threshold=0.05,  # Threshold to detect stagnation
+            cooldown=1,  # Reduce cooldown period
+            min_lr=1e-6,  # Prevent LR from going too low
+            verbose=True)
+        
+    def forward(self, x, idx):
+        encoded_i, encoded_j = self.encoder(x, idx)
+        concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
+        deep_output = self.deep_layers(concatenated_embedding)
+        output = self.output_layer(deep_output)
+        return output.squeeze()
+    
+    def predict(self, loader):
+        self.eval()
+        predictions = []
+        targets = []
+        with torch.no_grad():
+            for batch_X, batch_y, _, batch_idx in loader:
+                batch_X = batch_X.to(self.device)
+                batch_preds = self(batch_X, batch_idx).cpu().numpy()
                 predictions.append(batch_preds)
                 targets.append(batch_y.numpy())
         predictions = np.concatenate(predictions)
@@ -144,6 +218,8 @@ class PLSDecoderModel(nn.Module):
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+
+
 
 
 class PLSGene2Conn(nn.Module):

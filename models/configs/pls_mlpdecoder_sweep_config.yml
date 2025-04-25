@@ -34,44 +34,11 @@ parameters:
   epochs:
     values: [75, 100, 150]
 
-# MLP
-# best_parameters:
-#   input_dim: 
-#     value: !!int 0
-#   binarize: 
-#     value: !!int 0
-#   decoder:
-#     values: ['mlp']
-#   n_components:
-#     values: [10]
-#   max_iter:
-#     values: [1000]
-#   scale:
-#     values: [True]
-#   optimize_encoder:
-#     values: [False]
-#   hidden_dims:
-#     values:     
-#     - [128, 64]
-#   learning_rate:
-#     values: [0.00009]
-#   batch_size:
-#     values: [2048]
-#   dropout_rate:
-#     values: [0.2]
-#   weight_decay:
-#     values: [0.0001]
-#   epochs:
-    values: [100]
-
-# LINEAR
 best_parameters:
   input_dim: 
     value: !!int 0
   binarize: 
     value: !!int 0
-  decoder:
-    values: ['linear']
   n_components:
     values: [10]
   max_iter:
@@ -84,12 +51,12 @@ best_parameters:
     values:     
     - [128, 64]
   learning_rate:
-    values: [0.003]
+    values: [0.00009]
   batch_size:
-    values: [512]
+    values: [2048]
   dropout_rate:
     values: [0.2]
   weight_decay:
-    values: [0]
+    values: [0.0001]
   epochs:
     values: [100]
