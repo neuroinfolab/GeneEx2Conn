@@ -22,7 +22,7 @@ cv_type: random
 resolution: 1.0
 random_seed: 42
 search_method: ['wandb', 'mse', 2]
-track_wandb: false
+track_wandb: true
 skip_cv: true
 
 # Model
