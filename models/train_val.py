@@ -14,7 +14,7 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
     
     cudnn.benchmark = True  # Auto-tune GPU kernels
     scaler = GradScaler()  # Enable FP16 training
-    scaler = None
+    #scaler = None
     
     best_val_loss = float("inf")  # Track the best validation loss
     best_model_state = None  # Store the best model state

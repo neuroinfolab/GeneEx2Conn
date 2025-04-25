@@ -92,7 +92,8 @@ class BilinearLowRank(nn.Module):
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
 
-class BilinearSCM(nn.Module):
+
+class BilinearCM(nn.Module):
     def __init__(self, input_dim, binarize=False,learning_rate=0.01, epochs=100, 
                  batch_size=128, regularization='l2', lambda_reg=1.0, bias=True):
         super().__init__()
@@ -105,7 +106,7 @@ class BilinearSCM(nn.Module):
 
         self.bilinear = nn.Bilinear(input_dim//2, input_dim//2, 1, bias=bias)
         num_params = sum(p.numel() for p in self.bilinear.parameters() if p.requires_grad)
-        print(f"Number of learnable parameters in bilinear SCM layer: {num_params}")
+        print(f"Number of learnable parameters in bilinear CM layer: {num_params}")
         
         self.criterion = BilinearLoss(self.parameters(), regularization=regularization, lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate)

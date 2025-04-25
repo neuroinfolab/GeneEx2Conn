@@ -20,18 +20,18 @@ from data.data_utils import (
 )
 
 from models.base_models import ModelBuild, BaseModel
-from models.bilinear import BilinearLowRank, BilinearSCM
-from models.pls import PLSTwoStepModel, PLS_MLPDecoderModel, PLS_LinearDecoderModel
+from models.bilinear import BilinearLowRank, BilinearCM
+from models.pls import PLSTwoStepModel, PLS_MLPDecoderModel, PLS_BilinearDecoderModel
 from models.dynamic_mlp import DynamicMLP
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
 from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionCLSModel, CrossAttentionModel
 
 MODEL_CLASSES = {
     'bilinear_lowrank': BilinearLowRank,
-    'bilinear_SCM': BilinearSCM,
+    'bilinear_CM': BilinearCM,
     'pls_twostep': PLSTwoStepModel,
     'pls_mlpdecoder': PLS_MLPDecoderModel,
-    'pls_lineardecoder': PLS_LinearDecoderModel,
+    'pls_bilineardecoder': PLS_BilinearDecoderModel,
     'dynamic_mlp': DynamicMLP,
     'shared_mlp_encoder': SharedMLPEncoderModel,
     'shared_linear_encoder': SharedLinearEncoderModel,

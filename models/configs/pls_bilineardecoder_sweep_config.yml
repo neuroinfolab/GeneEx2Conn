@@ -1,4 +1,4 @@
-name: pls_decoder
+name: pls_lineardecoder
 method: random
 metric:
   name: mean_val_loss
@@ -10,10 +10,8 @@ parameters:
     value: !!int 0
   binarize: 
     value: !!int 0
-  decoder:
-    values: ['mlp'] # ['linear', 'bilinear', 'mlp']
   n_components:
-    values: [5, 8, 10, 12, 15, 20, 25]
+    values: [5, 8, 10, 12, 15, 20]
   max_iter:
     values: [1000]
   scale:
@@ -21,13 +19,13 @@ parameters:
   optimize_encoder:
     values: [False]
   learning_rate:
-    values: [0.0003, 0.0001, 0.00001]
+    values: [0.0035, 0.003, 0.0025]
   batch_size:
-    values: [256, 512]
+    values: [512]
   weight_decay:
-    values: [0.001, 0.0001, 0.00001]
+    values: [0, 0.01, 0.0001, 0.00001]
   epochs:
-    values: [75, 100, 125]
+    values: [75, 100, 150]
 
 best_parameters:
   input_dim: 
@@ -43,10 +41,10 @@ best_parameters:
   optimize_encoder:
     values: [False]
   learning_rate:
-    values: [0.004]
+    values: [0.0035]
   batch_size:
-    values: [128]
+    values: [512]
   weight_decay:
-    values: [0.0]
+    values: [0.01]
   epochs:
-    values: [100]
+    values: [75]

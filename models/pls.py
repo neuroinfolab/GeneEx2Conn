@@ -39,10 +39,6 @@ class PLSEncoder(nn.Module):
             self.x_loadings = nn.Parameter(torch.FloatTensor(self.pls_model.x_loadings_).to(self.device), requires_grad=False)
             X_tensor = torch.FloatTensor(self.X).to(self.device)
             self.cached_projection = torch.matmul(X_tensor, self.x_projector) # shape: full dataset x num components
-            print(f"cached_projection shape: {self.cached_projection.shape}")
-        
-        print(f"x_projector shape: {self.x_projector.shape}")
-        print(f"x_loadings shape: {self.x_loadings.shape}")
         
     def forward(self, x, expanded_idx):
         if self.optimize_encoder == True:
@@ -50,22 +46,22 @@ class PLSEncoder(nn.Module):
             x_scores_i = torch.matmul(x_i, self.x_projector)
             x_scores_j = torch.matmul(x_j, self.x_projector)
         else:
-            # implementation to use precomputed projection
-            # idxs = expanded_idx.view(-1).tolist()  # always gives list of ints
-            # region_pairs = np.array([self.region_pair_dataset.expanded_idx_to_valid_pair[idx] for idx in idxs])
-            # region_i = region_pairs[:, 0]
-            # region_j = region_pairs[:, 1]
-            # x_scores_i = self.cached_projection[region_i]
-            # x_scores_j = self.cached_projection[region_j]
+            # precomputed projection - slightly faster on a100/h100
+            idxs = expanded_idx.view(-1).tolist()
+            region_pairs = np.array([self.region_pair_dataset.expanded_idx_to_valid_pair[idx] for idx in idxs])
+            region_i = region_pairs[:, 0]
+            region_j = region_pairs[:, 1]
+            x_scores_i = self.cached_projection[region_i]
+            x_scores_j = self.cached_projection[region_j]
 
-            # slightly faster on v100 
-            x_i, x_j = torch.chunk(x, 2, dim=1)
-            x_scores_i = torch.matmul(x_i, self.x_projector)
-            x_scores_j = torch.matmul(x_j, self.x_projector)
+            # project each forward batch - slightly faster on v100 
+            # x_i, x_j = torch.chunk(x, 2, dim=1)
+            # x_scores_i = torch.matmul(x_i, self.x_projector)
+            # x_scores_j = torch.matmul(x_j, self.x_projector)
         
         return x_scores_i, x_scores_j
 
-class PLS_LinearDecoderModel(nn.Module):
+class PLS_BilinearDecoderModel(nn.Module):
     def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset,
                  binarize=False, n_components=10, max_iter=1000, scale=True, optimize_encoder=False, 
                  learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100):
@@ -94,8 +90,8 @@ class PLS_LinearDecoderModel(nn.Module):
         self.linear = nn.Linear(n_components * 2, 1)
         nn.init.xavier_uniform_(self.linear.weight)
         nn.init.zeros_(self.linear.bias)
-        # elif decoder == 'bilinear':
-        #    self.bilinear = nn.Bilinear(n_components, n_components, 1)
+        self.bilinear = nn.Bilinear(n_components, n_components, 1)
+        
         print(f"Total number of parameters: {sum(p.numel() for p in self.parameters())}")
 
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)            
@@ -112,8 +108,9 @@ class PLS_LinearDecoderModel(nn.Module):
         
     def forward(self, x, idx):
         encoded_i, encoded_j = self.encoder(x, idx)
-        concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
-        output = self.linear(concatenated_embedding)
+        #concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
+        #output = self.linear(concatenated_embedding)
+        output = self.bilinear(encoded_i, encoded_j)
         return output.squeeze()
     
     def predict(self, loader):
@@ -133,7 +130,7 @@ class PLS_LinearDecoderModel(nn.Module):
     def fit(self, dataset, expanded_train_indices, expanded_test_indices, verbose=True):
         train_dataset = Subset(dataset, expanded_train_indices)
         test_dataset = Subset(dataset, expanded_test_indices)
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
 

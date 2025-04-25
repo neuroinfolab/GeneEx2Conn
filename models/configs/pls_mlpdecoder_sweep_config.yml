@@ -1,4 +1,4 @@
-name: pls_decoder
+name: pls_mlpdecoder
 method: random
 metric:
   name: mean_val_loss
@@ -10,8 +10,6 @@ parameters:
     value: !!int 0
   binarize: 
     value: !!int 0
-  decoder:
-    values: ['mlp'] # ['linear', 'bilinear', 'mlp']
   n_components:
     values: [5, 8, 10, 12, 15, 20, 25]
   max_iter:
@@ -53,7 +51,7 @@ best_parameters:
   learning_rate:
     values: [0.00009]
   batch_size:
-    values: [2048]
+    values: [512]
   dropout_rate:
     values: [0.2]
   weight_decay:
