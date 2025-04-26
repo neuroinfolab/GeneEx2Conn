@@ -119,14 +119,13 @@ class Simulation:
         valid2true_index_mapping = dict(enumerate(valid_indices_values))
         self.valid2true_index_mapping = valid2true_index_mapping
 
-      
         # Subset all data using valid indices
         self.X = self.X[valid_indices]
         self.X_pca = self.X_pca[valid_indices]
-        self.Y_sc = self.Y_sc[valid_indices][:, valid_indices]
-        self.Y_sc_binary = self.Y_sc_binary[valid_indices][:, valid_indices]
-        self.Y_sc_spectralL = self.Y_sc_spectralL[valid_indices]
-        self.Y_sc_spectralA = self.Y_sc_spectralA[valid_indices]
+        self.Y_sc = None #self.Y_sc[valid_indices][:, valid_indices]
+        self.Y_sc_binary =   None #self.Y_sc_binary[valid_indices][:, valid_indices]
+        self.Y_sc_spectralL = None #self.Y_sc_spectralL[valid_indices]
+        self.Y_sc_spectralA = None #self.Y_sc_spectralA[valid_indices]
         self.Y_fc = self.Y_fc[valid_indices][:, valid_indices]
         self.Y_fc_binary = self.Y_fc_binary[valid_indices][:, valid_indices]
         self.coords = self.coords[valid_indices]
@@ -135,9 +134,9 @@ class Simulation:
 
         print(f"X shape: {self.X.shape}")
         print(f"X_pca shape: {self.X_pca.shape}")
-        print(f"Y_sc shape: {self.Y_sc.shape}")
-        print(f"Y_sc_spectralL shape: {self.Y_sc_spectralL.shape}")
-        print(f"Y_sc_spectralA shape: {self.Y_sc_spectralA.shape}")
+        # print(f"Y_sc shape: {self.Y_sc.shape}")
+        # print(f"Y_sc_spectralL shape: {self.Y_sc_spectralL.shape}")
+        # print(f"Y_sc_spectralA shape: {self.Y_sc_spectralA.shape}")
         print(f"Y_fc shape: {self.Y_fc.shape}")
         print(f"Coordinates shape: {self.coords.shape}")
 
@@ -176,13 +175,13 @@ class Simulation:
 
         feature_dict = {'transcriptome': self.X,
                         'transcriptome_PCA': self.X_pca,
-                        'structural': self.Y_sc,
-                        'structural_spectral_L': self.Y_sc_spectralL,
-                        'structural_spectral_A': self.Y_sc_spectralA,
+                        # 'structural': self.Y_sc,
+                        # 'structural_spectral_L': self.Y_sc_spectralL,
+                        # 'structural_spectral_A': self.Y_sc_spectralA,
                         'functional': self.Y_fc,
                         'euclidean': self.coords, 
-                        'structural_spatial_null': np.hstack((self.coords, self.Y_sc)), # cannot be combined with other feats
-                        'transcriptome_spatial_autocorr_null': np.hstack((self.coords, self.Y_sc, self.X_pca, self.X)), # cannot be combined with other feats
+                        # 'structural_spatial_null': np.hstack((self.coords, self.Y_sc)), # cannot be combined with other feats
+                        # 'transcriptome_spatial_autocorr_null': np.hstack((self.coords, self.Y_sc, self.X_pca, self.X)), # cannot be combined with other feats
                         }
         
         self.features = features 

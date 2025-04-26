@@ -47,7 +47,14 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         np.ndarray: Processed gene expression data
     """
     if dataset == "c_elegans":
-        genes_data = pd.read_csv(f"./data/c_elegans/Ad_aggregate_unthresholded_TPM.csv", header=None, skiprows=1).iloc[:,1:].T
+        genes_data = pd.read_csv(f"./data/c_elegans/gene_expression/corrected_gene_expression_transformed.csv", header=None, skiprows=1).iloc[:,1:].T
+        if gene_list == 'innexins':
+            genes_data = pd.read_csv("./data/c_elegans/gene_expression/corrected_gene_expression_transformed.csv", index_col=0).T
+            genes_data.index = range(genes_data.shape[0])
+            
+            genes_set = pd.read_csv('./data/enigma/gene_lists/innexins.txt', header=None)[0].tolist()
+            valid_genes = [gene for gene in genes_set if gene in genes_data.columns]
+            genes_data = np.array(genes_data[valid_genes])
         if run_PCA:
             genes_data = _apply_pca(genes_data)
         return np.array(genes_data)
@@ -158,12 +165,13 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
     """
     if dataset == 'c_elegans':
         if measure == 'FC':
-            matrix = pd.read_csv(f"./data/c_elegans/functional_connectivity.csv",  header=None, skiprows=1).iloc[:,1:]
+            # matrix = pd.read_csv(f"./data/c_elegans/functional_connectivity/functional_connectivity.csv",  header=None, skiprows=1).iloc[:,1:]
+            matrix = pd.read_csv(f"./data/c_elegans/functional_connectivity/overall_mean_fc.csv", header=None, skiprows=1).iloc[:,1:]
             # Fill Nans with 0
             matrix = matrix.fillna(0)
             return np.array(matrix)
         elif measure == 'SC':
-            matrix = pd.read_csv(f"./data/c_elegans/Witvliet_synapse_8.csv", header=None, skiprows=1).iloc[:,1:]
+            matrix = pd.read_csv(f"./data/c_elegans/connectomes/050523_YA_N2U_chem_synaptic_matrix_individual_cell.csv", header=None, skiprows=1).iloc[:,1:]
             return np.array(matrix)
     if dataset == 'AHBA':
         # Load relevant data and corresponding region labels from parcellation
