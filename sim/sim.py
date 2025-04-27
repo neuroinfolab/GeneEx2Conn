@@ -297,7 +297,7 @@ class Simulation:
 
         # Initialize sweep once for all inner folds if not skipping CV
         sweep_id = None
-        if not self.skip_cv and (search_method[0] == 'wandb' or track_wandb):
+        if (search_method[0] == 'wandb' or track_wandb): # not self.skip_cv and - still init the sweep and track group but don't call train sweep wrapper
             input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
             sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
             sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
