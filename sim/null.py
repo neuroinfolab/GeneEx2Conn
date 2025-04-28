@@ -12,7 +12,7 @@ import models.metrics
 from models.metrics import *
 
 
-# SPATIAL AUTOCORRELATION
+### SPATIAL AUTOCORRELATION ###
 def load_and_plot_data(parcellation='S400', hemisphere='both', omit_subcortical=False, 
                       sort_genes='expression', impute_strategy='mirror_interpolate', 
                       null_model='none', fontsize=16):
@@ -544,7 +544,7 @@ def compute_distance_decay_poly3(features, targets, bin_size_mm=5):
 
     return coefs
 
-
+### NULL SPIN TEST FUNCTIONS ###
 def generate_null_spins(n_rotations=100, seed=42, bin_size_mm=5, save_csv=False):
     """Generate null spin models and compute distance decay parameters for both raw gene expression and PCA-transformed data.
     
@@ -731,10 +731,343 @@ def generate_null_spins(n_rotations=100, seed=42, bin_size_mm=5, save_csv=False)
         
     return spins_df
 
+def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='SCM', n_perms=1000, sort_spins='mean_error_rank', num_components=10):
+    """
+    Run spin test using precomputed spins to generate null distribution
+    
+    Parameters:
+    -----------
+    X : array-like
+        Gene expression data matrix (n_regions x n_genes)
+    Y_true : array-like 
+        Connectivity matrix (n_regions x n_regions)
+    spins_df : pandas DataFrame
+        DataFrame containing precomputed spin indices
+    model_type : str
+        'SCM' or 'PLS' - which model to use for fitting
+    n_perms : int
+        Number of null permutations to run
+    shuffle_target : bool
+        If True, shuffle connectivity matrix, if False shuffle gene expression
+        
+    Returns:
+    --------
+    empirical_corr : float
+        Correlation between true and predicted values
+    p_value : float
+        Spin test p-value 
+    null_corrs : array
+        Distribution of null correlations
+    """
+    
+    # Sort spins_df by standardized_SA_error in ascending order
+    if sort_spins is not None:
+        spins_df = spins_df.sort_values(sort_spins, ascending=True)
+
+    # Get spin indices
+    cortical_spins_list = spins_df['cortical_spins'].tolist()[:n_perms]
+    cortical_spins_list = [eval(x) for x in cortical_spins_list]
+    cortical_spin_indices = np.array(cortical_spins_list)
+    
+    subcortical_spins_list = spins_df['subcortical_spins'].tolist()[:n_perms]
+    subcortical_spins_list = [eval(x) for x in subcortical_spins_list]
+    subcortical_spin_indices = np.array(subcortical_spins_list)
+
+    # Fit model to true data
+    if model_type == 'SCM':
+        O, Y_pred = fit_scm_closed(X, Y_true)
+        Y_pred_empirical = Y_pred
+    else:  # PLS
+        best_pls_model = PLSRegression(n_components=num_components)
+        best_pls_model.fit(X, Y_true)
+        Y_pred_empirical = best_pls_model.predict(X)
+    
+    # Calculate empirical correlation
+    empirical_corr = pearsonr(Y_true.flatten(), Y_pred_empirical.flatten())[0]
+
+    # Initialize array for null correlations
+    null_corrs = np.zeros(n_perms)
+    
+    # Generate null distribution
+    for i in range(n_perms):
+        if i % 50 == 0:
+            print(f"permutation: {i}")
+            
+        # Get spin indices for this permutation
+        cortical_spin_idx = cortical_spin_indices[i]
+        subcortical_spin_idx = subcortical_spin_indices[i]
+        
+        # Shuffle gene expression
+        Y_rotated = Y_true
+        X_cortical_rotated = X[cortical_spin_idx]
+        X_subcortical_rotated = X[subcortical_spin_idx]
+        X_rotated = np.vstack([X_cortical_rotated, X_subcortical_rotated])
+        X_rotated = X_rotated[valid_indices]
+
+        # Fit model on rotated data and get predictions
+        if model_type == 'SCM':
+            O_null, Y_pred_null = fit_scm_closed(X_rotated, Y_rotated)
+        else:  # PLS
+            best_pls_model = PLSRegression(n_components=num_components)
+            best_pls_model.fit(X_rotated, Y_rotated)
+            Y_pred_null = best_pls_model.predict(X_rotated)
+            
+        null_corrs[i] = pearsonr(Y_rotated.flatten(), Y_pred_null.flatten())[0]
+
+    # Calculate p-value
+    p_value = max(1/(n_perms + 1), np.mean(null_corrs >= empirical_corr))
+
+    # Plot null distribution
+    plt.figure(figsize=(10, 6))
+    plt.hist(null_corrs, bins=50, alpha=0.6, color='gray', label='Null distribution')
+    plt.axvline(empirical_corr, color='red', linestyle='--', 
+                label=f'Empirical (r={empirical_corr:.3f}, p={p_value:.3f})')
+    plt.xlabel('Pearson correlation')
+    plt.ylabel('Count')
+    plt.title(f'{model_type} Spin Test Null Distribution')
+    plt.legend()
+    plt.show()
+    
+    return empirical_corr, p_value, null_corrs
 
 
-# FIT SCM AND PLS MODELS
-# SCM functions
+def run_spin_test_random(X, Y_true, valid_indices, spins_df, model_type='SCM', n_perms=1000, num_components=10):
+    """
+    Run spin test using precomputed spins to generate null distribution
+    
+    Parameters:
+    -----------
+    X : array-like
+        Gene expression data matrix (n_regions x n_genes)
+    Y_true : array-like 
+        Connectivity matrix (n_regions x n_regions)
+    spins_df : pandas DataFrame
+        DataFrame containing precomputed spin indices
+    model_type : str
+        'SCM' or 'PLS' - which model to use for fitting
+    n_perms : int
+        Number of null permutations to run
+    shuffle_target : bool
+        If True, shuffle connectivity matrix, if False shuffle gene expression
+        
+    Returns:
+    --------
+    empirical_corr : float
+        Correlation between true and predicted values
+    p_value : float
+        Spin test p-value 
+    null_corrs : array
+        Distribution of null correlations
+    """
+    # Get spin indices from dataframe
+    spin_indices_list = spins_df['true_random_spins'].tolist()[:n_perms]
+    spin_indices_list = [eval(x) for x in spin_indices_list]
+    spin_indices = np.array(spin_indices_list)
+    
+    # Adjust indices to be 0-based and within bounds
+    spin_indices = spin_indices - 1  # Convert from 1-based to 0-based indexing
+    spin_indices = np.clip(spin_indices, 0, X.shape[0]-1)  # Clip to valid range
+
+    # Fit model to true data
+    if model_type == 'SCM':
+        O, Y_pred = fit_scm_closed(X, Y_true)
+        Y_pred_empirical = Y_pred
+    else:  # PLS
+        best_pls_model = PLSRegression(n_components=num_components)
+        best_pls_model.fit(X, Y_true)
+        Y_pred_empirical = best_pls_model.predict(X)
+    
+    # Calculate empirical correlation
+    empirical_corr = pearsonr(Y_true.flatten(), Y_pred_empirical.flatten())[0]
+
+    # Initialize array for null correlations
+    null_corrs = np.zeros(n_perms)
+    
+    # Generate null distribution
+    for i in range(n_perms):
+        if i % 50 == 0:
+            print(f"permutation: {i}")
+            
+        # Shuffle gene expression
+        Y_rotated = Y_true
+        X_rotated = X[spin_indices[i]]
+        X_rotated = X_rotated[valid_indices]
+
+        # Fit model on rotated data and get predictions
+        if model_type == 'SCM':
+            O_null, Y_pred_null = fit_scm_closed(X_rotated, Y_rotated)
+        else:  # PLS
+            best_pls_model = PLSRegression(n_components=num_components)
+            best_pls_model.fit(X_rotated, Y_rotated)
+            Y_pred_null = best_pls_model.predict(X_rotated)
+            
+        null_corrs[i] = pearsonr(Y_rotated.flatten(), Y_pred_null.flatten())[0]
+
+    # Calculate p-value
+    p_value = max(1/(n_perms + 1), np.mean(null_corrs >= empirical_corr))
+
+    # Plot null distribution
+    plt.figure(figsize=(10, 6))
+    plt.hist(null_corrs, bins=50, alpha=0.6, color='gray', label='Null distribution')
+    plt.axvline(empirical_corr, color='red', linestyle='--', 
+                label=f'Empirical (r={empirical_corr:.3f}, p={p_value:.3f})')
+    plt.xlabel('Pearson correlation')
+    plt.ylabel('Count')
+    plt.title(f'{model_type} Spin Test Null Distribution')
+    plt.legend()
+    plt.show()
+    
+    return empirical_corr, p_value, null_corrs
+
+
+def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_type='SCM', num_components=10, n_perms=1000, sort_spins='mean_error_rank', bins=25, fontsize=18):
+    """
+    Run spin test using precomputed spins to generate null distribution
+    
+    Parameters:
+    -----------
+    X : array-like
+        Gene expression data matrix (n_regions x n_genes)
+    Y_true : array-like 
+        Connectivity matrix (n_regions x n_regions)
+    spins_df : pandas DataFrame
+        DataFrame containing precomputed spin indices
+    model_type : str
+        'SCM' or 'PLS' - which model to use for fitting
+    num_components : int
+        Number of PLS components to use (only used if model_type='PLS')
+    n_perms : int
+        Number of null permutations to run
+    sort_spins : str
+        Metric to sort spins by
+    fontsize : int
+        Font size for plot text elements
+    """
+    
+    # Sort spins_df by standardized_SA_error in ascending order
+    spins_df = spins_df.sort_values(sort_spins, ascending=True)
+
+    # Get spin indices
+    cortical_spins_list = spins_df['cortical_spins'].tolist()[:n_perms]
+    cortical_spins_list = [eval(x) for x in cortical_spins_list]
+    cortical_spin_indices = np.array(cortical_spins_list)
+    
+    subcortical_spins_list = spins_df['subcortical_spins'].tolist()[:n_perms]
+    subcortical_spins_list = [eval(x) for x in subcortical_spins_list]
+    subcortical_spin_indices = np.array(subcortical_spins_list)
+
+    # Fit model to true data
+    if model_type == 'SCM':
+        O, Y_pred = fit_scm_closed(X, Y_true)
+        Y_pred_empirical = Y_pred
+    else:  # PLS
+        best_pls_model = PLSRegression(n_components=num_components)
+        best_pls_model.fit(X, Y_true)
+        Y_pred_empirical = best_pls_model.predict(X)
+    
+    # Calculate empirical correlation
+    empirical_corr = pearsonr(Y_true.flatten(), Y_pred_empirical.flatten())[0]
+
+    # Initialize arrays for null correlations and error metrics
+    null_corrs = np.zeros(n_perms)
+    error_metrics = {
+        'mean_error_rank': np.zeros(n_perms),
+        'total_cost': np.zeros(n_perms),
+        'standardized_SA_error': np.zeros(n_perms),
+        'standardized_poly_error': np.zeros(n_perms),
+        'standardized_SA_PCA_error': np.zeros(n_perms),
+        'standardized_poly_PCA_error': np.zeros(n_perms)
+    }
+    
+    # Generate null distribution
+    for i in range(n_perms):
+        if i % 50 == 0:
+            print(f"permutation: {i}")
+          
+        # Get spin indices for this permutation
+        cortical_spin_idx = cortical_spin_indices[i]
+        subcortical_spin_idx = subcortical_spin_indices[i]
+        
+        # Store error metrics for this permutation
+        for metric in error_metrics.keys():
+            error_metrics[metric][i] = spins_df[metric].iloc[i]
+        
+        # Shuffle gene expression
+        Y_rotated = Y_true
+        X_cortical_rotated = X[cortical_spin_idx]
+        X_subcortical_rotated = X[subcortical_spin_idx]
+        X_rotated = np.vstack([X_cortical_rotated, X_subcortical_rotated])
+        X_rotated = X_rotated[valid_indices]
+
+        # Fit model on rotated data
+        if model_type == 'SCM':
+            O_null, Y_pred_null = fit_scm_closed(X_rotated, Y_rotated)
+        else:  # PLS
+            best_pls_model = PLSRegression(n_components=num_components)
+            best_pls_model.fit(X_rotated, Y_rotated)
+            Y_pred_null = best_pls_model.predict(X_rotated)
+        
+        # Calculate correlation
+        null_corrs[i] = pearsonr(Y_rotated.flatten(), Y_pred_null.flatten())[0]
+
+    # Calculate p-value
+    p_value = max(1/(n_perms + 1), np.mean(null_corrs >= empirical_corr))
+
+    # Create figure with 3x2 subplots
+    fig, axes = plt.subplots(4, 2, figsize=(20, 18))
+    axes = axes.flatten()  # Flatten for easier indexing
+    
+    # Plot 1: Standard uncolored histogram
+    axes[0].hist(null_corrs, bins=bins, alpha=0.6, color='gray', label='Null distribution')
+    axes[0].axvline(empirical_corr, color='red', linestyle='--', 
+                    label=f'Empirical (r={empirical_corr:.3f}, p={p_value:.3f})')
+    axes[0].set_xlabel('Pearson correlation', fontsize=fontsize)
+    axes[0].set_ylabel('Count', fontsize=fontsize)
+    axes[0].set_title(f'Standard {model_type} Spin Test\nNull Distribution', fontsize=fontsize)
+    axes[0].legend(fontsize=fontsize-2)
+    axes[0].tick_params(labelsize=fontsize-2)
+    
+    # Calculate bin edges and centers once
+    counts, bin_edges = np.histogram(null_corrs, bins=bins)
+    bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    
+    # Plot colored histograms for each error metric
+    for idx, (metric, values) in enumerate(error_metrics.items(), 1):
+        # Calculate mean error metric for each bin
+        bin_errors = np.zeros(len(bin_centers))
+        for i in range(len(bin_centers)):
+            mask = (null_corrs >= bin_edges[i]) & (null_corrs < bin_edges[i+1])
+            bin_errors[i] = np.mean(values[mask]) if np.any(mask) else 0
+        
+        # Create colored histogram with darker colors for lower values
+        norm = plt.Normalize(bin_errors.min(), bin_errors.max())
+        colors = plt.cm.viridis(norm(bin_errors))  # Using reversed colormap
+        
+        # Plot bars
+        bars = axes[idx].bar(bin_centers, counts, width=np.diff(bin_edges), 
+                            color=colors, alpha=0.6)
+        
+        # Add colorbar
+        sm = plt.cm.ScalarMappable(cmap='viridis', norm=norm)
+        plt.colorbar(sm, ax=axes[idx], label=metric)
+        
+        # Add empirical line
+        axes[idx].axvline(empirical_corr, color='red', linestyle='--',
+                         label=f'Empirical (r={empirical_corr:.3f}, p={p_value:.3f})')
+        
+        axes[idx].set_xlabel('Pearson correlation', fontsize=fontsize)
+        axes[idx].set_ylabel('Count', fontsize=fontsize)
+        axes[idx].set_title(f'{model_type} Spin Test Distribution\nColored by {metric}', fontsize=fontsize)
+        axes[idx].legend(fontsize=fontsize-2)
+        axes[idx].tick_params(labelsize=fontsize-2)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    return empirical_corr, p_value, null_corrs, error_metrics
+
+### SCM AND PLS FIT FUNCTIONS ###
+# SCM
 def fit_scm(X, Y, alpha=0.0, verbose=True):
     """
     Fit Structural Covariance Model (SCM) to predict connectivity from gene expression.
@@ -1196,6 +1529,3 @@ def get_best_pls_model(X, Y, max_components=25, use_vertical_elbow=False):
     print(f"Mean correlation: {metrics['correlation']:.4f}")
     
     return best_model, metrics
-
-
-

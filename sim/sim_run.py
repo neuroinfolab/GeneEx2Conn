@@ -157,6 +157,7 @@ def load_config(config_path):
     config_path = os.path.join(absolute_root_path, 'sim/experiment_configs', config_path)
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run simulation with config file and optional overrides')
     parser.add_argument('config', help='Path to config file')
@@ -164,6 +165,7 @@ if __name__ == "__main__":
     parser.add_argument('--n_cvs', type=int, help='Override number of CVs from config')
     parser.add_argument('--feature_type', help='Override feature type from config')
     parser.add_argument('--random_seed', type=int, help='Override random seed from config')
+    parser.add_argument('--null_model', help='Override null model type from config')
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -180,12 +182,15 @@ if __name__ == "__main__":
         config['feature_type'] = [{args.feature_type: None}]
     if args.random_seed is not None:
         config['random_seed'] = args.random_seed
+    if args.null_model:
+        config['null_model'] = args.null_model
 
     print(f"Running simulation with config: {args.config}")
     print(f"Model type: {config['model_type']}")
     print(f"Search method: {config['search_method']}")
     print(f"Feature type: {config['feature_type']}")
     print(f"Random seed: {config['random_seed']}")
+    print(f"Null model: {config['null_model']}")
     
     print(torch.cuda.is_available())    
     print(os.environ.get("CUDA_VISIBLE_DEVICES"))

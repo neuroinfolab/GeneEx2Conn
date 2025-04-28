@@ -80,7 +80,7 @@ class DynamicMLP(nn.Module):
         self.model = nn.Sequential(*layers)
         self.optimizer = AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
         
-        self.patience = 20
+        self.patience = 50
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 

@@ -1,21 +1,5 @@
 from env.imports import *
 
-# import brainspace
-# from brainspace.gradient.kernels import compute_affinity
-# from brainspace.null_models import MoranRandomization
-from scipy.spatial.distance import cdist
-
-import nibabel as nib
-
-import netneurotools
-from netneurotools.datasets import fetch_schaefer2018
-from netneurotools.plotting import plot_fsaverage
-from netneurotools import datasets as nndata
-from netneurotools import freesurfer as nnsurf
-from netneurotools import stats as nnstats
-
-
-
 relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data'
 absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'
 

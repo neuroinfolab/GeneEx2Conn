@@ -92,7 +92,7 @@ class SharedSelfAttentionModel(nn.Module):
             self.output_layer = nn.DataParallel(self.output_layer)
                 
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
-        self.patience = 10
+        self.patience = 25
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
@@ -264,7 +264,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
         
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss()
-        self.patience = 10
+        self.patience = 25
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 

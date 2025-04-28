@@ -1,4 +1,4 @@
-name: pls_lineardecoder
+name: pls_bilineardecoder
 method: random
 metric:
   name: mean_val_loss
@@ -11,7 +11,7 @@ parameters:
   binarize: 
     value: !!int 0
   n_components:
-    values: [5, 8, 10, 12, 15, 20]
+    values: [8, 10, 12, 15, 20, 25]
   max_iter:
     values: [1000]
   scale:
@@ -23,9 +23,9 @@ parameters:
   batch_size:
     values: [512]
   weight_decay:
-    values: [0, 0.01, 0.001, 0.00001]
+    values: [0.01, 0.001, 0.00001]
   epochs:
-    values: [75, 100, 150]
+    values: [75, 100, 125]
 
 best_parameters:
   input_dim: 
