@@ -11,21 +11,6 @@ import models
 import models.metrics
 from models.metrics import *
 
-import netneurotools
-from netneurotools.datasets import fetch_schaefer2018
-from netneurotools.plotting import plot_fsaverage
-from netneurotools import datasets as nndata
-import nibabel as nib
-from netneurotools import freesurfer as nnsurf
-from netneurotools import stats as nnstats
-from netneurotools.plotting import plot_point_brain
-
-from scipy.optimize import curve_fit
-from scipy.stats import binned_statistic
-from scipy.spatial import distance
-from scipy.spatial.distance import cdist
-from scipy import stats
-from numpy.polynomial import Polynomial
 
 # SPATIAL AUTOCORRELATION
 def load_and_plot_data(parcellation='S400', hemisphere='both', omit_subcortical=False, 
