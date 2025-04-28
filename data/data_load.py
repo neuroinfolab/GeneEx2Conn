@@ -131,34 +131,36 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             print("valid genes", valid_genes)
             return genes_data, valid_genes
         
-        if null_model == 'spin':
-            print('spinning gene expression')
-            lh_annot, rh_annot = nndata.fetch_schaefer2018('fsaverage', data_dir='data/UKBB', verbose=1)['400Parcels7Networks']
-            # https://netneurotools.readthedocs.io/en/stable/generated/netneurotools.freesurfer.find_parcel_centroids.html#netneurotools.freesurfer.find_parcel_centroids
-            coords, hemi = nnsurf.find_parcel_centroids(lhannot=lh_annot, rhannot=rh_annot, version='fsaverage', surf='sphere')
-            # https://netneurotools.readthedocs.io/en/stable/generated/netneurotools.stats.gen_spinsamples.html
-            spins, cost = nnstats.gen_spinsamples(coords, hemi, n_rotate=1, seed=random_seed, method='vasa',return_cost=True)
+        if null_model == 'spin' and parcellation == 'S400':
+            print('Spinning gene expression')
+            spins_df_10k = pd.read_csv('./data/enigma/10000_null_spins.csv')
+            spins_df_10k = spins_df_10k.sort_values('mean_error_rank', ascending=True)
+            seed_to_index = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 9: 8, 42: 9}
+             # Get spin index based on random seed
+            spin_idx = seed_to_index.get(random_seed, 0)
+            print(f"Spin index for seed {random_seed}: {spin_idx}")
+            
+            # Get spin indices
+            cortical_spins_list = spins_df_10k['cortical_spins'].tolist()
+            cortical_spins_list = [eval(x) for x in cortical_spins_list]
+            cortical_spin_indices = np.array(cortical_spins_list)
+            print(cortical_spin_indices.shape)
 
-            # (method=original (Bloch) may give duplicates; Vasa, Hungarian will not)
-            spin_indices = spins[:, 0]
+            subcortical_spins_list = spins_df_10k['subcortical_spins'].tolist()
+            subcortical_spins_list = [eval(x) for x in subcortical_spins_list]
+            subcortical_spin_indices = np.array(subcortical_spins_list)
+            print(subcortical_spin_indices.shape)
+    
+            cortical_spin_idx = cortical_spin_indices[spin_idx]
+            subcortical_spin_idx = subcortical_spin_indices[spin_idx]
+            print(cortical_spin_idx.shape)
+            print(subcortical_spin_idx.shape)
+
             if omit_subcortical:
-                genes_data = genes_data[spin_indices]
+                genes_data = genes_data[cortical_spin_idx]
             else:
-                all_region_coords = load_coords(parcellation=parcellation, omit_subcortical=False)
-                n_cortical_regions = (genes_data.shape[0] // 100) * 100
-                cortical_genes_data_spun = genes_data[:n_cortical_regions][spin_indices]
-                subcortical_genes_data = genes_data[n_cortical_regions:]
-                subcortical_coords = all_region_coords[n_cortical_regions:]
-
-                x_coords = subcortical_coords[:, 0]
-                hemi_subcort = np.zeros_like(x_coords)
-                hemi_subcort[x_coords > 0] = 1
-
-                # To compare spatial overlap between subcortical maps, we employed a similar approach with the exception that subcortical labels were randomly shuffled as opposed to being projected onto spheres.
-                # https://enigma-toolbox.readthedocs.io/en/latest/pages/08.spintest/
-                subcortical_spins, _ = nnstats.gen_spinsamples(subcortical_coords, hemi_subcort, n_rotate=1, method='vasa', seed=random_seed, return_cost=True)
-                subcortical_genes_data_spun = subcortical_genes_data[subcortical_spins[:, 0]]
-                genes_data = np.vstack([cortical_genes_data_spun, subcortical_genes_data_spun])                
+                genes_data = np.vstack([genes_data[cortical_spin_idx], genes_data[subcortical_spin_idx+400]])
+            
         elif null_model == 'random':
             print('permuting gene expression')
             rng = np.random.default_rng(random_seed)

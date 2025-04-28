@@ -7,8 +7,6 @@ import imageio
 from data.data_load import load_transcriptome, load_network_labels, load_connectome
 
 
-
-
 def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subcortical=False, 
                   hemisphere='both', add_network_labels=False, add_hemisphere_labels=False,
                   title=None, fontsize=24, figsize=(12, 10)):

@@ -11,7 +11,6 @@ import models
 import models.metrics
 from models.metrics import *
 
-
 ### SPATIAL AUTOCORRELATION ###
 def load_and_plot_data(parcellation='S400', hemisphere='both', omit_subcortical=False, 
                       sort_genes='expression', impute_strategy='mirror_interpolate', 
@@ -773,6 +772,9 @@ def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='SCM', n_perms=
     subcortical_spins_list = [eval(x) for x in subcortical_spins_list]
     subcortical_spin_indices = np.array(subcortical_spins_list)
 
+    print(valid_indices)
+    print(X.shape)
+
     # Fit model to true data
     if model_type == 'SCM':
         O, Y_pred = fit_scm_closed(X, Y_true)
@@ -795,14 +797,22 @@ def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='SCM', n_perms=
             
         # Get spin indices for this permutation
         cortical_spin_idx = cortical_spin_indices[i]
-        subcortical_spin_idx = subcortical_spin_indices[i]
+        subcortical_spin_idx = subcortical_spin_indices[i]+399
+        
+        # Drop index 454 from subcortical spin indices
+        subcortical_spin_idx = np.delete(subcortical_spin_idx, np.where(subcortical_spin_idx == 454))
+        # Replace value 455 with 454 in subcortical spin indices
+        subcortical_spin_idx[subcortical_spin_idx == 455] = 454
+
+        print(subcortical_spin_idx)
+        print(subcortical_spin_idx.shape)
+        
         
         # Shuffle gene expression
         Y_rotated = Y_true
         X_cortical_rotated = X[cortical_spin_idx]
         X_subcortical_rotated = X[subcortical_spin_idx]
         X_rotated = np.vstack([X_cortical_rotated, X_subcortical_rotated])
-        X_rotated = X_rotated[valid_indices]
 
         # Fit model on rotated data and get predictions
         if model_type == 'SCM':
@@ -887,11 +897,23 @@ def run_spin_test_random(X, Y_true, valid_indices, spins_df, model_type='SCM', n
     for i in range(n_perms):
         if i % 50 == 0:
             print(f"permutation: {i}")
-            
+        
+        # Get spin indices for this permutation
+        cortical_spin_idx = cortical_spin_indices[i]
+        subcortical_spin_idx = subcortical_spin_indices[i]+399
+        
+        # Drop index 454 from subcortical spin indices
+        subcortical_spin_idx = np.delete(subcortical_spin_idx, np.where(subcortical_spin_idx == 454))
+        # Replace value 455 with 454 in subcortical spin indices
+        subcortical_spin_idx[subcortical_spin_idx == 455] = 454
+
+
         # Shuffle gene expression
         Y_rotated = Y_true
         X_rotated = X[spin_indices[i]]
         X_rotated = X_rotated[valid_indices]
+
+        
 
         # Fit model on rotated data and get predictions
         if model_type == 'SCM':
@@ -986,7 +1008,7 @@ def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_
           
         # Get spin indices for this permutation
         cortical_spin_idx = cortical_spin_indices[i]
-        subcortical_spin_idx = subcortical_spin_indices[i]
+        subcortical_spin_idx = subcortical_spin_indices[i]+400
         
         # Store error metrics for this permutation
         for metric in error_metrics.keys():

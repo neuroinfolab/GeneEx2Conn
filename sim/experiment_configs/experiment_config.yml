@@ -13,7 +13,7 @@ binarize: false
 
 # Gene expression
 impute_strategy: 'mirror_interpolate'
-sort_genes: 'chromosome'
+sort_genes: 'refgenome'
 gene_list: '0.2'
 null_model: 'none'
 
