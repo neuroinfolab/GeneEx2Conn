@@ -730,7 +730,7 @@ def generate_null_spins(n_rotations=100, seed=42, bin_size_mm=5, save_csv=False)
         
     return spins_df
 
-def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='SCM', n_perms=1000, sort_spins='mean_error_rank', num_components=10):
+def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='CM', n_perms=1000, sort_spins='mean_error_rank', num_components=10):
     """
     Run spin test using precomputed spins to generate null distribution
     
@@ -743,7 +743,7 @@ def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='SCM', n_perms=
     spins_df : pandas DataFrame
         DataFrame containing precomputed spin indices
     model_type : str
-        'SCM' or 'PLS' - which model to use for fitting
+        'CM' or 'PLS' - which model to use for fitting
     n_perms : int
         Number of null permutations to run
     shuffle_target : bool
@@ -772,12 +772,9 @@ def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='SCM', n_perms=
     subcortical_spins_list = [eval(x) for x in subcortical_spins_list]
     subcortical_spin_indices = np.array(subcortical_spins_list)
 
-    print(valid_indices)
-    print(X.shape)
-
     # Fit model to true data
-    if model_type == 'SCM':
-        O, Y_pred = fit_scm_closed(X, Y_true)
+    if model_type == 'CM':
+        O, Y_pred = fit_cm_closed(X, Y_true)
         Y_pred_empirical = Y_pred
     else:  # PLS
         best_pls_model = PLSRegression(n_components=num_components)
@@ -794,19 +791,14 @@ def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='SCM', n_perms=
     for i in range(n_perms):
         if i % 50 == 0:
             print(f"permutation: {i}")
-            
+        
         # Get spin indices for this permutation
-        cortical_spin_idx = cortical_spin_indices[i]
-        subcortical_spin_idx = subcortical_spin_indices[i]+399
+        cortical_spin_idx = cortical_spin_indices[i] # min index here is 0, max is 399
+        subcortical_spin_idx = subcortical_spin_indices[i]+400 # min index here is 400, max is 456
         
-        # Drop index 454 from subcortical spin indices
-        subcortical_spin_idx = np.delete(subcortical_spin_idx, np.where(subcortical_spin_idx == 454))
-        # Replace value 455 with 454 in subcortical spin indices
-        subcortical_spin_idx[subcortical_spin_idx == 455] = 454
-
-        print(subcortical_spin_idx)
-        print(subcortical_spin_idx.shape)
-        
+        # Drop index 455 from subcortical spin indices (always missing)
+        subcortical_spin_idx = np.delete(subcortical_spin_idx, np.where(subcortical_spin_idx == 455))
+        subcortical_spin_idx[subcortical_spin_idx == 456] = 455
         
         # Shuffle gene expression
         Y_rotated = Y_true
@@ -815,8 +807,8 @@ def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='SCM', n_perms=
         X_rotated = np.vstack([X_cortical_rotated, X_subcortical_rotated])
 
         # Fit model on rotated data and get predictions
-        if model_type == 'SCM':
-            O_null, Y_pred_null = fit_scm_closed(X_rotated, Y_rotated)
+        if model_type == 'CM':
+            O_null, Y_pred_null = fit_cm_closed(X_rotated, Y_rotated)
         else:  # PLS
             best_pls_model = PLSRegression(n_components=num_components)
             best_pls_model.fit(X_rotated, Y_rotated)
@@ -841,7 +833,7 @@ def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='SCM', n_perms=
     return empirical_corr, p_value, null_corrs
 
 
-def run_spin_test_random(X, Y_true, valid_indices, spins_df, model_type='SCM', n_perms=1000, num_components=10):
+def run_spin_test_random(X, Y_true, valid_indices, spins_df, model_type='CM', n_perms=1000, num_components=10):
     """
     Run spin test using precomputed spins to generate null distribution
     
@@ -854,7 +846,7 @@ def run_spin_test_random(X, Y_true, valid_indices, spins_df, model_type='SCM', n
     spins_df : pandas DataFrame
         DataFrame containing precomputed spin indices
     model_type : str
-        'SCM' or 'PLS' - which model to use for fitting
+        'CM' or 'PLS' - which model to use for fitting
     n_perms : int
         Number of null permutations to run
     shuffle_target : bool
@@ -875,12 +867,12 @@ def run_spin_test_random(X, Y_true, valid_indices, spins_df, model_type='SCM', n
     spin_indices = np.array(spin_indices_list)
     
     # Adjust indices to be 0-based and within bounds
-    spin_indices = spin_indices - 1  # Convert from 1-based to 0-based indexing
-    spin_indices = np.clip(spin_indices, 0, X.shape[0]-1)  # Clip to valid range
+    # spin_indices = spin_indices - 1  # Convert from 1-based to 0-based indexing
+    # spin_indices = np.clip(spin_indices, 0, X.shape[0]-1)  # Clip to valid range
 
     # Fit model to true data
-    if model_type == 'SCM':
-        O, Y_pred = fit_scm_closed(X, Y_true)
+    if model_type == 'CM':
+        O, Y_pred = fit_cm_closed(X, Y_true)
         Y_pred_empirical = Y_pred
     else:  # PLS
         best_pls_model = PLSRegression(n_components=num_components)
@@ -899,25 +891,19 @@ def run_spin_test_random(X, Y_true, valid_indices, spins_df, model_type='SCM', n
             print(f"permutation: {i}")
         
         # Get spin indices for this permutation
-        cortical_spin_idx = cortical_spin_indices[i]
-        subcortical_spin_idx = subcortical_spin_indices[i]+399
+        spin_idx = spin_indices[i] # min index here is 0, max is 456
+
+        # Drop index 455 from spin indices (always missing)
+        spin_idx = np.delete(spin_idx, np.where(spin_idx == 455))
+        spin_idx[spin_idx == 456] = 455
         
-        # Drop index 454 from subcortical spin indices
-        subcortical_spin_idx = np.delete(subcortical_spin_idx, np.where(subcortical_spin_idx == 454))
-        # Replace value 455 with 454 in subcortical spin indices
-        subcortical_spin_idx[subcortical_spin_idx == 455] = 454
-
-
         # Shuffle gene expression
         Y_rotated = Y_true
-        X_rotated = X[spin_indices[i]]
-        X_rotated = X_rotated[valid_indices]
-
-        
+        X_rotated = X[spin_idx]
 
         # Fit model on rotated data and get predictions
-        if model_type == 'SCM':
-            O_null, Y_pred_null = fit_scm_closed(X_rotated, Y_rotated)
+        if model_type == 'CM':
+            O_null, Y_pred_null = fit_cm_closed(X_rotated, Y_rotated)
         else:  # PLS
             best_pls_model = PLSRegression(n_components=num_components)
             best_pls_model.fit(X_rotated, Y_rotated)
@@ -942,7 +928,7 @@ def run_spin_test_random(X, Y_true, valid_indices, spins_df, model_type='SCM', n
     return empirical_corr, p_value, null_corrs
 
 
-def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_type='SCM', num_components=10, n_perms=1000, sort_spins='mean_error_rank', bins=25, fontsize=18):
+def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_type='CM', num_components=10, n_perms=1000, sort_spins='mean_error_rank', bins=25, fontsize=18):
     """
     Run spin test using precomputed spins to generate null distribution
     
@@ -955,7 +941,7 @@ def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_
     spins_df : pandas DataFrame
         DataFrame containing precomputed spin indices
     model_type : str
-        'SCM' or 'PLS' - which model to use for fitting
+        'CM' or 'PLS' - which model to use for fitting
     num_components : int
         Number of PLS components to use (only used if model_type='PLS')
     n_perms : int
@@ -979,8 +965,8 @@ def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_
     subcortical_spin_indices = np.array(subcortical_spins_list)
 
     # Fit model to true data
-    if model_type == 'SCM':
-        O, Y_pred = fit_scm_closed(X, Y_true)
+    if model_type == 'CM':
+        O, Y_pred = fit_cm_closed(X, Y_true)
         Y_pred_empirical = Y_pred
     else:  # PLS
         best_pls_model = PLSRegression(n_components=num_components)
@@ -1002,34 +988,37 @@ def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_
     }
     
     # Generate null distribution
+    # Generate null distribution
     for i in range(n_perms):
         if i % 50 == 0:
             print(f"permutation: {i}")
-          
-        # Get spin indices for this permutation
-        cortical_spin_idx = cortical_spin_indices[i]
-        subcortical_spin_idx = subcortical_spin_indices[i]+400
         
-        # Store error metrics for this permutation
-        for metric in error_metrics.keys():
-            error_metrics[metric][i] = spins_df[metric].iloc[i]
+        # Get spin indices for this permutation
+        cortical_spin_idx = cortical_spin_indices[i] # min index here is 0, max is 399
+        subcortical_spin_idx = subcortical_spin_indices[i]+400 # min index here is 400, max is 456
+        
+        # Drop index 455 from subcortical spin indices (always missing)
+        subcortical_spin_idx = np.delete(subcortical_spin_idx, np.where(subcortical_spin_idx == 455))
+        subcortical_spin_idx[subcortical_spin_idx == 456] = 455
         
         # Shuffle gene expression
         Y_rotated = Y_true
         X_cortical_rotated = X[cortical_spin_idx]
         X_subcortical_rotated = X[subcortical_spin_idx]
         X_rotated = np.vstack([X_cortical_rotated, X_subcortical_rotated])
-        X_rotated = X_rotated[valid_indices]
-
-        # Fit model on rotated data
-        if model_type == 'SCM':
-            O_null, Y_pred_null = fit_scm_closed(X_rotated, Y_rotated)
+        
+        # Fit model on rotated data and get predictions
+        if model_type == 'CM':
+            O_null, Y_pred_null = fit_cm_closed(X_rotated, Y_rotated)
         else:  # PLS
             best_pls_model = PLSRegression(n_components=num_components)
             best_pls_model.fit(X_rotated, Y_rotated)
             Y_pred_null = best_pls_model.predict(X_rotated)
+            
+        # Store error metrics for this permutation
+        for metric in error_metrics.keys():
+            error_metrics[metric][i] = spins_df[metric].iloc[i]
         
-        # Calculate correlation
         null_corrs[i] = pearsonr(Y_rotated.flatten(), Y_pred_null.flatten())[0]
 
     # Calculate p-value
@@ -1088,11 +1077,11 @@ def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_
     
     return empirical_corr, p_value, null_corrs, error_metrics
 
-### SCM AND PLS FIT FUNCTIONS ###
-# SCM
-def fit_scm(X, Y, alpha=0.0, verbose=True):
+### CM AND PLS FIT FUNCTIONS ###
+# CM
+def fit_cm(X, Y, alpha=0.0, verbose=True):
     """
-    Fit Structural Covariance Model (SCM) to predict connectivity from gene expression.
+    Fit Closed Form Connectome Model (CM) to predict connectivity from gene expression.
     Adapted from https://github.com/kpisti/SCM/tree/v1.0. Below implementation is aligned with Ridge Regression model from full paper.
 
     Args:
@@ -1163,9 +1152,9 @@ def fit_scm(X, Y, alpha=0.0, verbose=True):
     # Min-max scale Y_pred to [-1,1] range
     return O, Y_pred, objective
 
-def fit_scm_closed(X, Y, alpha=0.0, plot=False):
+def fit_cm_closed(X, Y, alpha=0.0, plot=False):
     """
-    Fit Structural Covariance Model (SCM) using closed form solution.
+    Fit Closed Form Connectome Model (CM) using closed form solution.
     
     Args:
         X: Gene expression PCA matrix (regions x gene_PCA_dim)
@@ -1190,7 +1179,7 @@ def fit_scm_closed(X, Y, alpha=0.0, plot=False):
         pearson_r, _ = stats.pearsonr(y_true, y_pred)
         r2 = r2_score(y_true, y_pred)
         mse = mean_squared_error(y_true, y_pred)
-        print("\nSCM model metrics:")
+        print("\nCM model metrics:")
         print(f"Pearson r: {pearson_r:.3f}")
         print(f"R-squared: {r2:.5f}") 
         print(f"MSE: {mse:.5f}")
@@ -1224,9 +1213,9 @@ def fit_scm_closed(X, Y, alpha=0.0, plot=False):
 
     return O, Y_pred
 
-def fit_scm_closed_with_scalar_bias(X, Y, alpha=0.0, plot=False):
+def fit_cm_closed_with_scalar_bias(X, Y, alpha=0.0, plot=False):
     """
-    Fit Structural Covariance Model (SCM) with a learned scalar bias term.
+    Fit Closed Form Connectome Model (CM) with a learned scalar bias term.
     
     Args:
         X: Gene expression PCA matrix (regions x gene_PCA_dim)
@@ -1263,7 +1252,7 @@ def fit_scm_closed_with_scalar_bias(X, Y, alpha=0.0, plot=False):
         pearson_r, _ = stats.pearsonr(y_true, y_pred)
         r2 = r2_score(y_true, y_pred)
         mse = mean_squared_error(y_true, y_pred)
-        print("\nSCM model metrics:")
+        print("\nCM model metrics:")
         print(f"Pearson r: {pearson_r:.3f}")
         print(f"R-squared: {r2:.5f}") 
         print(f"MSE: {mse:.5f}")
@@ -1297,9 +1286,9 @@ def fit_scm_closed_with_scalar_bias(X, Y, alpha=0.0, plot=False):
     
     return O, b, Y_pred
 
-def fit_scm_closed_with_gcv(X, Y, alpha=0.0, return_all=False):
+def fit_cm_closed_with_gcv(X, Y, alpha=0.0, return_all=False):
     """
-    Closed-form SCM fit with optional GCV scoring.
+    Closed-form CM fit with optional GCV scoring.
 
     Args:
         X (n x d): Input feature matrix (e.g. PCA of gene expression)
@@ -1341,7 +1330,7 @@ def grid_search_alpha_with_gcv(X, Y, alpha_values):
     traces = []
 
     for alpha in alpha_values:
-        _, _, gcv, res_norm, tau, tr_H = fit_scm_closed_with_gcv(X, Y, alpha=alpha, return_all=True)
+        _, _, gcv, res_norm, tau, tr_H = fit_cm_closed_with_gcv(X, Y, alpha=alpha, return_all=True)
         print(f"alpha={alpha:<6} | GCV={gcv:.4e} | Residual={res_norm:.4e} | τ={tau:.2f} | Tr(H)={tr_H:.2f}")
         gcv_scores.append(gcv)
         residuals.append(res_norm)
@@ -1382,7 +1371,7 @@ def grid_search_alpha_with_gcv(X, Y, alpha_values):
         ax.set_title(ax.get_title(), fontsize=14)
         ax.set_ylabel(ax.get_ylabel(), fontsize=12)
 
-    plt.suptitle('SCM Model Diagnostics vs Alpha', fontsize=16)
+    plt.suptitle('CM Model Diagnostics vs Alpha', fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.show()
 
