@@ -397,7 +397,7 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
     feature_str = "+".join(str(k) if v is None else f"{k}_{v}"
                          for feat in feature_type 
                          for k,v in feat.items())
-    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{outer_fold_idx}_innerCV" 
+    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}{seed}_fold{outer_fold_idx}_innerCV" 
     run = wandb.init(
         project="gx2conn",
         name=run_name,

@@ -26,5 +26,5 @@ track_wandb: true
 skip_cv: true
 
 # Model
-model_type: pls_lineardecoder
+model_type: shared_transformer
 use_gpu: true

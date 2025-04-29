@@ -91,8 +91,8 @@ class Simulation:
         self.connectome_target = connectome_target.upper()
         self.binarize = binarize
         self.skip_cv = skip_cv
-        self.results = []
         self.null_model = null_model
+        self.results = []
     
     def load_data(self):
         """
@@ -162,7 +162,7 @@ class Simulation:
     
     def expand_data_torch(self):
         """
-        Expand data based on feature type and prediction type
+        Expand data based on feature+processing type, and target
         """        
         # create a list of features to be expanded into edge-wise dataset
         features = []
@@ -221,7 +221,7 @@ class Simulation:
 
 
     def run_innercv_wandb_torch(self, input_dim, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3), sweep_id=None):
-        """Inner cross-validation with W&B support for deep learning models"""
+        """Inner cross-validation with W&B support for torch models"""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
@@ -265,7 +265,7 @@ class Simulation:
             best_run = sweep.best_run()
             wandb.teardown()
 
-            best_val_loss = best_run.summary.mean_val_loss # this can be changed to another metric like pearson
+            best_val_loss = best_run.summary.mean_val_loss # can change to mean_val_pearson
             best_config = best_run.config
         
         print('BEST CONFIG', best_config)
@@ -287,14 +287,11 @@ class Simulation:
         set_seed(self.random_seed)
         self.load_data()
         self.select_cv()
-
         self.expand_data_torch()
     
         if search_method[0] == 'wandb' or track_wandb:
             wandb.login()
         
-        network_dict = self.cv_obj.networks
-
         # Initialize sweep once for all inner folds if not skipping CV
         sweep_id = None
         if (search_method[0] == 'wandb' or track_wandb): # not self.skip_cv and - still init the sweep and track group but don't call train sweep wrapper
@@ -304,6 +301,7 @@ class Simulation:
             sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
             print('Initialized sweep with ID:', sweep_id)
 
+        network_dict = self.cv_obj.networks
         for fold_idx, (train_indices, test_indices) in enumerate(self.cv_obj.split(self.X, self.Y)):
             
             train_region_pairs = expand_X_symmetric(train_indices.reshape(-1, 1)).astype(int)
@@ -320,10 +318,10 @@ class Simulation:
                 feature_str = "+".join(str(k) if v is None else f"{k}_{v}" 
                                 for feat in self.feature_type 
                                 for k,v in feat.items())
-                run_name = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}_fold{fold_idx}_final_eval"
+                run_name = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}{self.random_seed}_fold{fold_idx}_final_eval"
                 final_eval_run = wandb.init(project="gx2conn",
                                             name=run_name,
-                                            group=f"sweep_{sweep_id}" if not self.skip_cv else None,
+                                            group=f"sweep_{sweep_id}",  #if not self.skip_cv else None,
                                             config=best_config,
                                             tags=["final_eval", 
                                                   f'cv_type_{self.cv_type}', 
