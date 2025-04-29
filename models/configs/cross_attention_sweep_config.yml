@@ -31,8 +31,6 @@ parameters:
     values: [0.00009, 0.00001, 0.0001]
   weight_decay:
     values: [0, 0.0001]
-  lambda_reg:
-    values: [0]
   batch_size:
     values: [128, 256]
   epochs:
@@ -44,11 +42,11 @@ best_parameters:
   binarize:
     value: !!int 0
   token_encoder_dim:
-    values: [20]
+    values: [1]
   d_model:
-    values: [128]
+    values: [16]
   encoder_output_dim:
-    values: [10]
+    values: [1]
   use_positional_encoding:
     values: [False]
   nhead:
@@ -65,10 +63,8 @@ best_parameters:
   learning_rate:
     values: [0.00009]
   weight_decay:
-    values: [0.0001]
-  lambda_reg:
-    values: [0]
+    values: [0.0]
   batch_size:
-    values: [512]
+    values: [256]
   epochs:
     values: [40]
