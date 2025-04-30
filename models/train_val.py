@@ -71,7 +71,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, scaler=None):
         optimizer.zero_grad()
 
         if scaler is not None: # Mixed precision training path            
-            with autocast():
+            with autocast(dtype=torch.bfloat16):
                 if hasattr(model, 'include_coords'):
                     predictions = model(batch_X, batch_coords).squeeze()
                 elif hasattr(model, 'optimize_encoder'):

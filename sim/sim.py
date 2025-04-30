@@ -388,6 +388,8 @@ class Simulation:
                 final_eval_run.finish()
                 wandb.finish()
                 print("Final evaluation metrics logged successfully.")
+            
+            break # for testing
         
         print_system_usage() # Display CPU and RAM utilization
         GPUtil.showUtilization() # Display GPU utilization

@@ -5,47 +5,10 @@ from models.train_val import train_model
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from flash_attn import flash_attn_func
+from torch.cuda.amp import autocast
 
-
-
-class SelfAttentionEncoder(nn.Module):
-    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1):
-        super(SelfAttentionEncoder, self).__init__()
-        self.token_encoder_dim = token_encoder_dim
-        self.d_model = d_model
-
-        self.input_projection = nn.Linear(token_encoder_dim, d_model)
-
-        self.encoder_layer = nn.TransformerEncoderLayer(
-            batch_first=True, 
-            d_model=d_model, 
-            nhead=nhead,
-            dim_feedforward= 4 * d_model,
-            dropout=dropout
-        )
-
-        self.transformer = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)
-        self.fc = nn.Linear(d_model, output_dim) # Linear output layer (after transformer)
-
-    def forward(self, x): 
-        batch_size, total_features = x.shape
-        gene_exp = x
-        
-        L = gene_exp.shape[1] // self.token_encoder_dim # number of tokens
-        gene_exp = gene_exp.view(batch_size, L, self.token_encoder_dim) # (batch_size, seq len, token_encoder_dim)
-        x_proj = self.input_projection(gene_exp)  # (batch_size, L, d_model)
-
-        x_enc = self.transformer(x_proj)
-        
-        x_enc = self.fc(x_enc)
-        x_enc = x_enc.reshape(batch_size, -1) # flatten for downstream tasks
-
-        return x_enc
-
-
-# === FAST TRANSFORMER IMPLEMENTATION ===
-import torch.nn.functional as F
-
+# === FAST TRANSFORMER IMPLEMENTATION === #
 class FastSelfAttentionBlock(nn.Module):
     def __init__(self, d_model, nhead, dropout=0.1):
         super().__init__()
@@ -211,9 +174,9 @@ class CrossAttentionBlock(nn.Module):
         self.attn_norm = nn.LayerNorm(d_model)
 
         self.ffn = nn.Sequential(
-            nn.Linear(d_model, 4 * d_model),
+            nn.Linear(d_model, 2 * d_model),
             nn.ReLU(),
-            nn.Linear(4 * d_model, d_model),
+            nn.Linear(2* d_model, d_model),
             nn.Dropout(dropout)
         )
         self.ffn_norm = nn.LayerNorm(d_model)
@@ -225,27 +188,38 @@ class CrossAttentionBlock(nn.Module):
         return x.transpose(1, 2).reshape(x.size(0), x.size(2), -1)
 
     def forward(self, q_input, kv_input):
-        residual = q_input
+        with autocast(dtype=torch.bfloat16):
+            residual = q_input
 
-        q = self.q_proj(q_input)
-        kv = self.kv_proj(kv_input)
-        k, v = kv.chunk(2, dim=-1)
+            q = self.q_proj(q_input)
+            kv = self.kv_proj(kv_input)
+            k, v = kv.chunk(2, dim=-1)
 
-        q = self.split_heads(q)
-        k = self.split_heads(k)
-        v = self.split_heads(v)
+            # Pytorch SDPA implementation - will use flash attention backend if available
+            '''
+            q = self.split_heads(q)
+            k = self.split_heads(k)
+            v = self.split_heads(v)
+            attn_output = F.scaled_dot_product_attention(q, k, v, dropout_p=0.0, is_causal=False)
+            attn_output = self.merge_heads(attn_output)
+            attn_output = self.attn_dropout(attn_output)
+            '''
+            # FlashAttention implementation - expects (B, L, nhead, head_dim)
+            q = self.split_heads(q).transpose(1, 2)  # (B, L, nhead, head_dim)
+            k = self.split_heads(k).transpose(1, 2)
+            v = self.split_heads(v).transpose(1, 2)
+            attn_output = flash_attn_func(q, k, v, dropout_p=0.0, causal=False) # , window_size=(128, 128)) # experiment with window size
+            attn_output = attn_output.transpose(1, 2)  # (B, nhead, L, head_dim)        
+            attn_output = self.merge_heads(attn_output)
+            attn_output = self.attn_dropout(attn_output)
 
-        attn_output = F.scaled_dot_product_attention(q, k, v, dropout_p=0.0, is_causal=False)
-        attn_output = self.merge_heads(attn_output)
-        attn_output = self.attn_dropout(attn_output)
+            x = self.attn_norm(residual + attn_output)
+            residual = x
+            
+            x = self.ffn(x)
+            x = self.ffn_norm(residual + x)
 
-        x = self.attn_norm(residual + attn_output)
-
-        residual = x
-        x = self.ffn(x)
-        x = self.ffn_norm(residual + x)
-
-        return x
+            return x
 
 class CrossAttentionEncoder(nn.Module):
     def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=2, dropout=0.1):
