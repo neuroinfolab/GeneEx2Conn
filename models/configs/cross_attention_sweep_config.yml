@@ -50,9 +50,9 @@ best_parameters:
   use_positional_encoding:
     values: [False]
   nhead:
-    values: [4]
+    values: [2]
   num_layers:
-    values: [4]
+    values: [2]
   deep_hidden_dims:
     values:
       - [256, 128]
@@ -67,4 +67,4 @@ best_parameters:
   batch_size:
     values: [512]
   epochs:
-    values: [200]
+    values: [20]
