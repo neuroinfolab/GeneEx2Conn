@@ -336,53 +336,39 @@ class CrossAttentionModel(nn.Module):
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
 
 
-# === SelfAttentionCLSEncoder using FastSelfAttentionBlock, FlashAttention, and CLS token ===
-# def build_coord_lookup_table(unique_coords, seed=42, scale=100.0):
-#     """
-#     unique_coords: (N, 3) float32 tensor
-#     Returns a dict mapping tuple(coord) → random 3D tensor in [-scale, scale]
-#     """
-#     torch.manual_seed(seed)
-#     lookup = {}
-#     for coord in unique_coords:
-#         key = tuple(coord.tolist())
-#         torch.manual_seed(hash(key) % (2**31 - 1))  # deterministically reseed
-#         lookup[key] = (torch.rand(3) * 2 - 1) * scale  # in [-scale, scale]
-#     return lookup
+# Quick function for hash table to randomly initialize coordinate vector deteterministically
+def build_coord_remap_table(coord_tensor, seed=42, scale=100.0):
+    torch.manual_seed(seed)
+    remap = (torch.rand_like(coord_tensor) * 2 - 1) * scale  # [-100, 100]
+    return remap
 
-# def register_lookup_tensor(self, coord_tensor):
-#     """
-#     coord_tensor: (N, 3) — all known input coordinates
-#     """
-#     lookup = build_coord_lookup_table(coord_tensor)
-#     # Map: key → value index-wise
-#     remapped = torch.stack([lookup[tuple(coord.tolist())] for coord in coord_tensor])
-#     self.register_buffer("coord_remap_table", remapped)  # (N, 3)
-#     self.register_buffer("coord_ref_table", coord_tensor)  # for matching
-
-# def replace_coords_with_remapped(self, coords):
-#     # Flatten for batched matching
-#     B, L, _ = coords.shape
-#     coords_flat = coords.view(-1, 3)
-
-#     # Match against coord_ref_table row-wise
-#     # We'll use broadcasting and torch.all for this
-#     idx = (coords_flat[:, None, :] == self.coord_ref_table[None, :, :]).all(-1).float().argmax(-1)
-
-#     # Grab remapped coords
-#     remapped = self.coord_remap_table[idx]  # (B * L, 3)
-#     return remapped.view(B, L, 3)
-
-
+# === SelfAttentionCLSEncoder using FastSelfAttentionBlock, FlashAttention, and CLS token === # 
 class SelfAttentionCLSEncoder(nn.Module):
-    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False):
+    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False, randomize_spatial=False):
         super().__init__()
         self.token_encoder_dim = token_encoder_dim
         self.d_model = d_model
         self.use_positional_encoding = use_positional_encoding
-
+        self.randomize_spatial = randomize_spatial
+        if randomize_spatial:
+            df = pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv')
+            region_coords = torch.tensor(df.iloc[:, -3:].values, dtype=torch.float32)
+            remap_tensor = build_coord_remap_table(region_coords)
+            self.register_buffer("coord_ref_table", region_coords)      # shape (N, 3)
+            self.register_buffer("coord_remap_table", remap_tensor)    # shape (N, 3)
+            print(region_coords)
+            print(remap_tensor)
+        
         self.input_projection = nn.Linear(token_encoder_dim, d_model)
         self.coord_to_cls = nn.Linear(3, d_model)
+        
+        '''
+        # Optionally freeze coordinate embedding 
+        non_learnable = False
+        if non_learnable:
+            self.coord_to_cls.weight.requires_grad = False
+            self.coord_to_cls.bias.requires_grad = False
+        '''
 
         self.layers = nn.ModuleList([
             FastSelfAttentionBlock(d_model, nhead, dropout)
@@ -390,12 +376,26 @@ class SelfAttentionCLSEncoder(nn.Module):
         ])
         self.output_projection = nn.Linear(d_model, output_dim)
 
+    def replace_coords_with_remapped(self, coords):
+        # coords: (B, 3)
+        B, _ = coords.shape
+        match = (coords[:, None, :] == self.coord_ref_table[None, :, :]).all(dim=-1)
+        idx = match.float().argmax(dim=1)
+        remapped = self.coord_remap_table[idx]
+        return remapped  # shape (B, 3)
+    
     def forward(self, gene_exp, coords):
         batch_size, total_features = gene_exp.shape
         L = total_features // self.token_encoder_dim
 
         gene_exp = gene_exp.view(batch_size, L, self.token_encoder_dim)
         x_proj = self.input_projection(gene_exp)  # (B, L, d_model)
+
+        # Optionally randomize spatial coordinates
+        '''
+        if self.randomize_spatial:
+            coords = self.replace_coords_with_remapped(coords)  # (B, 3)
+        '''
 
         cls_token = self.coord_to_cls(coords).unsqueeze(1)  # (B, 1, d_model)
         x = torch.cat([cls_token, x_proj], dim=1)  # (B, L+1, d_model)
@@ -420,6 +420,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
         
         self.binarize=binarize 
         self.include_coords = True
+        self.randomize_spatial = False # does not slow down model significantly
 
         # Transformer parameters
         self.input_dim = input_dim // 2
@@ -448,7 +449,9 @@ class SharedSelfAttentionCLSModel(nn.Module):
                                             nhead=self.nhead, 
                                             num_layers=self.num_layers,
                                             dropout=self.transformer_dropout,
-                                            use_positional_encoding=self.use_positional_encoding)
+                                            use_positional_encoding=self.use_positional_encoding, 
+                                            randomize_spatial=self.randomize_spatial
+                                            )
         self.encoder = torch.compile(self.encoder)
         
         # Use full sequence
