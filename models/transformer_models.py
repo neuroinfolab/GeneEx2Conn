@@ -8,6 +8,27 @@ import torch.nn.functional as F
 from flash_attn import flash_attn_func, flash_attn_qkvpacked_func
 from torch.cuda.amp import autocast
 
+# similar to https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html#torch.nn.functional.scaled_dot_product_attention for inference
+def scaled_dot_product_attention_with_weights(query, key, value, dropout_p=0.0, is_causal=False, scale=None):
+    scale_factor = 1 / math.sqrt(query.size(-1)) if scale is None else scale
+    scores = torch.matmul(query, key.transpose(-2, -1)) * scale_factor
+    weights = torch.softmax(scores, dim=-1)
+    weights = F.dropout(weights, p=dropout_p, training=True)
+    output = torch.matmul(weights, value)
+    return output, weights
+
+def plot_avg_attention(avg_attn):
+    nhead = avg_attn.shape[0]
+    for h in range(nhead):
+        plt.figure(figsize=(6, 5))
+        vmin, vmax = avg_attn[h].min(), avg_attn[h].max()
+        plt.imshow(avg_attn[h], cmap="viridis", vmin=vmin, vmax=vmax)
+        plt.colorbar(label=f"Attention Weight [{vmin:.2f}, {vmax:.2f}]")
+        plt.title(f"Average Attention Head {h}")
+        plt.xlabel("Key")
+        plt.ylabel("Query") 
+        plt.show()
+
 # === FAST TRANSFORMER IMPLEMENTATION === #
 class FastSelfAttentionBlock(nn.Module):
     def __init__(self, d_model, nhead, dropout=0.1):
@@ -27,6 +48,10 @@ class FastSelfAttentionBlock(nn.Module):
         )
         self.ffn_norm = nn.LayerNorm(d_model)
 
+        # Debug attention weights
+        self.debug_attn = False
+        self.last_attn_weights = None
+
     def split_heads(self, x):
         return x.view(x.size(0), x.size(1), self.nhead, self.head_dim).transpose(1, 2)
 
@@ -36,31 +61,31 @@ class FastSelfAttentionBlock(nn.Module):
     def forward(self, x):
         with autocast(dtype=torch.bfloat16):
             residual = x
-            
+
             # Project QKV jointly
             qkv = self.qkv_proj(x)  # (B, L, 3 * d_model)
-            qkv = qkv.view(x.size(0), x.size(1), 3, self.nhead, self.head_dim)  # (B, L, 3, nhead, head_dim)
-            attn_output = flash_attn_qkvpacked_func(qkv, dropout_p=0.0, causal=False) # (B, L, nhead, head_dim)
-            # SDPA implementation - will use flash attention backend if available
-            '''
-            qkv = self.qkv_proj(x)
-            q, k, v = qkv.chunk(3, dim=-1)
-            q = self.split_heads(q)
-            k = self.split_heads(k)
-            v = self.split_heads(v)
-            # approx 5 seconds per 10 epochs
-            attn_output = F.scaled_dot_product_attention(q, k, v, dropout_p=0.0, is_causal=False)
-            '''
-            attn_output = attn_output.transpose(1, 2)  # (B, nhead, L, head_dim)
-            attn_output = self.merge_heads(attn_output)
+            if self.debug_attn:
+                q, k, v = qkv.chunk(3, dim=-1)
+                q = self.split_heads(q)  # (B, nhead, L, head_dim)
+                k = self.split_heads(k)
+                v = self.split_heads(v)
+                # Manual scaled dot-product attention
+                attn_output, attn_weights = scaled_dot_product_attention_with_weights(q, k, v, dropout_p=0.0, is_causal=False)
+                self.last_attn_weights = attn_weights.detach().cpu()
+                attn_output = self.merge_heads(attn_output)
+            else:
+                qkv = qkv.view(x.size(0), x.size(1), 3, self.nhead, self.head_dim)  # (B, L, 3, nhead, head_dim)
+                attn_output = flash_attn_qkvpacked_func(qkv, dropout_p=0.0, causal=False) # (B, L, nhead, head_dim)
+                attn_output = attn_output.transpose(1, 2)  # (B, nhead, L, head_dim)
+                attn_output = self.merge_heads(attn_output)
             attn_output = self.attn_dropout(attn_output)
-            
+
             x = self.attn_norm(residual + attn_output)
             residual = x
 
             x = self.ffn(x)
             x = self.ffn_norm(residual + x)
-            
+
             return x
 
 class FastSelfAttentionEncoder(nn.Module):
@@ -148,18 +173,42 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
         output = self.output_layer(deep_output)
         return output.squeeze()
 
-    def predict(self, loader):
+    def predict(self, loader, collect_attn=False):
         self.eval()
         predictions = []
         targets = []
+
+        if collect_attn:
+            for layer in self.encoder.layers:
+                layer.debug_attn = True
+            avg_attn = None
+            total_batches = 0
+
         with torch.no_grad():
-            for batch_X, batch_y, _, _ in loader:
+            for batch_X, batch_y, batch_coords, _ in loader:
                 batch_X = batch_X.to(self.device)
                 batch_preds = self(batch_X).cpu().numpy()
                 predictions.append(batch_preds)
                 targets.append(batch_y.numpy())
+
+                if collect_attn:
+                    attn_weights = self.encoder.layers[-1].last_attn_weights
+                    if attn_weights is not None:
+                        # Mean across batch
+                        batch_avg = attn_weights.mean(dim=0)  # (nhead, L, L)
+                        if avg_attn is None:
+                            avg_attn = batch_avg
+                        else:
+                            avg_attn += batch_avg
+                        total_batches += 1
+
         predictions = np.concatenate(predictions)
         targets = np.concatenate(targets)
+
+        if collect_attn and total_batches > 0:
+            avg_attn /= total_batches  # Final average (nhead, L, L)
+            plot_avg_attention(avg_attn.cpu())
+
         return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
 
     def fit(self, dataset, train_indices, test_indices, verbose=True):
@@ -168,6 +217,218 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+
+
+# Quick function for hash table to randomly initialize coordinate vector deteterministically
+def build_coord_remap_table(coord_tensor, seed=42, scale=100.0):
+    torch.manual_seed(seed)
+    remap = (torch.rand_like(coord_tensor) * 2 - 1) * scale  # [-100, 100]
+    return remap
+
+# === SelfAttentionCLSEncoder using FastSelfAttentionBlock, FlashAttention, and CLS token === # 
+class SelfAttentionCLSEncoder(nn.Module):
+    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False, randomize_spatial=False):
+        super().__init__()
+        self.token_encoder_dim = token_encoder_dim
+        self.d_model = d_model
+        self.use_positional_encoding = use_positional_encoding
+        '''
+        self.randomize_spatial = randomize_spatial
+        if randomize_spatial:
+            df = pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv')
+            region_coords = torch.tensor(df.iloc[:, -3:].values, dtype=torch.float32)
+            remap_tensor = build_coord_remap_table(region_coords)
+            self.register_buffer("coord_ref_table", region_coords)      # shape (N, 3)
+            self.register_buffer("coord_remap_table", remap_tensor)    # shape (N, 3)
+            print(region_coords)
+            print(remap_tensor)
+        '''
+        
+        self.input_projection = nn.Linear(token_encoder_dim, d_model)
+        self.coord_to_cls = nn.Linear(3, d_model)
+        
+        '''
+        # Optionally freeze coordinate embedding 
+        non_learnable = False
+        if non_learnable:
+            self.coord_to_cls.weight.requires_grad = False
+            self.coord_to_cls.bias.requires_grad = False
+        '''
+
+        self.layers = nn.ModuleList([
+            FastSelfAttentionBlock(d_model, nhead, dropout)
+            for _ in range(num_layers)
+        ])
+        self.output_projection = nn.Linear(d_model, output_dim)
+
+    def replace_coords_with_remapped(self, coords):
+        # coords: (B, 3)
+        B, _ = coords.shape
+        match = (coords[:, None, :] == self.coord_ref_table[None, :, :]).all(dim=-1)
+        idx = match.float().argmax(dim=1)
+        remapped = self.coord_remap_table[idx]
+        return remapped  # shape (B, 3)
+    
+    def forward(self, gene_exp, coords):
+        batch_size, total_features = gene_exp.shape
+        L = total_features // self.token_encoder_dim
+
+        gene_exp = gene_exp.view(batch_size, L, self.token_encoder_dim)
+        x_proj = self.input_projection(gene_exp)  # (B, L, d_model)
+
+        '''
+        # Optionally randomize spatial coordinates
+        if self.randomize_spatial:
+            coords = self.replace_coords_with_remapped(coords)  # (B, 3)
+        '''
+
+        cls_token = self.coord_to_cls(coords).unsqueeze(1)  # (B, 1, d_model)
+        x = torch.cat([cls_token, x_proj], dim=1)  # (B, L+1, d_model)
+
+        # if self.use_positional_encoding:
+        #     x = self.add_positional_encoding(x)
+
+        for layer in self.layers:
+            x = layer(x)
+
+        x = self.output_projection(x)
+        x = x.reshape(batch_size, -1)  # flatten all tokens including CLS
+        # x = x[:, 0]  # return just the CLS token
+        return x
+
+
+class SharedSelfAttentionCLSModel(nn.Module):
+    def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
+                 use_positional_encoding=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
+                 batch_size=128, epochs=100):
+        super().__init__()
+        
+        self.binarize=binarize 
+        self.include_coords = True
+        self.randomize_spatial = False # does not slow down model significantly
+
+        # Transformer parameters
+        self.input_dim = input_dim // 2
+        self.token_encoder_dim = token_encoder_dim 
+        self.d_model = d_model
+        self.encoder_output_dim = encoder_output_dim
+        self.transformer_dropout = transformer_dropout
+        self.use_positional_encoding = use_positional_encoding
+        self.nhead = nhead
+        self.num_layers = num_layers
+
+        # Deep layers parameters
+        self.deep_hidden_dims = deep_hidden_dims
+        self.dropout_rate = dropout_rate
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.batch_size = batch_size
+        self.epochs = epochs
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Create self-attention encoder
+        self.encoder = SelfAttentionCLSEncoder(
+                                            token_encoder_dim=self.token_encoder_dim,
+                                            d_model=self.d_model,
+                                            output_dim=self.encoder_output_dim, 
+                                            nhead=self.nhead, 
+                                            num_layers=self.num_layers,
+                                            dropout=self.transformer_dropout,
+                                            use_positional_encoding=self.use_positional_encoding, 
+                                            randomize_spatial=self.randomize_spatial
+                                            )
+        self.encoder = torch.compile(self.encoder)
+        
+        # Use full sequence
+        prev_dim = (self.input_dim // self.token_encoder_dim * self.encoder_output_dim) * 2 + 2 * self.encoder_output_dim # Concatenated outputs of encoder
+        # Use CLS token only 
+        #prev_dim = self.encoder_output_dim * 2 # Concatenated outputs of encoder CLS token only or mean pooled
+
+        deep_layers = [] # Deep layers for concatenated outputs
+        for hidden_dim in self.deep_hidden_dims:
+            deep_layers.extend([
+                nn.Linear(prev_dim, hidden_dim),
+                nn.ReLU(),
+                nn.BatchNorm1d(hidden_dim, dtype=torch.float32), 
+                nn.Dropout(dropout_rate)])
+            prev_dim = hidden_dim
+        self.deep_layers = nn.Sequential(*deep_layers)
+        self.output_layer = nn.Linear(prev_dim, 1)
+        
+        self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
+        self.criterion = nn.MSELoss()
+        self.patience = 25
+        self.scheduler = ReduceLROnPlateau( 
+            self.optimizer, 
+            mode='min', 
+            factor=0.3,  # Reduce LR by 70%
+            patience=20,  # Reduce LR after patientce epochs of no improvement
+            threshold=0.1,  # Threshold to detect stagnation
+            cooldown=1,  # Reduce cooldown period
+            min_lr=1e-6,  # Prevent LR from going too low
+            verbose=True
+        )
+
+    def forward(self, x, coords):
+        x_i, x_j = torch.chunk(x, chunks=2, dim=1)
+        coords_i, coords_j = torch.chunk(coords, chunks=2, dim=1)
+
+        encoded_i = self.encoder(x_i, coords_i)
+        encoded_j = self.encoder(x_j, coords_j)
+        
+        pairwise_embedding = torch.cat((encoded_i, encoded_j), dim=1)
+
+        deep_output = self.deep_layers(pairwise_embedding)
+        output = self.output_layer(deep_output)
+        
+        return output.squeeze()
+        
+    def predict(self, loader, collect_attn=False):
+        self.eval()
+        predictions = []
+        targets = []
+
+        if collect_attn:
+            for layer in self.encoder.layers:
+                layer.debug_attn = True
+            avg_attn = None
+            total_batches = 0
+
+        with torch.no_grad():
+            for batch_X, batch_y, batch_coords, _ in loader:
+                batch_X = batch_X.to(self.device)
+                batch_coords = batch_coords.to(self.device)
+                batch_preds = self(batch_X, batch_coords).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+
+                if collect_attn:
+                    attn_weights = self.encoder.layers[-1].last_attn_weights
+                    if attn_weights is not None:
+                        # Mean across batch
+                        batch_avg = attn_weights.mean(dim=0)  # (nhead, L, L)
+                        if avg_attn is None:
+                            avg_attn = batch_avg
+                        else:
+                            avg_attn += batch_avg
+                        total_batches += 1
+
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+
+        if collect_attn and total_batches > 0:
+            avg_attn /= total_batches  # Final average (nhead, L, L)
+            plot_avg_attention(avg_attn.cpu())
+
+        return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
+    
+    def fit(self, dataset, train_indices, test_indices, verbose=True):
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+
 
 
 # === Transformer-style CrossAttentionEncoder ===
@@ -328,192 +589,6 @@ class CrossAttentionModel(nn.Module):
         targets = np.concatenate(targets)
         return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
 
-    def fit(self, dataset, train_indices, test_indices, verbose=True):
-        train_dataset = Subset(dataset, train_indices)
-        test_dataset = Subset(dataset, test_indices)
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
-        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
-
-
-# Quick function for hash table to randomly initialize coordinate vector deteterministically
-def build_coord_remap_table(coord_tensor, seed=42, scale=100.0):
-    torch.manual_seed(seed)
-    remap = (torch.rand_like(coord_tensor) * 2 - 1) * scale  # [-100, 100]
-    return remap
-
-# === SelfAttentionCLSEncoder using FastSelfAttentionBlock, FlashAttention, and CLS token === # 
-class SelfAttentionCLSEncoder(nn.Module):
-    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False, randomize_spatial=False):
-        super().__init__()
-        self.token_encoder_dim = token_encoder_dim
-        self.d_model = d_model
-        self.use_positional_encoding = use_positional_encoding
-        self.randomize_spatial = randomize_spatial
-        if randomize_spatial:
-            df = pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv')
-            region_coords = torch.tensor(df.iloc[:, -3:].values, dtype=torch.float32)
-            remap_tensor = build_coord_remap_table(region_coords)
-            self.register_buffer("coord_ref_table", region_coords)      # shape (N, 3)
-            self.register_buffer("coord_remap_table", remap_tensor)    # shape (N, 3)
-            print(region_coords)
-            print(remap_tensor)
-        
-        self.input_projection = nn.Linear(token_encoder_dim, d_model)
-        self.coord_to_cls = nn.Linear(3, d_model)
-        
-        '''
-        # Optionally freeze coordinate embedding 
-        non_learnable = False
-        if non_learnable:
-            self.coord_to_cls.weight.requires_grad = False
-            self.coord_to_cls.bias.requires_grad = False
-        '''
-
-        self.layers = nn.ModuleList([
-            FastSelfAttentionBlock(d_model, nhead, dropout)
-            for _ in range(num_layers)
-        ])
-        self.output_projection = nn.Linear(d_model, output_dim)
-
-    def replace_coords_with_remapped(self, coords):
-        # coords: (B, 3)
-        B, _ = coords.shape
-        match = (coords[:, None, :] == self.coord_ref_table[None, :, :]).all(dim=-1)
-        idx = match.float().argmax(dim=1)
-        remapped = self.coord_remap_table[idx]
-        return remapped  # shape (B, 3)
-    
-    def forward(self, gene_exp, coords):
-        batch_size, total_features = gene_exp.shape
-        L = total_features // self.token_encoder_dim
-
-        gene_exp = gene_exp.view(batch_size, L, self.token_encoder_dim)
-        x_proj = self.input_projection(gene_exp)  # (B, L, d_model)
-
-        # Optionally randomize spatial coordinates
-        '''
-        if self.randomize_spatial:
-            coords = self.replace_coords_with_remapped(coords)  # (B, 3)
-        '''
-
-        cls_token = self.coord_to_cls(coords).unsqueeze(1)  # (B, 1, d_model)
-        x = torch.cat([cls_token, x_proj], dim=1)  # (B, L+1, d_model)
-
-        # if self.use_positional_encoding:
-        #     x = self.add_positional_encoding(x)
-
-        for layer in self.layers:
-            x = layer(x)
-
-        x = self.output_projection(x)
-        x = x.reshape(batch_size, -1)  # flatten all tokens including CLS
-        # x = x[:, 0]  # return just the CLS token
-        return x
-
-
-class SharedSelfAttentionCLSModel(nn.Module):
-    def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
-                 use_positional_encoding=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
-                 batch_size=128, epochs=100):
-        super().__init__()
-        
-        self.binarize=binarize 
-        self.include_coords = True
-        self.randomize_spatial = False # does not slow down model significantly
-
-        # Transformer parameters
-        self.input_dim = input_dim // 2
-        self.token_encoder_dim = token_encoder_dim 
-        self.d_model = d_model
-        self.encoder_output_dim = encoder_output_dim
-        self.transformer_dropout = transformer_dropout
-        self.use_positional_encoding = use_positional_encoding
-        self.nhead = nhead
-        self.num_layers = num_layers
-
-        # Deep layers parameters
-        self.deep_hidden_dims = deep_hidden_dims
-        self.dropout_rate = dropout_rate
-        self.learning_rate = learning_rate
-        self.weight_decay = weight_decay
-        self.batch_size = batch_size
-        self.epochs = epochs
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        # Create self-attention encoder
-        self.encoder = SelfAttentionCLSEncoder(
-                                            token_encoder_dim=self.token_encoder_dim,
-                                            d_model=self.d_model,
-                                            output_dim=self.encoder_output_dim, 
-                                            nhead=self.nhead, 
-                                            num_layers=self.num_layers,
-                                            dropout=self.transformer_dropout,
-                                            use_positional_encoding=self.use_positional_encoding, 
-                                            randomize_spatial=self.randomize_spatial
-                                            )
-        self.encoder = torch.compile(self.encoder)
-        
-        # Use full sequence
-        prev_dim = (self.input_dim // self.token_encoder_dim * self.encoder_output_dim) * 2 + 2 * self.encoder_output_dim # Concatenated outputs of encoder
-        # Use CLS token only 
-        #prev_dim = self.encoder_output_dim * 2 # Concatenated outputs of encoder CLS token only or mean pooled
-
-        deep_layers = [] # Deep layers for concatenated outputs
-        for hidden_dim in self.deep_hidden_dims:
-            deep_layers.extend([
-                nn.Linear(prev_dim, hidden_dim),
-                nn.ReLU(),
-                nn.BatchNorm1d(hidden_dim, dtype=torch.float32), 
-                nn.Dropout(dropout_rate)])
-            prev_dim = hidden_dim
-        self.deep_layers = nn.Sequential(*deep_layers)
-        self.output_layer = nn.Linear(prev_dim, 1)
-        
-        self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
-        self.criterion = nn.MSELoss()
-        self.patience = 25
-        self.scheduler = ReduceLROnPlateau( 
-            self.optimizer, 
-            mode='min', 
-            factor=0.3,  # Reduce LR by 70%
-            patience=20,  # Reduce LR after patientce epochs of no improvement
-            threshold=0.1,  # Threshold to detect stagnation
-            cooldown=1,  # Reduce cooldown period
-            min_lr=1e-6,  # Prevent LR from going too low
-            verbose=True
-        )
-
-    def forward(self, x, coords):
-        x_i, x_j = torch.chunk(x, chunks=2, dim=1)
-        coords_i, coords_j = torch.chunk(coords, chunks=2, dim=1)
-
-        encoded_i = self.encoder(x_i, coords_i)
-        encoded_j = self.encoder(x_j, coords_j)
-        
-        pairwise_embedding = torch.cat((encoded_i, encoded_j), dim=1)
-        # pairwise_embedding = encoded_i + encoded_j
-
-        deep_output = self.deep_layers(pairwise_embedding)
-        output = self.output_layer(deep_output)
-        
-        return output.squeeze()
-        
-    def predict(self, loader):
-        self.eval()
-        predictions = []
-        targets = []
-        with torch.no_grad():
-            for batch_X, batch_y, batch_coords, batch_idx in loader:
-                batch_X = batch_X.to(self.device)
-                batch_coords = batch_coords.to(self.device)
-                batch_preds = self(batch_X, batch_coords).cpu().numpy()
-                predictions.append(batch_preds)
-                targets.append(batch_y.numpy())
-        predictions = np.concatenate(predictions)
-        targets = np.concatenate(targets)
-        return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
-    
     def fit(self, dataset, train_indices, test_indices, verbose=True):
         train_dataset = Subset(dataset, train_indices)
         test_dataset = Subset(dataset, test_indices)

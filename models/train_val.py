@@ -41,7 +41,10 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
 
             if patience_counter >= patience or epoch == epochs - 1:
                 model.load_state_dict(best_model_state)  # Rewind to best model
-                predictions, targets = model.predict(val_loader)
+                try:
+                    predictions, targets = model.predict(val_loader, collect_attn=False)
+                except:
+                    predictions, targets = model.predict(val_loader)
                 pearson_corr = pearsonr(predictions, targets)[0]
                 if patience_counter >= patience:
                     print(f"\nEarly stopping triggered at epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}, Pearson Correlation: {pearson_corr:.4f}")
@@ -62,10 +65,23 @@ def train_epoch(model, train_loader, criterion, optimizer, device, scaler=None):
     """Combined training function for regular and mixed precision training"""
     model.train()
     total_train_loss = 0
-    
+
     for batch_X, batch_y, batch_coords, batch_idx in train_loader:
         batch_X = batch_X.to(device)
         batch_y = batch_y.to(device)
+        
+        '''
+        # roll a dice at this point and replace batch_y with values from underlying population
+        if np.random.rand() < 1/6:
+            for expanded_idx in batch_idx:
+                true_idx = model.region_pair_dataset.expanded_idx_to_true_pair[expanded_idx]
+                # Reorder true idx pairs so smaller value always comes first
+                true_idx = tuple(sorted(true_idx))
+                print(true_idx)
+        '''
+
+
+            batch_y = batch_y.to(device)
         batch_coords = batch_coords.to(device)
         
         optimizer.zero_grad()

@@ -10,17 +10,17 @@ parameters:
   binarize:
     value: !!int 0
   token_encoder_dim:
-    values: [20, 30, 60]
+    values: [20, 60]
   d_model:
-    values: [64, 128, 256]
+    values: [128]
   encoder_output_dim:
-    values: [10, 20, 30]
+    values: [10]
   use_positional_encoding:
     values: [False]
   nhead:
     values: [2, 4] 
   num_layers:
-    values: [2, 4]
+    values: [2]
   deep_hidden_dims:
     values:
     - [256, 128]
@@ -29,11 +29,11 @@ parameters:
   dropout_rate:
     values: [0.1, 0.2]
   learning_rate:
-    values: [0.00009, 0.00001]
+    values: [0.00009]
   weight_decay:
     values: [0, 0.0001]
   batch_size:
-    values: [256, 512]
+    values: [512]
   epochs:
     values: [50, 75]
 
@@ -68,4 +68,4 @@ best_parameters:
   batch_size:
     values: [512]
   epochs:
-    values: [50]
+    values: [5]

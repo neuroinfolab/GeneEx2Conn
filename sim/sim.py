@@ -146,7 +146,6 @@ class Simulation:
             self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
         print('Y shape', self.Y.shape)
     
-    
     def select_cv(self):
         """
         Select cross-validation strategy
@@ -353,13 +352,12 @@ class Simulation:
                         train_history = best_model.fit(self.region_pair_dataset, train_indices, test_indices)
                 else: 
                     train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
-
+            
+            # Evaluate on the test fold
             train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
             test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
             train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
             test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
-
-            # Evaluate on the test fold
             evaluator = ModelEvaluatorTorch(region_pair_dataset=self.region_pair_dataset,
                                             model=best_model,
                                             Y=self.Y,

@@ -406,9 +406,9 @@ class ModelEvaluatorTorch:
         self.test_metrics = self.evaluate(self.test_loader, self.test_indices, self.test_distances_expanded, not self.test_shared_regions, train=False)
 
     def evaluate(self, loader, indices, distances, square, train=False):
-        try: 
-            self.Y_pred, self.Y_true = self.model.predict(loader)            
-        except: 
+        try: # for most deep learning models
+            self.Y_pred, self.Y_true = self.model.predict(loader)
+        except: # this is for PLS like models
             self.Y_pred, self.Y_true = self.model.predict(self.X, indices, train)
 
         return Metrics(self.Y, indices, self.Y_true, self.Y_pred, square, self.binarize, self.network_labels, distances).get_metrics()
