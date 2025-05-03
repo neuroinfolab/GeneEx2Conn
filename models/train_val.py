@@ -4,7 +4,7 @@ from torch.cuda.amp import autocast, GradScaler
 import torch.distributed as dist
 
 
-def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, verbose=True):
+def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, verbose=True, dataset=None):
     train_history = {"train_loss": [], "val_loss": []}
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
@@ -19,11 +19,11 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
     best_val_loss = float("inf")  # Track the best validation loss
     best_model_state = None  # Store the best model state
     patience_counter = 0  # Counts epochs without improvement
-
+    
     for epoch in range(epochs):
         start_time = time.time() if (epoch + 1) % 5 == 0 else None
 
-        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, scaler=scaler)
+        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, scaler=scaler, dataset=dataset)
         train_history["train_loss"].append(train_loss)
 
         if val_loader:
@@ -41,10 +41,7 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
 
             if patience_counter >= patience or epoch == epochs - 1:
                 model.load_state_dict(best_model_state)  # Rewind to best model
-                try:
-                    predictions, targets = model.predict(val_loader, collect_attn=False)
-                except:
-                    predictions, targets = model.predict(val_loader)
+                predictions, targets = model.predict(val_loader)
                 pearson_corr = pearsonr(predictions, targets)[0]
                 if patience_counter >= patience:
                     print(f"\nEarly stopping triggered at epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}, Pearson Correlation: {pearson_corr:.4f}")
@@ -61,27 +58,52 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
 
     return train_history
 
-def train_epoch(model, train_loader, criterion, optimizer, device, scaler=None):
+def augment_batch(batch_idx, dataset, device):
+    # Time the population data operations
+    start_time = time.time()
+    
+    # Adjust odd indices to their corresponding even indices
+    batch_idx = batch_idx - (batch_idx % 2)
+
+    # Get true pairs for batch indices
+    true_pairs = np.array([dataset.expanded_idx_to_true_pair[idx.item()] for idx in batch_idx])
+
+    # Get population edge indices for all pairs at once
+    pop_edge_indices = np.array([dataset.upper_tri_map[tuple(pair)] for pair in true_pairs])
+
+    # Get valid subjects mask for these edges
+    valid_subjects_mask = dataset.masks[:, pop_edge_indices]
+
+    # Get random subject index for each edge
+    random_subjects = np.array([
+        np.random.choice(np.where(valid_subjects_mask[:, i])[0])
+        for i in range(len(pop_edge_indices))
+    ])
+    # Get edge values using vectorized indexing
+    batch_y = torch.tensor(dataset.connectomes[random_subjects, pop_edge_indices], dtype=torch.float32).to(device)    
+    pop_time = time.time() - start_time
+
+    return batch_y
+
+def train_epoch(model, train_loader, criterion, optimizer, device, scaler=None, dataset=None):
     """Combined training function for regular and mixed precision training"""
     model.train()
     total_train_loss = 0
 
     for batch_X, batch_y, batch_coords, batch_idx in train_loader:
+
+        # Create population batch if dataset has population data
+        if dataset is not None:
+
+            #print(f"Using population data")
+            # Randomly decide whether to use population data for this batch
+            prob = np.random.random()
+            #print(f"Use population data probability: {prob:.4f}")
+            if prob < 0.1:
+                batch_y = augment_batch(batch_idx, dataset, device)  # Skip population replacement for this batch
+            
         batch_X = batch_X.to(device)
         batch_y = batch_y.to(device)
-        
-        '''
-        # roll a dice at this point and replace batch_y with values from underlying population
-        if np.random.rand() < 1/6:
-            for expanded_idx in batch_idx:
-                true_idx = model.region_pair_dataset.expanded_idx_to_true_pair[expanded_idx]
-                # Reorder true idx pairs so smaller value always comes first
-                true_idx = tuple(sorted(true_idx))
-                print(true_idx)
-        '''
-
-
-            batch_y = batch_y.to(device)
         batch_coords = batch_coords.to(device)
         
         optimizer.zero_grad()

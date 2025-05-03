@@ -702,6 +702,19 @@ class RegionPairDataset(Dataset):
         self.true_pair_to_expanded_idx = dict(zip(true_pairs, range(len(true_pairs))))
         self.expanded_idx_to_valid_pair = {v: k for k, v in self.valid_pair_to_expanded_idx.items()}
         self.expanded_idx_to_true_pair = {v: k for k, v in self.true_pair_to_expanded_idx.items()}
+    
+        # Load and check shapes of .npy files
+        data_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data/Penn_UKBB_data/npy/S456'
+
+        self.connectomes = np.load(f'{data_dir}/connectomes_upper.npy', allow_pickle=True)
+        self.masks = np.load(f'{data_dir}/masks.npy', allow_pickle=True)
+        self.subject_ids = np.load(f'{data_dir}/subject_ids.npy', allow_pickle=True)
+        self.upper_tri_map = np.load(f'{data_dir}/upper_triangle_index_map.npy', allow_pickle=True)
+        self.upper_tri_map = self.upper_tri_map.item()
+        print("Shapes of loaded arrays:")
+        print(f"connectomes_upper.npy: {self.connectomes.shape}")
+        print(f"masks.npy: {self.masks.shape}")
+        print(f"subject_ids.npy: {self.subject_ids.shape}")
 
     def __len__(self):
         return len(self.X_expanded)

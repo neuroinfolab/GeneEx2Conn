@@ -216,7 +216,7 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
         test_dataset = Subset(dataset, test_indices)
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
-        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose, dataset=dataset)
 
 
 # Quick function for hash table to randomly initialize coordinate vector deteterministically

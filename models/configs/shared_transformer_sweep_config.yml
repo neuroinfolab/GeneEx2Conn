@@ -68,4 +68,4 @@ best_parameters:
   batch_size:
     values: [512]
   epochs:
-    values: [5]
+    values: [20]
