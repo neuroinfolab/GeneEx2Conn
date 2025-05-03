@@ -57,6 +57,8 @@ best_parameters:
   deep_hidden_dims:
     values:
     - [256, 128]
+  cls_init:
+    values: ['spatial_learned']
   transformer_dropout:
     values: [0.2]
   dropout_rate:

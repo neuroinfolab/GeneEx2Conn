@@ -1,15 +1,16 @@
 from env.imports import *
 from data.data_utils import create_data_loader
 from models.train_val import train_model
-
-import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from flash_attn import flash_attn_func, flash_attn_qkvpacked_func
 from torch.cuda.amp import autocast
 
-# similar to https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html#torch.nn.functional.scaled_dot_product_attention for inference
+
 def scaled_dot_product_attention_with_weights(query, key, value, dropout_p=0.0, is_causal=False, scale=None):
+    '''
+    Helper function to compute attention output and weights at inference
+    '''
+    # similar to https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html#torch.nn.functional.scaled_dot_product_attention for inference
     scale_factor = 1 / math.sqrt(query.size(-1)) if scale is None else scale
     scores = torch.matmul(query, key.transpose(-2, -1)) * scale_factor
     weights = torch.softmax(scores, dim=-1)
@@ -18,6 +19,9 @@ def scaled_dot_product_attention_with_weights(query, key, value, dropout_p=0.0, 
     return output, weights
 
 def plot_avg_attention(avg_attn):
+    '''
+    Helper function to plot average attention weights
+    '''
     nhead = avg_attn.shape[0]
     for h in range(nhead):
         plt.figure(figsize=(6, 5))
@@ -48,8 +52,8 @@ class FastSelfAttentionBlock(nn.Module):
         )
         self.ffn_norm = nn.LayerNorm(d_model)
 
-        # Debug attention weights
-        self.debug_attn = False
+        # Store attention weights
+        self.store_attn = False
         self.last_attn_weights = None
 
     def split_heads(self, x):
@@ -64,7 +68,7 @@ class FastSelfAttentionBlock(nn.Module):
 
             # Project QKV jointly
             qkv = self.qkv_proj(x)  # (B, L, 3 * d_model)
-            if self.debug_attn:
+            if self.store_attn:
                 q, k, v = qkv.chunk(3, dim=-1)
                 q = self.split_heads(q)  # (B, nhead, L, head_dim)
                 k = self.split_heads(k)
@@ -180,7 +184,7 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
 
         if collect_attn:
             for layer in self.encoder.layers:
-                layer.debug_attn = True
+                layer.store_attn = True
             avg_attn = None
             total_batches = 0
 
@@ -219,50 +223,50 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose, dataset=dataset)
 
 
-# Quick function for hash table to randomly initialize coordinate vector deteterministically
+# === SelfAttentionCLSEncoder using FastSelfAttentionBlock, FlashAttention, and CLS token === # 
 def build_coord_remap_table(coord_tensor, seed=42, scale=100.0):
+    '''
+    Helper function for hash table to initialize coordinate vector randomly in deteterministic way
+    '''
     torch.manual_seed(seed)
     remap = (torch.rand_like(coord_tensor) * 2 - 1) * scale  # [-100, 100]
     return remap
 
-# === SelfAttentionCLSEncoder using FastSelfAttentionBlock, FlashAttention, and CLS token === # 
 class SelfAttentionCLSEncoder(nn.Module):
-    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False, randomize_spatial=False):
+    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False, cls_init='spatial_learned'):
         super().__init__()
         self.token_encoder_dim = token_encoder_dim
         self.d_model = d_model
         self.use_positional_encoding = use_positional_encoding
-        '''
-        self.randomize_spatial = randomize_spatial
-        if randomize_spatial:
-            df = pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv')
-            region_coords = torch.tensor(df.iloc[:, -3:].values, dtype=torch.float32)
-            remap_tensor = build_coord_remap_table(region_coords)
-            self.register_buffer("coord_ref_table", region_coords)      # shape (N, 3)
-            self.register_buffer("coord_remap_table", remap_tensor)    # shape (N, 3)
-            print(region_coords)
-            print(remap_tensor)
-        '''
+        self.cls_init = cls_init
         
+        # Token projection
         self.input_projection = nn.Linear(token_encoder_dim, d_model)
         self.coord_to_cls = nn.Linear(3, d_model)
         
-        '''
-        # Optionally freeze coordinate embedding 
-        non_learnable = False
-        if non_learnable:
+        # CLS token randomization/projection freeze
+        if self.cls_init == 'random_learned':
+            df = pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv')
+            region_coords = torch.tensor(df.iloc[:, -3:].values, dtype=torch.float32)
+            remap_tensor = build_coord_remap_table(region_coords)
+            self.register_buffer("coord_ref_table", region_coords)
+            self.register_buffer("coord_remap_table", remap_tensor)
+        elif self.cls_init == 'spatial_fixed':
             self.coord_to_cls.weight.requires_grad = False
-            self.coord_to_cls.bias.requires_grad = False
-        '''
+            self.coord_to_cls.bias.requires_grad = False            
 
+        # Transformer layers
         self.layers = nn.ModuleList([
             FastSelfAttentionBlock(d_model, nhead, dropout)
             for _ in range(num_layers)
         ])
-        self.output_projection = nn.Linear(d_model, output_dim)
 
+        self.output_projection = nn.Linear(d_model, output_dim)
+    
     def replace_coords_with_remapped(self, coords):
-        # coords: (B, 3)
+        '''
+        Helper function to replace true coordinates with randomized remapped coordinates
+        '''
         B, _ = coords.shape
         match = (coords[:, None, :] == self.coord_ref_table[None, :, :]).all(dim=-1)
         idx = match.float().argmax(dim=1)
@@ -276,17 +280,11 @@ class SelfAttentionCLSEncoder(nn.Module):
         gene_exp = gene_exp.view(batch_size, L, self.token_encoder_dim)
         x_proj = self.input_projection(gene_exp)  # (B, L, d_model)
 
-        '''
-        # Optionally randomize spatial coordinates
-        if self.randomize_spatial:
+        if self.cls_init == 'random_learned': # Optionally replace true coordinates with randomized - like a summary token
             coords = self.replace_coords_with_remapped(coords)  # (B, 3)
-        '''
 
         cls_token = self.coord_to_cls(coords).unsqueeze(1)  # (B, 1, d_model)
         x = torch.cat([cls_token, x_proj], dim=1)  # (B, L+1, d_model)
-
-        # if self.use_positional_encoding:
-        #     x = self.add_positional_encoding(x)
 
         for layer in self.layers:
             x = layer(x)
@@ -299,13 +297,14 @@ class SelfAttentionCLSEncoder(nn.Module):
 
 class SharedSelfAttentionCLSModel(nn.Module):
     def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
-                 use_positional_encoding=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
+                 use_positional_encoding=False, cls_init='spatial_learned', transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
                  batch_size=128, epochs=100):
         super().__init__()
         
-        self.binarize=binarize 
+        self.binarize = binarize 
         self.include_coords = True
-        self.randomize_spatial = False # does not slow down model significantly
+        self.cls_init = cls_init # 'random_learned' 'spatial_fixed' 'spatial_learned' 
+        #self.randomize_spatial = False # does not slow down model significantly
 
         # Transformer parameters
         self.input_dim = input_dim // 2
@@ -335,14 +334,14 @@ class SharedSelfAttentionCLSModel(nn.Module):
                                             num_layers=self.num_layers,
                                             dropout=self.transformer_dropout,
                                             use_positional_encoding=self.use_positional_encoding, 
-                                            randomize_spatial=self.randomize_spatial
+                                            cls_init=self.cls_init
                                             )
         self.encoder = torch.compile(self.encoder)
         
         # Use full sequence
         prev_dim = (self.input_dim // self.token_encoder_dim * self.encoder_output_dim) * 2 + 2 * self.encoder_output_dim # Concatenated outputs of encoder
         # Use CLS token only 
-        #prev_dim = self.encoder_output_dim * 2 # Concatenated outputs of encoder CLS token only or mean pooled
+        # prev_dim = self.encoder_output_dim * 2 # Concatenated outputs of encoder CLS token only or mean pooled
 
         deep_layers = [] # Deep layers for concatenated outputs
         for hidden_dim in self.deep_hidden_dims:
@@ -390,7 +389,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
 
         if collect_attn:
             for layer in self.encoder.layers:
-                layer.debug_attn = True
+                layer.store_attn = True
             avg_attn = None
             total_batches = 0
 
@@ -427,11 +426,10 @@ class SharedSelfAttentionCLSModel(nn.Module):
         test_dataset = Subset(dataset, test_indices)
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
-        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose, dataset=dataset)
 
 
-
-# === Transformer-style CrossAttentionEncoder ===
+# === CrossAttentionEncoder ===
 class CrossAttentionBlock(nn.Module):
     def __init__(self, d_model, nhead, dropout=0.1):
         super().__init__()
@@ -594,4 +592,4 @@ class CrossAttentionModel(nn.Module):
         test_dataset = Subset(dataset, test_indices)
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
-        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose, dataset=dataset)

@@ -681,6 +681,34 @@ def create_data_loader(X, y, batch_size, device, shuffle=True, weight=False):
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0)
 
 
+def augment_batch(batch_idx, dataset, device, verbose=True):
+    '''
+    Helper function to swap out targets of a population batch with individualized targets from population data
+    '''
+    start_time = time.time()    
+    
+    # Convert expanded index to upper triangle index
+    batch_idx = batch_idx - (batch_idx % 2) 
+    # Convert to tuple index of true connectome
+    true_pairs = np.array([dataset.expanded_idx_to_true_pair[idx.item()] for idx in batch_idx])
+    # Convert tuple index to expanded index for population data (might be different indexing system)
+    pop_edge_indices = np.array([dataset.upper_tri_map[tuple(pair)] for pair in true_pairs])
+    # Get mask for all subjects for these edges
+    valid_subjects_mask = dataset.masks[:, pop_edge_indices]
+    # For each edge, randomly select a subject with valid data for that edge
+    random_subjects = np.array([
+        np.random.choice(np.where(valid_subjects_mask[:, i])[0])
+        for i in range(len(pop_edge_indices))])
+    # Use vectorized indexing to store edge values for selected subjects
+    batch_y = torch.tensor(dataset.connectomes[random_subjects, pop_edge_indices], dtype=torch.float32).to(device)    
+    
+    pop_time = time.time() - start_time
+    if verbose:
+        print(f"Augmentation time: {pop_time:.2f} seconds")
+    
+    # Return augmented target batch of shape (batch_size,)
+    return batch_y
+
 class RegionPairDataset(Dataset):
     def __init__(self, X, Y, coords, valid2true_mapping):
         self.X = torch.tensor(X, dtype=torch.float32)
@@ -703,19 +731,14 @@ class RegionPairDataset(Dataset):
         self.expanded_idx_to_valid_pair = {v: k for k, v in self.valid_pair_to_expanded_idx.items()}
         self.expanded_idx_to_true_pair = {v: k for k, v in self.true_pair_to_expanded_idx.items()}
     
-        # Load and check shapes of .npy files
+        # UKBB connectomes
         data_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data/Penn_UKBB_data/npy/S456'
-
         self.connectomes = np.load(f'{data_dir}/connectomes_upper.npy', allow_pickle=True)
         self.masks = np.load(f'{data_dir}/masks.npy', allow_pickle=True)
         self.subject_ids = np.load(f'{data_dir}/subject_ids.npy', allow_pickle=True)
         self.upper_tri_map = np.load(f'{data_dir}/upper_triangle_index_map.npy', allow_pickle=True)
         self.upper_tri_map = self.upper_tri_map.item()
-        print("Shapes of loaded arrays:")
-        print(f"connectomes_upper.npy: {self.connectomes.shape}")
-        print(f"masks.npy: {self.masks.shape}")
-        print(f"subject_ids.npy: {self.subject_ids.shape}")
-
+        
     def __len__(self):
         return len(self.X_expanded)
         
