@@ -118,7 +118,7 @@ class FastSelfAttentionEncoder(nn.Module):
 class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionModel
     def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128],
                  use_positional_encoding=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
-                 batch_size=128, epochs=100):
+                 batch_size=256, aug_prob=0.0, epochs=100):
         super().__init__()
         
         self.binarize = binarize
@@ -130,6 +130,9 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
         self.num_layers = num_layers
         self.batch_size = batch_size
         self.epochs = epochs
+        
+        self.aug_prob = aug_prob
+        
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.encoder = FastSelfAttentionEncoder(
@@ -304,7 +307,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
         self.binarize = binarize 
         self.include_coords = True
         self.cls_init = cls_init # 'random_learned' 'spatial_fixed' 'spatial_learned' 
-        #self.randomize_spatial = False # does not slow down model significantly
+        self.aug_prob=0
 
         # Transformer parameters
         self.input_dim = input_dim // 2

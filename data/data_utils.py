@@ -681,7 +681,7 @@ def create_data_loader(X, y, batch_size, device, shuffle=True, weight=False):
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0)
 
 
-def augment_batch(batch_idx, dataset, device, verbose=True):
+def augment_batch(batch_idx, dataset, device, verbose=False):
     '''
     Helper function to swap out targets of a population batch with individualized targets from population data
     '''

@@ -19,7 +19,7 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
     for epoch in range(epochs):
         start_time = time.time() if (epoch + 1) % 5 == 0 else None    
         
-        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, scaler=scaler, dataset=dataset)
+        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler=scaler, dataset=dataset)
         train_history["train_loss"].append(train_loss)
         
         if val_loader:
@@ -54,13 +54,13 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
 
     return train_history
 
-def train_epoch(model, train_loader, criterion, optimizer, device, scaler=None, dataset=None):
+def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler=None, dataset=None):
     model.train()
     total_train_loss = 0
 
     for batch_X, batch_y, batch_coords, batch_idx in train_loader:
-        if dataset is not None: # Target-side augmentation with 10% probability only for transformer models
-            if np.random.random() < 0.1: batch_y = augment_batch(batch_idx, dataset, device)
+        if dataset is not None: # Target-side augmentation with given linear decaying Pr only for transformer models
+            if np.random.random() < model.aug_prob*(1-epoch/model.epochs) : batch_y = augment_batch(batch_idx, dataset, device)
         
         batch_X = batch_X.to(device)
         batch_y = batch_y.to(device)
