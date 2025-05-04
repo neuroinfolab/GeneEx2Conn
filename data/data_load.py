@@ -47,7 +47,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         np.ndarray: Processed gene expression data
     """
     if dataset == "c_elegans":
-        genes_data = pd.read_csv(f"./data/c_elegans/gene_expression/corrected_gene_expression_transformed.csv", header=None, skiprows=1).iloc[:,1:].T
+        genes_data = pd.read_csv(f"./data/c_elegans/gene_expression/genomic_ordered_gene_expression_transformed_nohvg_sorted_by_x.csv", header=None, skiprows=1).iloc[:,1:].T
         if gene_list == 'innexins':
             genes_data = pd.read_csv("./data/c_elegans/gene_expression/corrected_gene_expression_transformed.csv", index_col=0).T
             genes_data.index = range(genes_data.shape[0])
@@ -166,7 +166,7 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
     if dataset == 'c_elegans':
         if measure == 'FC':
             # matrix = pd.read_csv(f"./data/c_elegans/functional_connectivity/functional_connectivity.csv",  header=None, skiprows=1).iloc[:,1:]
-            matrix = pd.read_csv(f"./data/c_elegans/functional_connectivity/overall_mean_fc.csv", header=None, skiprows=1).iloc[:,1:]
+            matrix = pd.read_csv(f"./data/c_elegans/functional_connectivity/overall_mean_fc_sorted_by_x.csv", header=None, skiprows=1).iloc[:,1:]
             # Fill Nans with 0
             matrix = matrix.fillna(0)
             return np.array(matrix)
