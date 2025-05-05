@@ -80,13 +80,13 @@ class DynamicMLP(nn.Module):
         self.model = nn.Sequential(*layers)
         self.optimizer = AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
         
-        self.patience = 20
+        self.patience = 50
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
             factor=0.3,  # Reduce LR by 70%
             patience=20,  # Reduce LR after patience epochs of no improvement
-            threshold=0.1,  # Threshold to detect stagnation
+            threshold=0.05,  # Threshold to detect stagnation
             cooldown=1,  # Reduce cooldown period
             min_lr=1e-6,  # Prevent LR from going too low
             verbose=True

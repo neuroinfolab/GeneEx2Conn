@@ -384,16 +384,22 @@ def expand_shared_matrices(X_train, X_train2, Y_train2, Y_train_feats1=np.nan, Y
 def expand_X_symmetric(X):
     """
     Expands the X matrix symmetrically by combining features from pairs of regions.
+    For each pair of regions, creates two rows by concatenating their features in both orders.
 
     Parameters:
-    X (numpy.ndarray): Input matrix of gene expressions.
+    X (numpy.ndarray): Input matrix of gene expressions, shape (num_regions, num_genes)
+                      where num_regions is the number of brain regions and 
+                      num_genes is the number of gene features per region
 
     Returns:
-    numpy.ndarray: Expanded symmetric matrix.
+    numpy.ndarray: Expanded symmetric matrix, shape (region pairs * 2, 2 * num_genes)
+                  where region pairs = (num_regions choose 2)
+                  Each row contains concatenated features from two regions
+                  For each region pair (i,j), creates rows [features_i|features_j] and [features_j|features_i]
     """
     num_regions, num_genes = X.shape
     region_combinations = list(combinations(range(num_regions), 2))
-    num_combinations = len(region_combinations)
+    num_combinations = len(region_combinations)  # Equal to (num_regions * (num_regions-1))/2
 
     expanded_X = np.zeros((num_combinations * 2, 2 * num_genes))
     
@@ -409,16 +415,20 @@ def expand_Y_symmetric(Y):
     Expands the Y matrix symmetrically by extracting pairwise connectivity values.
 
     Parameters:
-    Y (numpy.ndarray): Input matrix of connectome values.
+    Y (numpy.ndarray): Input matrix of connectome values, shape (num_regions, num_regions)
+                      where num_regions is the number of brain regions
 
     Returns:
-    numpy.ndarray: Expanded symmetric vector.
+    numpy.ndarray: Expanded symmetric vector, shape (region pairs * 2,)
+                  where region pairs = (num_regions choose 2) = (num_regions * (num_regions-1))/2
+                  For each region pair (i,j), contains both Y[i,j] and Y[j,i] values
+                  Total length is num_regions * (num_regions-1)
     """
     num_regions = Y.shape[0]
     region_combinations = list(combinations(range(num_regions), 2))
-    num_combinations = len(region_combinations)
+    num_combinations = len(region_combinations)  # Equal to (num_regions * (num_regions-1))/2
     
-    expanded_Y = np.zeros(num_combinations * 2)
+    expanded_Y = np.zeros(num_combinations * 2)  # Length = num_regions * (num_regions-1)
     
     for i, (region1, region2) in enumerate(region_combinations):
         expanded_Y[i * 2] = Y[region1, region2]
@@ -671,6 +681,34 @@ def create_data_loader(X, y, batch_size, device, shuffle=True, weight=False):
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0)
 
 
+def augment_batch(batch_idx, dataset, device, verbose=False):
+    '''
+    Helper function to swap out targets of a population batch with individualized targets from population data
+    '''
+    start_time = time.time()    
+    
+    # Convert expanded index to upper triangle index
+    batch_idx = batch_idx - (batch_idx % 2) 
+    # Convert to tuple index of true connectome
+    true_pairs = np.array([dataset.expanded_idx_to_true_pair[idx.item()] for idx in batch_idx])
+    # Convert tuple index to expanded index for population data (might be different indexing system)
+    pop_edge_indices = np.array([dataset.upper_tri_map[tuple(pair)] for pair in true_pairs])
+    # Get mask for all subjects for these edges
+    valid_subjects_mask = dataset.masks[:, pop_edge_indices]
+    # For each edge, randomly select a subject with valid data for that edge
+    random_subjects = np.array([
+        np.random.choice(np.where(valid_subjects_mask[:, i])[0])
+        for i in range(len(pop_edge_indices))])
+    # Use vectorized indexing to store edge values for selected subjects
+    batch_y = torch.tensor(dataset.connectomes[random_subjects, pop_edge_indices], dtype=torch.float32).to(device)    
+    
+    pop_time = time.time() - start_time
+    if verbose:
+        print(f"Augmentation time: {pop_time:.2f} seconds")
+    
+    # Return augmented target batch of shape (batch_size,)
+    return batch_y
+
 class RegionPairDataset(Dataset):
     def __init__(self, X, Y, coords, valid2true_mapping):
         self.X = torch.tensor(X, dtype=torch.float32)
@@ -692,7 +730,15 @@ class RegionPairDataset(Dataset):
         self.true_pair_to_expanded_idx = dict(zip(true_pairs, range(len(true_pairs))))
         self.expanded_idx_to_valid_pair = {v: k for k, v in self.valid_pair_to_expanded_idx.items()}
         self.expanded_idx_to_true_pair = {v: k for k, v in self.true_pair_to_expanded_idx.items()}
-
+    
+        # UKBB connectomes
+        data_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data/Penn_UKBB_data/npy/S456'
+        self.connectomes = np.load(f'{data_dir}/connectomes_upper.npy', allow_pickle=True)
+        self.masks = np.load(f'{data_dir}/masks.npy', allow_pickle=True)
+        self.subject_ids = np.load(f'{data_dir}/subject_ids.npy', allow_pickle=True)
+        self.upper_tri_map = np.load(f'{data_dir}/upper_triangle_index_map.npy', allow_pickle=True)
+        self.upper_tri_map = self.upper_tri_map.item()
+        
     def __len__(self):
         return len(self.X_expanded)
         

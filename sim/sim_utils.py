@@ -59,6 +59,7 @@ def load_sweep_config(file_path, input_dim, binarize):
         config = yaml.safe_load(file)
     
     config['parameters']['input_dim']['value'] = input_dim
+    
     if binarize is not None:
         config['parameters']['binarize']['value'] = binarize
 
@@ -76,9 +77,10 @@ def load_best_parameters(yaml_file_path, input_dim, binarize):
                    for key, value in best_parameters.items()}
     
     best_config['input_dim'] = input_dim    
+    
     if binarize is not None:
         best_config['binarize'] = binarize
-
+    
     return best_config
 
 
@@ -299,7 +301,7 @@ def extract_model_params(model):
 
 
 # WANDB
-def train_sweep(config, model_type, feature_type, connectome_target, cv_type, outer_fold_idx, inner_fold_splits, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize):
+def train_sweep(config, model_type, feature_type, connectome_target, cv_type, outer_fold_idx, inner_fold_splits, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, null_model):
     """
     Training function for W&B sweeps for deep learning models.
     
@@ -326,7 +328,7 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
         project="gx2conn",
         name=run_name,
         group=f"sweep_{sweep_id}",
-        tags=["inner cross validation", f'cv_type_{cv_type}', f"fold{outer_fold_idx}", f"model_{model_type}", f"split_{cv_type}{seed}", f'feature_type_{feature_str}', f'target_{connectome_target}', f"parcellation_{parcellation}",  f"hemisphere_{hemisphere}", f"omit_subcortical_{omit_subcortical}", f"gene_list_{gene_list}", f"binarize_{binarize}"],
+        tags=["inner cross validation", f'cv_type_{cv_type}', f"fold{outer_fold_idx}", f"model_{model_type}", f"split_{cv_type}{seed}", f'feature_type_{feature_str}', f'target_{connectome_target}', f"parcellation_{parcellation}",  f"hemisphere_{hemisphere}", f"omit_subcortical_{omit_subcortical}", f"gene_list_{gene_list}", f"binarize_{binarize}", f"null_model_{null_model}"],
         reinit=True
     )
 
@@ -374,7 +376,7 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
     run.finish()
     return mean_metrics['mean_val_loss']
 
-def train_sweep_torch(config, model_type, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, impute_strategy, sort_genes):
+def train_sweep_torch(config, model_type, train_indices, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, impute_strategy, sort_genes, null_model):
     """
     Training function for W&B sweeps for deep learning models.
     
@@ -395,12 +397,28 @@ def train_sweep_torch(config, model_type, feature_type, connectome_target, datas
     feature_str = "+".join(str(k) if v is None else f"{k}_{v}"
                          for feat in feature_type 
                          for k,v in feat.items())
-    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{outer_fold_idx}_innerCV" 
+    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}{seed}_fold{outer_fold_idx}_innerCV" 
     run = wandb.init(
         project="gx2conn",
         name=run_name,
         group=f"sweep_{sweep_id}",
-        tags=["inner cross validation", f'cv_type_{cv_type}', f"fold{outer_fold_idx}", f"model_{model_type}", f"split_{cv_type}{seed}", f'feature_type_{feature_str}', f'target_{connectome_target}', f"parcellation_{parcellation}",  f"hemisphere_{hemisphere}", f"omit_subcortical_{omit_subcortical}", f"gene_list_{gene_list}", f"binarize_{binarize}", f"impute_strategy_{impute_strategy}", f"sort_genes_{sort_genes}"],
+        tags=[
+            "inner cross validation",
+            f'cv_type_{cv_type}',
+            f"fold{outer_fold_idx}",
+            f"model_{model_type}",
+            f"split_{cv_type}{seed}",
+            f'feature_type_{feature_str}',
+            f'target_{connectome_target}',
+            f"parcellation_{parcellation}",
+            f"hemisphere_{hemisphere}",
+            f"omit_subcortical_{omit_subcortical}",
+            f"gene_list_{gene_list}",
+            f"binarize_{binarize}",
+            f"impute_strategy_{impute_strategy}",
+            f"sort_genes_{sort_genes}",
+            f"null_model_{null_model}"
+        ],
         reinit=True
     )
     sweep_config = wandb.config
@@ -422,39 +440,46 @@ def train_sweep_torch(config, model_type, feature_type, connectome_target, datas
         train_indices_expanded = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
         test_indices_expanded = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])    
 
-        # Initialize model dynamically based on sweep config
-        model = ModelClass(**sweep_config).to(device)
-
-        # Train model
-        history = model.fit(dataset, train_indices_expanded, test_indices_expanded)
+        # Initialize model dynamically based on sweep config and fit
+        if 'pls' in model_type:
+            model = ModelClass(**sweep_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=dataset).to(device)
+        else:
+            model = ModelClass(**sweep_config).to(device)
         
-        # Log epoch-wise metrics
-        for epoch, metrics in enumerate(zip(history['train_loss'], history['val_loss'])):
-            wandb.log({
-                'inner_fold': fold_idx,
-                f'fold{fold_idx}_epoch': epoch,
-                f'fold{fold_idx}_train_loss': metrics[0],
-                f'fold{fold_idx}_val_loss': metrics[1]
-            })
+        if model_type == 'pls_twostep':
+            history = model.fit(dataset, train_indices, test_indices)
+            # Store final metrics
+            inner_fold_metrics['final_train_loss'].append(history['train_loss'])
+            inner_fold_metrics['final_val_loss'].append(history['val_loss'])
+            inner_fold_metrics['final_train_pearson'].append(history['train_pearson'])
+            inner_fold_metrics['final_val_pearson'].append(history['val_pearson'])
+        else: 
+            history = model.fit(dataset, train_indices_expanded, test_indices_expanded)
+            # Log epoch-wise metrics
+            for epoch, metrics in enumerate(zip(history['train_loss'], history['val_loss'])):
+                wandb.log({
+                    'inner_fold': fold_idx,
+                    f'fold{fold_idx}_epoch': epoch,
+                    f'fold{fold_idx}_train_loss': metrics[0],
+                    f'fold{fold_idx}_val_loss': metrics[1]
+                })
+            
+            train_dataset = Subset(dataset, train_indices_expanded)
+            train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
+            test_dataset = Subset(dataset, test_indices_expanded)
+            val_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
         
-        train_dataset = Subset(dataset, train_indices_expanded)
-        train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
-        predictions, targets = model.predict(train_loader)
-        train_pearson = pearsonr(predictions, targets)[0]
+            predictions, targets = model.predict(train_loader)
+            train_pearson = pearsonr(predictions, targets)[0]
+            predictions, targets = model.predict(val_loader)
+            val_pearson = pearsonr(predictions, targets)[0]
+            # Store final metrics
+            inner_fold_metrics['final_train_loss'].append(history['train_loss'][-1])
+            inner_fold_metrics['final_val_loss'].append(history['val_loss'][-1])
+            inner_fold_metrics['final_train_pearson'].append(train_pearson)
+            inner_fold_metrics['final_val_pearson'].append(val_pearson)
         
-        test_dataset = Subset(dataset, test_indices_expanded)
-        val_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
-        predictions, targets = model.predict(val_loader)
-        val_pearson = pearsonr(predictions, targets)[0]
-
-        # Store final metrics
-        inner_fold_metrics['final_train_loss'].append(history['train_loss'][-1])
-        inner_fold_metrics['final_val_loss'].append(history['val_loss'][-1])
-        inner_fold_metrics['final_train_pearson'].append(train_pearson)
-        inner_fold_metrics['final_val_pearson'].append(val_pearson)
-
-        # Only run CV on the first inner fold to test more parameters
-        break
+        break  # Only run CV on the first inner fold to test more parameters
 
     # Log mean metrics across folds
     mean_metrics = {
@@ -467,48 +492,3 @@ def train_sweep_torch(config, model_type, feature_type, connectome_target, datas
     run.finish()
     
     return mean_metrics['mean_val_loss']
-
-'''
-def train_final_torch(feature_type, model_type, connectome_target, cv_type, fold_idx, train_metrics, test_metrics, best_val_score, best_model, train_history, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, impute_strategy, sort_genes):
-    """
-    Fit model with best hyperparameters and log final eval metrics to Weights & Biases. 
-    
-    Args:
-        feature_type (list): List of feature dictionaries
-        model_type (str): Type of model being used
-        connectome_target (str): Target connectome type
-        cv_type (str): Type of cross validation
-        fold_idx (int): Current fold index
-        train_history (dict): Training history for epoch-based models
-        train_metrics (dict): Final training metrics
-        test_metrics (dict): Final test metrics 
-        best_val_score (float): Best validation score
-        best_model: Trained model object
-    """
-    # Create feature string for run name
-    feature_str = "+".join(str(k) if v is None else f"{k}_{v}" 
-                        for feat in feature_type 
-                        for k,v in feat.items())
-    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{fold_idx}_final_eval"
-
-    # Initialize a new, standalone W&B run for final evaluation results
-    final_eval_run = wandb.init(
-        project="gx2conn",
-        name=run_name,
-        tags=["final_eval", f'cv_type_{cv_type}', f'outerfold_{fold_idx}',  f'model_{model_type}',  f"split_{cv_type}{seed}", f'feature_type_{feature_str}', f'target_{connectome_target}', f'parcellation_{parcellation}', f'hemisphere_{hemisphere}', f'omit_subcortical_{omit_subcortical}', f'gene_list_{gene_list}', f"binarize_{binarize}", f"impute_strategy_{impute_strategy}", f"sort_genes_{sort_genes}"],
-        reinit=True
-    )
-
-    if model_type in model_classes:
-        wandb.watch(best_model, log='all')
-        for epoch, (train_loss, val_loss) in enumerate(zip(train_history['train_loss'], train_history['val_loss'])):
-            wandb.log({'train_mse_loss': train_loss, 'test_mse_loss': val_loss})
-
-    wandb.log({
-        'final_train_metrics': train_metrics, 'final_test_metrics': test_metrics, 'best_val_loss': best_val_score, 'config': best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model)
-    })
-    
-    final_eval_run.finish()
-    wandb.finish()
-    print("Final evaluation metrics logged successfully.")
-'''

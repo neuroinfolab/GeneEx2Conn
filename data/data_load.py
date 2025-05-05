@@ -19,7 +19,6 @@ def _apply_pca(data, var_thresh=0.95):
         n_components = np.argmax(cumulative_variance >= var_thresh) + 1
         print(f"Number of components for 95% variance PCA: {n_components}")
         
-        # Initialize output array with NaNs
         data_pca = np.full((data.shape[0], n_components), np.nan)
         
         # Fill in transformed valid rows
@@ -27,8 +26,7 @@ def _apply_pca(data, var_thresh=0.95):
         
         return data_pca
 
-
-def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='expression', return_valid_genes=False):
+def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='expression', return_valid_genes=False, null_model='none', random_seed=42):
     """
     Load transcriptome data with optional PCA reduction.
     
@@ -43,6 +41,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         hemisphere (str): Brain hemisphere ('both', 'left', 'right'). Default: 'both'
         impute_strategy (str): How to impute missing values ('mirror', 'interpolate', 'mirror_interpolate'). Default: None (otherwise: 'mirror_interpolate' recommended)
         sort_genes (str): Sort genes based on reference genome order 'refgenome', or by mean expression across brain 'expression', or alphabetically (None). Default: 'expression'
+        null_model (str): Shuffle gene expression data as in spin test null model. Default: none, spin, random
     Returns
         np.ndarray: Processed gene expression data
     """
@@ -74,7 +73,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             else:
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
             genes_data = genes_data.drop('label', axis=1)
-            region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t').iterrows()]
+            region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv').iterrows()]
         
         # Choose gene list
         if gene_list == '0.2' or gene_list == '1':
@@ -108,19 +107,16 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             valid_genes.sort(key=lambda x: gene_order_dict[x])
             genes_data = np.array(genes_data[valid_genes])
         elif sort_genes == 'expression':
-            #valid_genes = [gene for gene in genes_list if gene in genes_data.columns]
             genes_data = np.array(genes_data[valid_genes])
             mean_expr = np.nanmean(genes_data, axis=0)
             sort_idx = np.argsort(mean_expr)
             genes_data = genes_data[:, sort_idx]
             valid_genes = [valid_genes[i] for i in sort_idx]
         elif sort_genes == 'random':
-            #valid_genes = [gene for gene in genes_list if gene in genes_data.columns]
             random_genes = np.random.permutation(valid_genes)
             genes_data = np.array(genes_data[random_genes])
             valid_genes = random_genes
         else:
-            #valid_genes = [gene for gene in genes_list if gene in genes_data.columns]
             genes_data = np.array(genes_data[valid_genes])
 
         # Apply PCA if specified
@@ -146,6 +142,41 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         if return_valid_genes:
             print("valid genes", valid_genes)
             return genes_data, valid_genes
+        
+        if null_model == 'spin' and parcellation == 'S400':
+            print('Spinning gene expression')
+            spins_df_10k = pd.read_csv('./data/enigma/10000_null_spins.csv')
+            spins_df_10k = spins_df_10k.sort_values('mean_error_rank', ascending=True)
+            seed_to_index = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 9: 8, 42: 9}
+             # Get spin index based on random seed
+            spin_idx = seed_to_index.get(random_seed, 0)
+            print(f"Spin index for seed {random_seed}: {spin_idx}")
+            
+            # Get spin indices
+            cortical_spins_list = spins_df_10k['cortical_spins'].tolist()
+            cortical_spins_list = [eval(x) for x in cortical_spins_list]
+            cortical_spin_indices = np.array(cortical_spins_list)
+            print(cortical_spin_indices.shape)
+
+            subcortical_spins_list = spins_df_10k['subcortical_spins'].tolist()
+            subcortical_spins_list = [eval(x) for x in subcortical_spins_list]
+            subcortical_spin_indices = np.array(subcortical_spins_list)
+            print(subcortical_spin_indices.shape)
+    
+            cortical_spin_idx = cortical_spin_indices[spin_idx]
+            subcortical_spin_idx = subcortical_spin_indices[spin_idx]
+            print(cortical_spin_idx.shape)
+            print(subcortical_spin_idx.shape)
+
+            if omit_subcortical:
+                genes_data = genes_data[cortical_spin_idx]
+            else:
+                genes_data = np.vstack([genes_data[cortical_spin_idx], genes_data[subcortical_spin_idx+400]])
+            
+        elif null_model == 'random':
+            print('permuting gene expression')
+            rng = np.random.default_rng(random_seed)
+            genes_data = rng.permutation(genes_data)
         
         return genes_data
 
@@ -185,13 +216,13 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
                 matrix[matrix < 0] = 0 # a handful of values are slightly negative so set to 0
                 matrix = matrix / matrix.max()
         elif parcellation == 'S400' or parcellation == 'S456':
-            region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t').iterrows()]
+            region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv').iterrows()]
             if measure == 'FC':
                 matrix = np.array(pd.read_csv('./data/UKBB/UKBB_S456_FC_mu.csv'))
             elif measure == 'SC':
                 matrix = np.log1p(loadmat('./data/HCP1200/4S456_DTI_count.mat')['connectivity'])
                 matrix = matrix / matrix.max()
-     
+       
         # Add diagonal as 1 if specified (diagonal is ignored in edge-wise reconstruction)
         if diag == 1:
             matrix = matrix + np.eye(matrix.shape[0])
@@ -252,10 +283,8 @@ def load_coords(dataset='AHBA', parcellation='S100', omit_subcortical=True, hemi
         hcp_schaef = pd.read_csv(absolute_data_path + '/atlas_info/schaef114.csv')
         coordinates = hcp_schaef[['mni_x', 'mni_y', 'mni_z']].values
     elif parcellation == 'S400':
-        region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t').iterrows()]
-        UKBB_S456_atlas_info_path = absolute_data_path + '/atlas_info/atlas-4S456Parcels_dseg_reformatted.csv'
-        UKBB_S456_atlas_info = pd.read_csv(UKBB_S456_atlas_info_path)
-        # Store MNI coordinates from atlas info as list of [x,y,z] coordinates
+        region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv').iterrows()]
+        UKBB_S456_atlas_info = pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv')
         mni_coords = [[x, y, z] for x, y, z in zip(UKBB_S456_atlas_info['mni_x'], 
                                               UKBB_S456_atlas_info['mni_y'],
                                               UKBB_S456_atlas_info['mni_z'])]
@@ -289,10 +318,8 @@ def load_network_labels(parcellation='S100', omit_subcortical=False, dataset='HC
         network_labels = pd.read_csv('./data/c_elegans/labels.csv', header=None, skiprows=1)
         return labels.values, network_labels.values
     if parcellation == 'S100': 
-        schaef156_atlas_info = pd.read_csv('./data/UKBB/schaefer156_atlas_info.txt', sep='\t')
-            
+        schaef156_atlas_info = pd.read_csv('./data/UKBB/atlas-4S156Parcels_dseg_reformatted.csv')       
         schaef156_atlas_info.loc[schaef156_atlas_info['atlas_name'] == 'Cerebellum', 'network_label'] = 'Cerebellum'
-
         schaef156_atlas_info.loc[(schaef156_atlas_info['network_label'].isna()) & 
                                 (schaef156_atlas_info['atlas_name'] != 'Cerebellum'), 'network_label'] = 'Subcortical'
 
@@ -307,7 +334,7 @@ def load_network_labels(parcellation='S100', omit_subcortical=False, dataset='HC
         network_labels = schaef156_atlas_info['network_label'].values
 
     elif parcellation == 'S400':
-        schaef456_atlas_info = pd.read_csv('./data/UKBB/schaefer456_atlas_info.txt', sep='\t')
+        schaef456_atlas_info = pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv')
         schaef456_atlas_info.loc[schaef456_atlas_info['atlas_name'] == 'Cerebellum', 'network_label'] = 'Cerebellum'
         schaef456_atlas_info.loc[(schaef456_atlas_info['network_label'].isna()) & 
                                 (schaef456_atlas_info['atlas_name'] != 'Cerebellum'), 'network_label'] = 'Subcortical'

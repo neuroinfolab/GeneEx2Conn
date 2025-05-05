@@ -1,0 +1,30 @@
+# Sample experiment config
+
+# Inputs and targets
+feature_type:
+  - transcriptome: null
+use_shared_regions: false
+test_shared_regions: false
+omit_subcortical: true
+parcellation: 'S400'
+hemisphere: 'both'
+connectome_target: 'FC'
+binarize: false
+
+# Gene expression 
+impute_strategy: 'mirror_interpolate'
+sort_genes: 'expression'
+gene_list: '0.2'
+null_model: 'spin'
+
+# Cross-validation
+cv_type: random
+resolution: 1.0
+random_seed: 42
+search_method: ['wandb', 'mse', 5]
+track_wandb: true
+skip_cv: false
+
+# Model
+model_type: 'dynamic_mlp'
+use_gpu: true

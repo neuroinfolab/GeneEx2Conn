@@ -47,17 +47,17 @@ parameters:
   activation:
     values: ['none']
   learning_rate:
-    values: [0.0005, 0.001]
+    values: [0.0001]
   batch_size:
     values: [256]
   regularization:
     values: ['l2']
   lambda_reg:
-    values: [0.01, 0.1]
+    values: [0, 0.00001, 0.001]
   shared_weights:
     values: [True]
   reduced_dim:
-    values: [5, 7, 10]
+    values: [5, 8, 10, 12]
   epochs:
     values: [100, 150]
 
@@ -84,4 +84,4 @@ best_parameters:
   reduced_dim:
     values: [10]
   epochs:
-    values: [150]
+    values: [100]

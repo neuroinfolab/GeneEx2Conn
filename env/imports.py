@@ -35,31 +35,29 @@ from matplotlib.patches import Patch
 import umap
 import umap.umap_ as umap
 from mpl_toolkits.mplot3d import Axes3D
-import nichord
-from nichord.chord import plot_chord
-from nichord.glassbrain import plot_glassbrain
-from nichord.combine import combine_imgs, plot_and_combine
-from nichord.coord_labeler import get_idx_to_label
 
 # stats 
 import scipy
+import statsmodels.api as sm
 from scipy import stats
 from scipy.stats import pearsonr, spearmanr
 from scipy.stats import entropy
+from scipy.signal import savgol_filter
+from scipy.spatial.distance import pdist, squareform
+from scipy.io import loadmat
+from scipy.stats import randint, uniform
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from sklearn.preprocessing import StandardScaler
 from scipy.stats import ttest_ind, shapiro, levene
 from sklearn.metrics import make_scorer
-from scipy.stats import randint, uniform
 from sklearn.preprocessing import MinMaxScaler
-from scipy.signal import savgol_filter
-from scipy.spatial.distance import pdist, squareform
-from scipy.io import loadmat
-import statsmodels.api as sm
 from kneed import KneeLocator
 
 # modeling
+import lightgbm
+import wandb
+import xgboost
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error, accuracy_score, log_loss
 from sklearn.cross_decomposition import PLSCanonical
@@ -79,30 +77,32 @@ from sklearn.svm import SVC
 from sklearn.svm import SVR
 from skopt import BayesSearchCV
 from skopt.space import Real, Categorical, Integer
-import xgboost
 from xgboost import XGBRegressor, XGBRFRegressor, XGBClassifier
-import lightgbm
 from lightgbm import LGBMRegressor
-import wandb
+from scipy.optimize import curve_fit
+from scipy.stats import binned_statistic
+from scipy.spatial import distance
+from scipy.spatial.distance import cdist
+from numpy.polynomial import Polynomial
 
 # cuda, pytorch, GPU
 import GPUtil
 import cupy as cp
 import torch
 import torch.nn as nn
+import torchmetrics
+import torch.distributed as dist
 from torch.utils.data import TensorDataset, DataLoader, Subset
 from torch.optim import Adam, AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-import torchmetrics
 from torchmetrics import PearsonCorrCoef
-import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 # gene expression
 import scib
 import scanpy as sc
-from anndata import AnnData
 import inmoose
+from anndata import AnnData
 from inmoose.pycombat import pycombat_norm, pycombat_seq
 
 # network analysis
@@ -119,11 +119,24 @@ from skopt.plots import plot_objective, plot_histogram
 # gene ontology
 import gseapy as gp
 
-# enigma toolbox and data
+# neuro data and toolboxes
+import abagen
+import nichord
+import nibabel as nib
+import netneurotools
 from enigmatoolbox.datasets import fetch_ahba
 from enigmatoolbox.datasets import load_sc, load_sc_as_one, load_fc, load_fc_as_one
 from enigmatoolbox.utils.parcellation import parcel_to_surface
 from enigmatoolbox.plotting import plot_cortical
 from enigmatoolbox.permutation_testing import rotate_parcellation
 from nilearn import plotting
-import abagen
+from nichord.chord import plot_chord
+from nichord.glassbrain import plot_glassbrain
+from nichord.combine import combine_imgs, plot_and_combine
+from nichord.coord_labeler import get_idx_to_label
+from netneurotools.datasets import fetch_schaefer2018
+from netneurotools.plotting import plot_fsaverage
+from netneurotools import datasets as nndata
+from netneurotools import freesurfer as nnsurf
+from netneurotools import stats as nnstats
+from netneurotools.plotting import plot_point_brain

@@ -50,21 +50,22 @@ class BilinearLowRank(nn.Module):
         else:  # 'none'
             self.activation = nn.Identity()
 
+        self.criterion = BilinearLoss(self.parameters(), regularization=regularization, lambda_reg=lambda_reg)
+        self.optimizer = Adam(self.parameters(), lr=learning_rate)
+        
         self.patience = 20
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
             factor=0.3,  # Reduce LR by 70%
             patience=20,  # Reduce LR after patience epochs of no improvement
-            threshold=0.1,  # Threshold to detect stagnation
+            threshold=0.05,  # Threshold to detect stagnation
             cooldown=1,  # Reduce cooldown period
             min_lr=1e-6,  # Prevent LR from going too low
             verbose=True
         )
-        self.criterion = BilinearLoss(self.parameters(), regularization=regularization, lambda_reg=lambda_reg)
-        self.optimizer = Adam(self.parameters(), lr=learning_rate)
-
-    def forward(self, x): 
+    
+    def forward(self, x):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         out1 = self.activation(self.linear(x_i))
         out2 = self.activation(self.linear(x_j) if self.shared_weights else self.linear2(x_j))
@@ -91,7 +92,8 @@ class BilinearLowRank(nn.Module):
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
 
-class BilinearSCM(nn.Module):
+
+class BilinearCM(nn.Module):
     def __init__(self, input_dim, binarize=False,learning_rate=0.01, epochs=100, 
                  batch_size=128, regularization='l2', lambda_reg=1.0, bias=True):
         super().__init__()
@@ -104,11 +106,22 @@ class BilinearSCM(nn.Module):
 
         self.bilinear = nn.Bilinear(input_dim//2, input_dim//2, 1, bias=bias)
         num_params = sum(p.numel() for p in self.bilinear.parameters() if p.requires_grad)
-        print(f"Number of learnable parameters in bilinear SCM layer: {num_params}")
+        print(f"Number of learnable parameters in bilinear CM layer: {num_params}")
         
         self.criterion = BilinearLoss(self.parameters(), regularization=regularization, lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate)
-        self.scheduler = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.1, patience=20, verbose=True)
+
+        self.patience = 20
+        self.scheduler = ReduceLROnPlateau( 
+            self.optimizer, 
+            mode='min', 
+            factor=0.3,  # Reduce LR by 70%
+            patience=20,  # Reduce LR after patience epochs of no improvement
+            threshold=0.05,  # Threshold to detect stagnation
+            cooldown=1,  # Reduce cooldown period
+            min_lr=1e-6,  # Prevent LR from going too low
+            verbose=True
+        )
     
     def forward(self, x):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
@@ -137,4 +150,4 @@ class BilinearSCM(nn.Module):
 
     def fit_full(self, dataset, verbose=True):
         train_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, pin_memory=False)
-        return train_model(self, train_loader, None, self.epochs, self.criterion, self.optimizer)
+        return train_model(self, train_loader, None, self.epochs, self.criterion, self.patience, self.scheduler, self.optimizer)

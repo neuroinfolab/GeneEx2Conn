@@ -20,15 +20,19 @@ from data.data_utils import (
 )
 
 from models.base_models import ModelBuild, BaseModel
+from models.bilinear import BilinearLowRank, BilinearCM
+from models.pls import PLSTwoStepModel, PLS_MLPDecoderModel, PLS_BilinearDecoderModel
 from models.dynamic_mlp import DynamicMLP
-from models.bilinear import BilinearLowRank, BilinearSCM
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
 from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionCLSModel, CrossAttentionModel
 
 MODEL_CLASSES = {
-    'dynamic_mlp': DynamicMLP,
     'bilinear_lowrank': BilinearLowRank,
-    'bilinear_SCM': BilinearSCM,
+    'bilinear_CM': BilinearCM,
+    'pls_twostep': PLSTwoStepModel,
+    'pls_mlpdecoder': PLS_MLPDecoderModel,
+    'pls_bilineardecoder': PLS_BilinearDecoderModel,
+    'dynamic_mlp': DynamicMLP,
     'shared_mlp_encoder': SharedMLPEncoderModel,
     'shared_linear_encoder': SharedLinearEncoderModel,
     'shared_transformer': SharedSelfAttentionModel,
@@ -62,15 +66,16 @@ from sim.sim_utils import (
     train_sweep_torch,
     load_sweep_config, 
     load_best_parameters
-    # log_wandb_metrics
 )
+
+absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
 
 
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, resolution=1.0, random_seed=42,
                  omit_subcortical=False, parcellation='S100', impute_strategy='mirror_interpolate', sort_genes='expression', 
                  gene_list='0.2', hemisphere='both', use_shared_regions=False, test_shared_regions=False, 
-                 connectome_target='FC', binarize=False, skip_cv=False, species="human"):        
+                 connectome_target='FC', binarize=False, skip_cv=False, null_model=False, species="human"):        
         """
         Initialization of simulation parameters
         """
@@ -86,6 +91,7 @@ class Simulation:
         self.connectome_target = connectome_target.upper()
         self.binarize = binarize
         self.skip_cv = skip_cv
+        self.null_model = null_model
         self.results = []
         self.species = species
 
@@ -99,17 +105,17 @@ class Simulation:
         if self.species == "c_elegans":
             dataset = "c_elegans"
             network_dataset = "c_elegans"
-        
-        self.X = load_transcriptome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes)        
-        self.X_pca = load_transcriptome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA=True, hemisphere=self.hemisphere)
-        self.Y_sc = load_connectome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None, hemisphere=self.hemisphere)
-        self.Y_sc_binary = load_connectome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
-        self.Y_sc_spectralL = load_connectome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L', hemisphere=self.hemisphere)
-        self.Y_sc_spectralA = load_connectome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='A', hemisphere=self.hemisphere)
-        self.Y_fc = load_connectome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', hemisphere=self.hemisphere)
-        self.Y_fc_binary = load_connectome(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', binarize=True, hemisphere=self.hemisphere)
-        self.coords = load_coords(dataset=dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
-        self.labels, self.network_labels = load_network_labels(dataset=network_dataset, parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
+
+        self.X = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes, null_model=self.null_model, random_seed=self.random_seed)        
+        self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA=True, hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
+        self.Y_sc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None, hemisphere=self.hemisphere)
+        self.Y_sc_binary = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
+        self.Y_sc_spectralL = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L', hemisphere=self.hemisphere)
+        self.Y_sc_spectralA = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='A', hemisphere=self.hemisphere)
+        self.Y_fc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', hemisphere=self.hemisphere)
+        self.Y_fc_binary = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', binarize=True, hemisphere=self.hemisphere)
+        self.coords = load_coords(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
+        self.labels, self.network_labels = load_network_labels(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
 
         # Find rows that are not all NaN - necessary for gene expression data with unsampled regions
         valid_indices = ~np.isnan(self.X).all(axis=1)
@@ -118,7 +124,7 @@ class Simulation:
         valid_indices_values = np.where(valid_indices)[0]
         valid2true_index_mapping = dict(enumerate(valid_indices_values))
         self.valid2true_index_mapping = valid2true_index_mapping
-
+      
         # Subset all data using valid indices
         self.X = self.X[valid_indices]
         self.X_pca = self.X_pca[valid_indices]
@@ -147,7 +153,6 @@ class Simulation:
             self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
         print('Y shape', self.Y.shape)
     
-    
     def select_cv(self):
         """
         Select cross-validation strategy
@@ -163,7 +168,7 @@ class Simulation:
     
     def expand_data_torch(self):
         """
-        Expand data based on feature type and prediction type
+        Expand data based on feature+processing type, and target
         """        
         # create a list of features to be expanded into edge-wise dataset
         features = []
@@ -187,7 +192,7 @@ class Simulation:
         self.features = features 
         print('features', self.features)
 
-        X = []
+        X_all = []
         for feature in features:
             if 'spectral' in feature:
                 feature_type = '_'.join(feature.split('_')[:-1])  # take provided number of spectral components
@@ -207,35 +212,35 @@ class Simulation:
     
                 feature_X = feature_dict[feature]
             
-            X.append(feature_X)
+            X_all.append(feature_X)
         
-        self.X = np.hstack(X)
+        self.X_all = np.hstack(X_all)
         print('X generated... expanding to pairwise dataset')
 
         # Create custom dataset for region pair data
         self.region_pair_dataset = RegionPairDataset(
-            self.X, 
+            self.X_all, 
             self.Y,
             self.coords,
             self.valid2true_index_mapping
         )
 
 
-    def run_innercv_wandb_torch(self, input_dim, train_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3)):
-        """Inner cross-validation with W&B support for deep learning models"""
+    def run_innercv_wandb_torch(self, input_dim, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3), sweep_id=None):
+        """Inner cross-validation with W&B support for torch models"""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-        sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
         
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
 
-        if self.skip_cv: 
+        if self.skip_cv:
+            sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
             best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
             best_val_loss = 0.0 # no CV --> no best val loss
         else:
             def train_sweep_wrapper(config=None):
                 return train_sweep_torch(
                     config=config,
+                    train_indices=train_indices,
                     model_type=self.model_type,
                     feature_type=self.feature_type,
                     connectome_target=self.connectome_target,
@@ -253,13 +258,10 @@ class Simulation:
                     seed=self.random_seed,
                     binarize=self.binarize,
                     impute_strategy=self.impute_strategy,
-                    sort_genes=self.sort_genes
+                    sort_genes=self.sort_genes,
+                    null_model=self.null_model
                 )
             
-            # Initialize sweep
-            sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
-            print('sweep_id', sweep_id)
-
             # Run sweep
             wandb.agent(sweep_id, function=train_sweep_wrapper, count=search_method[2])
 
@@ -269,16 +271,19 @@ class Simulation:
             best_run = sweep.best_run()
             wandb.teardown()
 
-            best_val_loss = best_run.summary.mean_val_loss # this can be changed to another metric
+            best_val_loss = best_run.summary.mean_val_loss # can change to mean_val_pearson
             best_config = best_run.config
-
+        
         print('BEST CONFIG', best_config)
 
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]
-        best_model = ModelClass(**best_config).to(device)
+        if 'pls' in self.model_type:
+            best_model = ModelClass(**best_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=self.region_pair_dataset).to(device)
+        else:
+            best_model = ModelClass(**best_config).to(device)
             
-        return best_model, best_val_loss
+        return best_model, best_val_loss, best_config, sweep_id
 
 
     def run_sim_torch(self, search_method=('random', 'mse', 5), track_wandb=False):
@@ -288,16 +293,23 @@ class Simulation:
         set_seed(self.random_seed)
         self.load_data()
         self.select_cv()
-
         self.expand_data_torch()
     
         if search_method[0] == 'wandb' or track_wandb:
             wandb.login()
         
-        network_dict = self.cv_obj.networks
+        # Initialize sweep once for all inner folds if not skipping CV
+        sweep_id = None
+        if (search_method[0] == 'wandb' or track_wandb): # not self.skip_cv and - still init the sweep and track group but don't call train sweep wrapper
+            input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
+            sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
+            sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
+            sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
+            print('Initialized sweep with ID:', sweep_id)
 
+        network_dict = self.cv_obj.networks
         for fold_idx, (train_indices, test_indices) in enumerate(self.cv_obj.split(self.X, self.Y)):
-        
+            
             train_region_pairs = expand_X_symmetric(train_indices.reshape(-1, 1)).astype(int)
             test_region_pairs = expand_X_symmetric(test_indices.reshape(-1, 1)).astype(int)
 
@@ -306,15 +318,17 @@ class Simulation:
             
             innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
             input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
-            best_model, best_val_score = self.run_innercv_wandb_torch(input_dim, train_indices, innercv_network_dict, fold_idx, search_method)
+            best_model, best_val_score, best_config, _ = self.run_innercv_wandb_torch(input_dim, train_indices, test_indices, innercv_network_dict, fold_idx, search_method, sweep_id)
             
             if track_wandb:
                 feature_str = "+".join(str(k) if v is None else f"{k}_{v}" 
                                 for feat in self.feature_type 
                                 for k,v in feat.items())
-                run_name = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}_fold{fold_idx}_final_eval"
+                run_name = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}{self.random_seed}_fold{fold_idx}_final_eval"
                 final_eval_run = wandb.init(project="gx2conn",
                                             name=run_name,
+                                            group=f"sweep_{sweep_id}",  #if not self.skip_cv else None,
+                                            config=best_config,
                                             tags=["final_eval", 
                                                   f'cv_type_{self.cv_type}', 
                                                   f'outerfold_{fold_idx}',
@@ -328,23 +342,29 @@ class Simulation:
                                                   f'gene_list_{self.gene_list}',
                                                   f"binarize_{self.binarize}",
                                                   f"impute_strategy_{self.impute_strategy}",
-                                                  f"sort_genes_{self.sort_genes}"],
+                                                  f"sort_genes_{self.sort_genes}",
+                                                  f"null_model_{self.null_model}"],
                                             reinit=True)
 
                 if self.model_type in MODEL_CLASSES:
                     wandb.watch(best_model, log='all')
-                    train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
+                    if self.model_type == 'pls_twostep':
+                        train_history = best_model.fit(self.region_pair_dataset, train_indices, test_indices)
+                    else:
+                        train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
                     for epoch, (train_loss, val_loss) in enumerate(zip(train_history['train_loss'], train_history['val_loss'])):
                         wandb.log({'train_mse_loss': train_loss, 'test_mse_loss': val_loss})
             else:
-                train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
-
+                if self.model_type == 'pls_twostep':
+                        train_history = best_model.fit(self.region_pair_dataset, train_indices, test_indices)
+                else: 
+                    train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
+            
+            # Evaluate on the test fold
             train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
             test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
             train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
             test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
-
-            # Evaluate on the test fold
             evaluator = ModelEvaluatorTorch(region_pair_dataset=self.region_pair_dataset,
                                             model=best_model,
                                             Y=self.Y,
@@ -360,17 +380,22 @@ class Simulation:
 
             train_metrics = evaluator.get_train_metrics()
             test_metrics = evaluator.get_test_metrics()
+
             print("\nTRAIN METRICS:", train_metrics)
             print("TEST METRICS:", test_metrics)
             print('BEST VAL SCORE', best_val_score)
             print('BEST MODEL HYPERPARAMS', best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model))
 
             if track_wandb:
-                wandb.log({'final_train_metrics': train_metrics, 'final_test_metrics': test_metrics, 'best_val_loss': best_val_score, 'config': best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model)})
+                wandb.log({'final_train_metrics': train_metrics, 
+                           'final_test_metrics': test_metrics, 
+                           'best_val_loss': best_val_score})
                 final_eval_run.finish()
                 wandb.finish()
                 print("Final evaluation metrics logged successfully.")
-
+            
+            break # for testing
+        
         print_system_usage() # Display CPU and RAM utilization
         GPUtil.showUtilization() # Display GPU utilization
 
@@ -507,7 +532,7 @@ class Simulation:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Load sweep config
-        sweep_config_path = os.path.join(os.getcwd(), 'models', 'configs', f'{self.model_type}_sweep_config.yml')
+        sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
         sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
         
         if self.skip_cv: 
@@ -632,16 +657,19 @@ class Simulation:
                     binarize=self.binarize,
                     impute_strategy=self.impute_strategy,
                     sort_genes=self.sort_genes,
-                    seed=self.random_seed
+                    seed=self.random_seed,
+                    null_model=self.null_model
                 )
 
             # Extract feature importances and model JSON
-            feature_importances_, model_json = extract_feature_importances(
+            '''
+            feature_importances_ = extract_feature_importances(
                 self.model_type, 
                 best_model, 
                 self.save_model_json
             )
-
+            '''
+            
             # Save results to pickle file - consider removing this
             self.results.append({
                 'model_parameters': best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model),
@@ -649,9 +677,9 @@ class Simulation:
                 'best_val_score': best_val_score,
                 'test_metrics': test_metrics,
                 'y_true': Y_test.get() if self.gpu_acceleration else Y_test,
-                'y_pred': best_model.predict(X_test),
-                'feature_importances': feature_importances_,
-                'model_json': model_json
+                'y_pred': best_model.predict(X_test)
+                # 'feature_importances': feature_importances_,
+                # 'model_json': model_json
             })
 
             print_system_usage() # Display CPU and RAM utilization 
