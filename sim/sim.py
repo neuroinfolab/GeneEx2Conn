@@ -291,7 +291,7 @@ class Simulation:
         if search_method[0] == 'wandb' or track_wandb:
             wandb.login()
         
-        # Initialize sweep once for all inner folds if not skipping CV
+        # Initialize sweep regardless of inner CV
         sweep_id = None
         if (search_method[0] == 'wandb' or track_wandb): # not self.skip_cv and - still init the sweep and track group but don't call train sweep wrapper
             input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
@@ -315,12 +315,12 @@ class Simulation:
             
             if track_wandb:
                 feature_str = "+".join(str(k) if v is None else f"{k}_{v}" 
-                                for feat in self.feature_type 
+                                for feat in self.feature_type
                                 for k,v in feat.items())
                 run_name = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}{self.random_seed}_fold{fold_idx}_final_eval"
                 final_eval_run = wandb.init(project="gx2conn",
                                             name=run_name,
-                                            group=f"sweep_{sweep_id}",  #if not self.skip_cv else None,
+                                            group=f"sweep_{sweep_id}" if sweep_id else None,
                                             config=best_config,
                                             tags=["final_eval", 
                                                   f'cv_type_{self.cv_type}', 
@@ -387,14 +387,17 @@ class Simulation:
                 wandb.finish()
                 print("Final evaluation metrics logged successfully.")
             
-            break # for testing
+            time.sleep(5)
+            print("logged inner CV for first fold")
+            break
         
         print_system_usage() # Display CPU and RAM utilization
         GPUtil.showUtilization() # Display GPU utilization
+        time.sleep(10)  # wait for 10 seconds
+        print("Sim complete")
+
 
     
-
-
     #########################################################
     #### FUNCTIONALITY FOR NON-GPU SKLEARN BASED MODELS #####
     #########################################################

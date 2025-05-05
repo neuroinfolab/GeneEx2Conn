@@ -435,51 +435,50 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
     # Process each inner fold
     for fold_idx, (train_indices, test_indices) in enumerate(cv_obj.split()):
         print(f'Processing inner fold {fold_idx}')
-        train_region_pairs = expand_X_symmetric(np.array(train_indices).reshape(-1, 1)).astype(int)
-        test_region_pairs = expand_X_symmetric(np.array(test_indices).reshape(-1, 1)).astype(int)
-        train_indices_expanded = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
-        test_indices_expanded = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])    
-
-        # Initialize model dynamically based on sweep config and fit
-        if 'pls' in model_type:
-            model = ModelClass(**sweep_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=dataset).to(device)
-        else:
-            model = ModelClass(**sweep_config).to(device)
-        
-        if model_type == 'pls_twostep':
-            history = model.fit(dataset, train_indices, test_indices)
-            # Store final metrics
-            inner_fold_metrics['final_train_loss'].append(history['train_loss'])
-            inner_fold_metrics['final_val_loss'].append(history['val_loss'])
-            inner_fold_metrics['final_train_pearson'].append(history['train_pearson'])
-            inner_fold_metrics['final_val_pearson'].append(history['val_pearson'])
-        else: 
-            history = model.fit(dataset, train_indices_expanded, test_indices_expanded)
-            # Log epoch-wise metrics
-            for epoch, metrics in enumerate(zip(history['train_loss'], history['val_loss'])):
-                wandb.log({
-                    'inner_fold': fold_idx,
-                    f'fold{fold_idx}_epoch': epoch,
-                    f'fold{fold_idx}_train_loss': metrics[0],
-                    f'fold{fold_idx}_val_loss': metrics[1]
-                })
+        if fold_idx == 0:  # Only run CV on the first inner fold to test more parameters
+            train_region_pairs = expand_X_symmetric(np.array(train_indices).reshape(-1, 1)).astype(int)
+            test_region_pairs = expand_X_symmetric(np.array(test_indices).reshape(-1, 1)).astype(int)
+            train_indices_expanded = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
+            test_indices_expanded = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])    
+    
+            # Initialize model dynamically based on sweep config and fit
+            if 'pls' in model_type:
+                model = ModelClass(**sweep_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=dataset).to(device)
+            else:
+                model = ModelClass(**sweep_config).to(device)
             
-            train_dataset = Subset(dataset, train_indices_expanded)
-            train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
-            test_dataset = Subset(dataset, test_indices_expanded)
-            val_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
-        
-            predictions, targets = model.predict(train_loader)
-            train_pearson = pearsonr(predictions, targets)[0]
-            predictions, targets = model.predict(val_loader)
-            val_pearson = pearsonr(predictions, targets)[0]
-            # Store final metrics
-            inner_fold_metrics['final_train_loss'].append(history['train_loss'][-1])
-            inner_fold_metrics['final_val_loss'].append(history['val_loss'][-1])
-            inner_fold_metrics['final_train_pearson'].append(train_pearson)
-            inner_fold_metrics['final_val_pearson'].append(val_pearson)
-        
-        break  # Only run CV on the first inner fold to test more parameters
+            if model_type == 'pls_twostep':
+                history = model.fit(dataset, train_indices, test_indices)
+                # Store final metrics
+                inner_fold_metrics['final_train_loss'].append(history['train_loss'])
+                inner_fold_metrics['final_val_loss'].append(history['val_loss'])
+                inner_fold_metrics['final_train_pearson'].append(history['train_pearson'])
+                inner_fold_metrics['final_val_pearson'].append(history['val_pearson'])
+            else: 
+                history = model.fit(dataset, train_indices_expanded, test_indices_expanded)
+                # Log epoch-wise metrics
+                for epoch, metrics in enumerate(zip(history['train_loss'], history['val_loss'])):
+                    wandb.log({
+                        'inner_fold': fold_idx,
+                        f'fold{fold_idx}_epoch': epoch,
+                        f'fold{fold_idx}_train_loss': metrics[0],
+                        f'fold{fold_idx}_val_loss': metrics[1]
+                    })
+                
+                train_dataset = Subset(dataset, train_indices_expanded)
+                train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
+                test_dataset = Subset(dataset, test_indices_expanded)
+                val_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
+            
+                predictions, targets = model.predict(train_loader)
+                train_pearson = pearsonr(predictions, targets)[0]
+                predictions, targets = model.predict(val_loader)
+                val_pearson = pearsonr(predictions, targets)[0]
+                # Store final metrics
+                inner_fold_metrics['final_train_loss'].append(history['train_loss'][-1])
+                inner_fold_metrics['final_val_loss'].append(history['val_loss'][-1])
+                inner_fold_metrics['final_train_pearson'].append(train_pearson)
+                inner_fold_metrics['final_val_pearson'].append(val_pearson)
 
     # Log mean metrics across folds
     mean_metrics = {

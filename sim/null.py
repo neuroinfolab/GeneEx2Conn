@@ -272,7 +272,7 @@ def plot_distance_decay_poly3(features, y_feature='FC', bin_size_mm=5, coverage=
     plt.tight_layout()
     plt.show()
 
-def plot_distance_fits(features, y_feature, bin_size_mm=10, coverage='Full Brain'):
+def plot_distance_fits(features, y_feature, bin_size_mm=10, coverage='Full Brain', include_linear=False, fontsize=28):
     """
     Plot distance relationships with exponential decay, polynomial and linear fits
     
@@ -281,6 +281,8 @@ def plot_distance_fits(features, y_feature, bin_size_mm=10, coverage='Full Brain
         y_feature (str): Feature to plot ('FC', 'CGE', or 'PCA_CGE')
         bin_size_mm (float): Size of distance bins in mm
         coverage (str): Brain coverage description for title
+        include_linear (bool): Whether to include linear fit (default False)
+        fontsize (int): Base font size for plot text elements (default 18)
     """
     # Calculate binned statistics
     bins = np.arange(0, max(features['distances']) + bin_size_mm, bin_size_mm)
@@ -306,14 +308,16 @@ def plot_distance_fits(features, y_feature, bin_size_mm=10, coverage='Full Brain
     exp_params, _ = curve_fit(exp_decay, bin_centers, bin_means,
                            p0=[0, 10], bounds=([-1, 0], [1, 100]), maxfev=5000)
     
-    # Linear fit
-    linear = np.polyfit(bin_centers, bin_means, 1)
+    # Linear fit if requested
+    if include_linear:
+        linear = np.polyfit(bin_centers, bin_means, 1)
     
     # Generate fit lines
     x_fit = np.linspace(min(features['distances']), max(features['distances']), 100)
     y_poly = poly3(x_fit)
     y_exp = exp_decay(x_fit, *exp_params)
-    y_linear = linear[0] * x_fit + linear[1]
+    if include_linear:
+        y_linear = linear[0] * x_fit + linear[1]
 
     # Create plot
     fig, ax = plt.subplots(figsize=(12, 8))
@@ -328,42 +332,44 @@ def plot_distance_fits(features, y_feature, bin_size_mm=10, coverage='Full Brain
         y_label = y_feature.replace('_', ' ').title()
 
     # Plot raw data and binned statistics
-    plt.bar(bin_centers, bin_means, width=bin_size_mm, color='#808080', alpha=0.6)
-    plt.scatter(features['distances'], features[y_feature], color='gray', alpha=0.1, s=0.8)
-    plt.errorbar(bin_centers, bin_means, yerr=bin_std, color='black', fmt='o',
-                 markersize=2, capsize=1, linewidth=0.5,
-                 label=f"Mean {y_label} ({bin_size_mm}mm bins)")
+    plt.bar(bin_centers, bin_means, width=bin_size_mm, color='#808080', alpha=0.5)
+    plt.scatter(features['distances'], features[y_feature], color='gray', alpha=0.1, s=1)
+    # plt.errorbar(bin_centers, bin_means, yerr=bin_std, color='black', fmt='o',
+    #              markersize=2, capsize=2, linewidth=0.5,
+    #              label=f"Mean {y_feature} ({bin_size_mm}mm bins)")
 
     # Plot fits
-    plt.plot(x_fit, y_poly, "darkorange", linewidth=2.5, label="3rd Order Polynomial")
-    plt.plot(x_fit, y_exp, "red", linewidth=2.5, label="Exponential Decay")
-    plt.plot(x_fit, y_linear, "blue", linewidth=2.5, label="Linear Fit")
+    plt.plot(x_fit, y_poly, "darkorange", linewidth=3, label="3rd Order Polynomial")
+    plt.plot(x_fit, y_exp, "red", linewidth=3, label="Exponential Decay")
+    if include_linear:
+        plt.plot(x_fit, y_linear, "blue", linewidth=4, label="Linear Fit")
 
-    plt.xlabel('Distance (mm)', fontsize=18)
-    plt.ylabel(y_label, fontsize=18)
-    plt.title(f'Distance vs {y_label} ({coverage})', fontsize=20)
-    plt.tick_params(axis='both', which='major', labelsize=16)
-    plt.legend(fontsize=16, loc='upper right')
+    plt.xlabel('Distance (mm)', fontsize=fontsize-2)
+    plt.ylabel(y_label, fontsize=fontsize-2)
+    # plt.title(f'Distance vs {y_label} ({coverage})', fontsize=fontsize+2)
+    plt.tick_params(axis='both', which='major', labelsize=fontsize-2)
+    # plt.legend(fontsize=fontsize-4, loc='upper right')
 
-    # Add fit parameters text box outside plot
+    # Add fit parameters text box in lower right corner
     param_text = (
-        "Fit Parameters:\n\n"
+        "Exponential:\n"
+        f"SA-∞ = {exp_params[0]:.3f}\n"
+        f"SA-λ = {exp_params[1]:.3f}\n\n"
         "Polynomial:\n"
         f"$a_3$ = {poly_coefs[3]:.2e}\n"
         f"$a_2$ = {poly_coefs[2]:.2e}\n"
         f"$a_1$ = {poly_coefs[1]:.2e}\n"
-        f"$a_0$ = {poly_coefs[0]:.2e}\n\n"
-        "Exponential:\n"
-        f"SA-∞ = {exp_params[0]:.3f}\n"
-        f"SA-λ = {exp_params[1]:.3f}\n\n"
-        "Linear:\n"
-        f"slope = {linear[0]:.2e}\n"
-        f"intercept = {linear[1]:.2e}"
+        f"$a_0$ = {poly_coefs[0]:.2e}"
     )
     
-    plt.figtext(1.02, 0.5, param_text, fontsize=14, 
-                bbox=dict(facecolor='white', alpha=0.8),
-                va='center')
+    if include_linear:
+        param_text += f"\n\nLinear:\nslope = {linear[0]:.2e}\nintercept = {linear[1]:.2e}"
+    
+    plt.text(0.78, 0.02, param_text, fontsize=fontsize-9,
+             bbox=dict(facecolor='white', alpha=0.8),
+             transform=ax.transAxes,
+             verticalalignment='bottom',
+             horizontalalignment='left')
 
     plt.tight_layout()
     plt.show()
@@ -730,7 +736,7 @@ def generate_null_spins(n_rotations=100, seed=42, bin_size_mm=5, save_csv=False)
         
     return spins_df
 
-def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='CM', n_perms=1000, sort_spins='mean_error_rank', num_components=10):
+def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='CM', n_perms=1000, sort_spins='mean_error_rank', num_components=10, pre_fit=False):
     """
     Run spin test using precomputed spins to generate null distribution
     
@@ -785,36 +791,39 @@ def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='CM', n_perms=1
     empirical_corr = pearsonr(Y_true.flatten(), Y_pred_empirical.flatten())[0]
 
     # Initialize array for null correlations
-    null_corrs = np.zeros(n_perms)
+    if pre_fit:
+        null_corrs = spins_df[f'pearsonr_{model_type}'].to_numpy()[:n_perms]
+    else:
+        null_corrs = np.zeros(n_perms)
     
-    # Generate null distribution
-    for i in range(n_perms):
-        if i % 50 == 0:
-            print(f"permutation: {i}")
-        
-        # Get spin indices for this permutation
-        cortical_spin_idx = cortical_spin_indices[i] # min index here is 0, max is 399
-        subcortical_spin_idx = subcortical_spin_indices[i]+400 # min index here is 400, max is 456
-        
-        # Drop index 455 from subcortical spin indices (always missing)
-        subcortical_spin_idx = np.delete(subcortical_spin_idx, np.where(subcortical_spin_idx == 455))
-        subcortical_spin_idx[subcortical_spin_idx == 456] = 455
-        
-        # Shuffle gene expression
-        Y_rotated = Y_true
-        X_cortical_rotated = X[cortical_spin_idx]
-        X_subcortical_rotated = X[subcortical_spin_idx]
-        X_rotated = np.vstack([X_cortical_rotated, X_subcortical_rotated])
-
-        # Fit model on rotated data and get predictions
-        if model_type == 'CM':
-            O_null, Y_pred_null = fit_cm_closed(X_rotated, Y_rotated)
-        else:  # PLS
-            best_pls_model = PLSRegression(n_components=num_components)
-            best_pls_model.fit(X_rotated, Y_rotated)
-            Y_pred_null = best_pls_model.predict(X_rotated)
+        # Generate null distribution
+        for i in range(n_perms):
+            if i % 50 == 0:
+                print(f"permutation: {i}")
             
-        null_corrs[i] = pearsonr(Y_rotated.flatten(), Y_pred_null.flatten())[0]
+            # Get spin indices for this permutation
+            cortical_spin_idx = cortical_spin_indices[i] # min index here is 0, max is 399
+            subcortical_spin_idx = subcortical_spin_indices[i]+400 # min index here is 400, max is 456
+            
+            # Drop index 455 from subcortical spin indices (always missing)
+            subcortical_spin_idx = np.delete(subcortical_spin_idx, np.where(subcortical_spin_idx == 455))
+            subcortical_spin_idx[subcortical_spin_idx == 456] = 455
+            
+            # Shuffle gene expression
+            Y_rotated = Y_true
+            X_cortical_rotated = X[cortical_spin_idx]
+            X_subcortical_rotated = X[subcortical_spin_idx]
+            X_rotated = np.vstack([X_cortical_rotated, X_subcortical_rotated])
+
+            # Fit model on rotated data and get predictions
+            if model_type == 'CM':
+                O_null, Y_pred_null = fit_cm_closed(X_rotated, Y_rotated)
+            else:  # PLS
+                best_pls_model = PLSRegression(n_components=num_components)
+                best_pls_model.fit(X_rotated, Y_rotated)
+                Y_pred_null = best_pls_model.predict(X_rotated)
+                
+            null_corrs[i] = pearsonr(Y_rotated.flatten(), Y_pred_null.flatten())[0]
 
     # Calculate p-value
     p_value = max(1/(n_perms + 1), np.mean(null_corrs >= empirical_corr))
@@ -928,7 +937,7 @@ def run_spin_test_random(X, Y_true, valid_indices, spins_df, model_type='CM', n_
     return empirical_corr, p_value, null_corrs
 
 
-def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_type='CM', num_components=10, n_perms=1000, sort_spins='mean_error_rank', bins=25, fontsize=18):
+def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_type='CM', num_components=10, n_perms=1000, sort_spins='mean_error_rank', bins=25, fontsize=18, pre_fit=False):
     """
     Run spin test using precomputed spins to generate null distribution
     
@@ -950,6 +959,8 @@ def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_
         Metric to sort spins by
     fontsize : int
         Font size for plot text elements
+    prefit : bool
+        If True, use pre fit null distribution
     """
     
     # Sort spins_df by standardized_SA_error in ascending order
@@ -977,49 +988,61 @@ def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_
     empirical_corr = pearsonr(Y_true.flatten(), Y_pred_empirical.flatten())[0]
 
     # Initialize arrays for null correlations and error metrics
-    null_corrs = np.zeros(n_perms)
-    error_metrics = {
-        'mean_error_rank': np.zeros(n_perms),
-        'total_cost': np.zeros(n_perms),
-        'standardized_SA_error': np.zeros(n_perms),
-        'standardized_poly_error': np.zeros(n_perms),
-        'standardized_SA_PCA_error': np.zeros(n_perms),
-        'standardized_poly_PCA_error': np.zeros(n_perms)
-    }
-    
-    # Generate null distribution
-    # Generate null distribution
-    for i in range(n_perms):
-        if i % 50 == 0:
-            print(f"permutation: {i}")
+    # Initialize array for null correlations
+    if pre_fit:
+        null_corrs = spins_df[f'pearsonr_{model_type}'].to_numpy()[:n_perms]
+        error_metrics = {
+            'mean_error_rank': spins_df['mean_error_rank'].to_numpy()[:n_perms],
+            'total_cost': spins_df['total_cost'].to_numpy()[:n_perms],
+            'standardized_SA_error': spins_df['standardized_SA_error'].to_numpy()[:n_perms],
+            'standardized_poly_error': spins_df['standardized_poly_error'].to_numpy()[:n_perms],
+            'standardized_SA_PCA_error': spins_df['standardized_SA_PCA_error'].to_numpy()[:n_perms],
+            'standardized_poly_PCA_error': spins_df['standardized_poly_PCA_error'].to_numpy()[:n_perms]
+        }
+    else:
+        null_corrs = np.zeros(n_perms)
+        error_metrics = {
+            'mean_error_rank': np.zeros(n_perms),
+            'total_cost': np.zeros(n_perms),
+            'standardized_SA_error': np.zeros(n_perms),
+            'standardized_poly_error': np.zeros(n_perms),
+            'standardized_SA_PCA_error': np.zeros(n_perms),
+            'standardized_poly_PCA_error': np.zeros(n_perms)
+        }
         
-        # Get spin indices for this permutation
-        cortical_spin_idx = cortical_spin_indices[i] # min index here is 0, max is 399
-        subcortical_spin_idx = subcortical_spin_indices[i]+400 # min index here is 400, max is 456
-        
-        # Drop index 455 from subcortical spin indices (always missing)
-        subcortical_spin_idx = np.delete(subcortical_spin_idx, np.where(subcortical_spin_idx == 455))
-        subcortical_spin_idx[subcortical_spin_idx == 456] = 455
-        
-        # Shuffle gene expression
-        Y_rotated = Y_true
-        X_cortical_rotated = X[cortical_spin_idx]
-        X_subcortical_rotated = X[subcortical_spin_idx]
-        X_rotated = np.vstack([X_cortical_rotated, X_subcortical_rotated])
-        
-        # Fit model on rotated data and get predictions
-        if model_type == 'CM':
-            O_null, Y_pred_null = fit_cm_closed(X_rotated, Y_rotated)
-        else:  # PLS
-            best_pls_model = PLSRegression(n_components=num_components)
-            best_pls_model.fit(X_rotated, Y_rotated)
-            Y_pred_null = best_pls_model.predict(X_rotated)
+        # Generate null distribution
+        # Generate null distribution
+        for i in range(n_perms):
+            if i % 50 == 0:
+                print(f"permutation: {i}")
             
-        # Store error metrics for this permutation
-        for metric in error_metrics.keys():
-            error_metrics[metric][i] = spins_df[metric].iloc[i]
-        
-        null_corrs[i] = pearsonr(Y_rotated.flatten(), Y_pred_null.flatten())[0]
+            # Get spin indices for this permutation
+            cortical_spin_idx = cortical_spin_indices[i] # min index here is 0, max is 399
+            subcortical_spin_idx = subcortical_spin_indices[i]+400 # min index here is 400, max is 456
+            
+            # Drop index 455 from subcortical spin indices (always missing)
+            subcortical_spin_idx = np.delete(subcortical_spin_idx, np.where(subcortical_spin_idx == 455))
+            subcortical_spin_idx[subcortical_spin_idx == 456] = 455
+            
+            # Shuffle gene expression
+            Y_rotated = Y_true
+            X_cortical_rotated = X[cortical_spin_idx]
+            X_subcortical_rotated = X[subcortical_spin_idx]
+            X_rotated = np.vstack([X_cortical_rotated, X_subcortical_rotated])
+            
+            # Fit model on rotated data and get predictions
+            if model_type == 'CM':
+                O_null, Y_pred_null = fit_cm_closed(X_rotated, Y_rotated)
+            else:  # PLS
+                best_pls_model = PLSRegression(n_components=num_components)
+                best_pls_model.fit(X_rotated, Y_rotated)
+                Y_pred_null = best_pls_model.predict(X_rotated)
+                
+            # Store error metrics for this permutation
+            for metric in error_metrics.keys():
+                error_metrics[metric][i] = spins_df[metric].iloc[i]
+            
+            null_corrs[i] = pearsonr(Y_rotated.flatten(), Y_pred_null.flatten())[0]
 
     # Calculate p-value
     p_value = max(1/(n_perms + 1), np.mean(null_corrs >= empirical_corr))
@@ -1185,7 +1208,7 @@ def fit_cm_closed(X, Y, alpha=0.0, plot=False):
         print(f"MSE: {mse:.5f}")
 
         # Create figure with two subplots side by side
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
 
         # Plot ground truth connectome
         im1 = ax1.imshow(Y, cmap='RdBu_r', vmin=-0.75, vmax=1)

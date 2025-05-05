@@ -139,23 +139,19 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
              # Get spin index based on random seed
             spin_idx = seed_to_index.get(random_seed, 0)
             print(f"Spin index for seed {random_seed}: {spin_idx}")
-            
+            print(f"Mean error rank for spin index {spin_idx}: {spins_df_10k['mean_error_rank'].iloc[spin_idx]}")
+
             # Get spin indices
             cortical_spins_list = spins_df_10k['cortical_spins'].tolist()
             cortical_spins_list = [eval(x) for x in cortical_spins_list]
             cortical_spin_indices = np.array(cortical_spins_list)
-            print(cortical_spin_indices.shape)
-
             subcortical_spins_list = spins_df_10k['subcortical_spins'].tolist()
             subcortical_spins_list = [eval(x) for x in subcortical_spins_list]
             subcortical_spin_indices = np.array(subcortical_spins_list)
-            print(subcortical_spin_indices.shape)
     
             cortical_spin_idx = cortical_spin_indices[spin_idx]
             subcortical_spin_idx = subcortical_spin_indices[spin_idx]
-            print(cortical_spin_idx.shape)
-            print(subcortical_spin_idx.shape)
-
+            
             if omit_subcortical:
                 genes_data = genes_data[cortical_spin_idx]
             else:
