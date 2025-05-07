@@ -23,7 +23,7 @@ resolution: 1.0
 random_seed: 42
 search_method: ['wandb', 'mse', 5]
 track_wandb: true
-skip_cv: false
+skip_cv: true
 
 # Model
 model_type: shared_transformer

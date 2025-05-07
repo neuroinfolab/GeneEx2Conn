@@ -15,8 +15,8 @@ parameters:
     values: [128]
   encoder_output_dim:
     values: [10]
-  use_positional_encoding:
-    values: [False]
+  use_alibi:
+    values: [True, False]
   nhead:
     values: [2] 
   num_layers:
@@ -25,7 +25,7 @@ parameters:
     values:
     - [256, 128]
   cls_init:
-    values: ['random_learned', 'spatial_fixed', 'spatial_learned']
+    values: ['spatial_learned'] # 'random_learned', 'spatial_fixed', 'spatial_learned']
   transformer_dropout:
     values: [0.2] # 0.1, 0.2]
   dropout_rate:
@@ -48,10 +48,10 @@ best_parameters:
     values: [20]
   d_model:
     values: [128]
-  use_positional_encoding:
-    values: [False]
   encoder_output_dim:
     values: [10]
+  use_alibi:
+    values: [False]
   nhead:
     values: [2] 
   num_layers:
@@ -71,5 +71,7 @@ best_parameters:
     values: [0.0001]
   batch_size:
     values: [512]
+  aug_prob:
+    values: [0.2]
   epochs:
     values: [50]

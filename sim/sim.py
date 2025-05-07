@@ -387,9 +387,9 @@ class Simulation:
                 wandb.finish()
                 print("Final evaluation metrics logged successfully.")
             
-            time.sleep(5)
-            print("logged inner CV for first fold")
-            break
+            time.sleep(3)
+            # print("logged inner CV for first fold")
+            # break
         
         print_system_usage() # Display CPU and RAM utilization
         GPUtil.showUtilization() # Display GPU utilization

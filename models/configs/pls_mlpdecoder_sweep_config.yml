@@ -11,7 +11,7 @@ parameters:
   binarize: 
     value: !!int 0
   n_components:
-    values: [8, 10, 12, 15, 20, 25]
+    values: [8, 10, 12, 15, 20, 25, 30]
   max_iter:
     values: [1000]
   scale:

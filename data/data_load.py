@@ -26,7 +26,7 @@ def _apply_pca(data, var_thresh=0.95):
         
         return data_pca
 
-def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='expression', return_valid_genes=False, null_model='none', random_seed=42):
+def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='refgenome', return_valid_genes=False, null_model='none', random_seed=42):
     """
     Load transcriptome data with optional PCA reduction.
     

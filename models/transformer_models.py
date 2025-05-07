@@ -35,7 +35,7 @@ def plot_avg_attention(avg_attn):
 
 # === FAST TRANSFORMER IMPLEMENTATION === #
 class FastSelfAttentionBlock(nn.Module):
-    def __init__(self, d_model, nhead, dropout=0.1):
+    def __init__(self, d_model, nhead, dropout=0.1, use_alibi=False):
         super().__init__()
         self.nhead = nhead
         self.head_dim = d_model // nhead
@@ -56,11 +56,25 @@ class FastSelfAttentionBlock(nn.Module):
         self.store_attn = False
         self.last_attn_weights = None
 
+        self.use_alibi = use_alibi
+        if use_alibi:
+            slopes = self.build_alibi_slopes(nhead)
+            self.register_buffer("alibi_slopes", slopes)
+
     def split_heads(self, x):
         return x.view(x.size(0), x.size(1), self.nhead, self.head_dim).transpose(1, 2)
 
     def merge_heads(self, x):
         return x.transpose(1, 2).reshape(x.size(0), x.size(2), -1)
+
+    @staticmethod
+    def build_alibi_slopes(n_heads):
+        slopes = []
+        base = 2.0
+        for i in range(n_heads):
+            power = i // (n_heads // base)
+            slopes.append(1.0 / (base ** power))
+        return torch.tensor(slopes).float()
 
     def forward(self, x):
         with autocast(dtype=torch.bfloat16):
@@ -79,7 +93,14 @@ class FastSelfAttentionBlock(nn.Module):
                 attn_output = self.merge_heads(attn_output)
             else:
                 qkv = qkv.view(x.size(0), x.size(1), 3, self.nhead, self.head_dim)  # (B, L, 3, nhead, head_dim)
-                attn_output = flash_attn_qkvpacked_func(qkv, dropout_p=0.0, causal=False) # (B, L, nhead, head_dim)
+                attn_output = flash_attn_qkvpacked_func(
+                    qkv,
+                    dropout_p=0.0,
+                    causal=False,
+                    alibi_slopes=self.alibi_slopes if self.use_alibi else None
+                )
+                # ALiBi indicates positionality in the transformer by simply modifying the attention mechanism,
+                # biasing the attention mechanism to have words that are away from each other interact less than words that are nearby.
                 attn_output = attn_output.transpose(1, 2)  # (B, nhead, L, head_dim)
                 attn_output = self.merge_heads(attn_output)
             attn_output = self.attn_dropout(attn_output)
@@ -93,11 +114,11 @@ class FastSelfAttentionBlock(nn.Module):
             return x
 
 class FastSelfAttentionEncoder(nn.Module):
-    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1):
+    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_alibi=False):
         super().__init__()
         self.input_projection = nn.Linear(token_encoder_dim, d_model)
         self.layers = nn.ModuleList([
-            FastSelfAttentionBlock(d_model, nhead, dropout)
+            FastSelfAttentionBlock(d_model, nhead, dropout, use_alibi=use_alibi)
             for _ in range(num_layers)
         ])
         self.output_projection = nn.Linear(d_model, output_dim)
@@ -117,7 +138,7 @@ class FastSelfAttentionEncoder(nn.Module):
 
 class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionModel
     def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128],
-                 use_positional_encoding=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
+                 use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
                  batch_size=256, aug_prob=0.0, epochs=100):
         super().__init__()
         
@@ -130,9 +151,8 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
         self.num_layers = num_layers
         self.batch_size = batch_size
         self.epochs = epochs
-        
         self.aug_prob = aug_prob
-        
+        self.use_alibi = use_alibi
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.encoder = FastSelfAttentionEncoder(
@@ -141,7 +161,8 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
             output_dim=self.encoder_output_dim,
             nhead=self.nhead,
             num_layers=self.num_layers,
-            dropout=transformer_dropout
+            dropout=transformer_dropout,
+            use_alibi=self.use_alibi
         )
         self.encoder = torch.compile(self.encoder)
 
@@ -227,31 +248,33 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
 
 
 # === SelfAttentionCLSEncoder using FastSelfAttentionBlock, FlashAttention, and CLS token === # 
-def build_coord_remap_table(coord_tensor, seed=42, scale=100.0):
-    '''
-    Helper function for hash table to initialize coordinate vector randomly in deteterministic way
-    '''
-    torch.manual_seed(seed)
-    remap = (torch.rand_like(coord_tensor) * 2 - 1) * scale  # [-100, 100]
-    return remap
-
-class SelfAttentionCLSEncoder(nn.Module):
-    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False, cls_init='spatial_learned'):
+class SelfAttentionCLSEncoder(nn.Module):    
+    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False, cls_init='spatial_learned', use_alibi=False):
         super().__init__()
         self.token_encoder_dim = token_encoder_dim
         self.d_model = d_model
         self.use_positional_encoding = use_positional_encoding
         self.cls_init = cls_init
+        self.use_alibi = use_alibi
         
         # Token projection
         self.input_projection = nn.Linear(token_encoder_dim, d_model)
         self.coord_to_cls = nn.Linear(3, d_model)
         
+        @staticmethod
+        def build_coord_remap_table(coord_tensor, seed=42, scale=100.0):
+            '''
+            Helper function for hash table to initialize coordinate vector randomly in deteterministic way
+            '''
+            torch.manual_seed(seed)
+            remap = (torch.rand_like(coord_tensor) * 2 - 1) * scale  # [-100, 100]
+            return remap
+        
         # CLS token randomization/projection freeze
         if self.cls_init == 'random_learned':
             df = pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv')
             region_coords = torch.tensor(df.iloc[:, -3:].values, dtype=torch.float32)
-            remap_tensor = build_coord_remap_table(region_coords)
+            remap_tensor = self.build_coord_remap_table(region_coords)
             self.register_buffer("coord_ref_table", region_coords)
             self.register_buffer("coord_remap_table", remap_tensor)
         elif self.cls_init == 'spatial_fixed':
@@ -260,9 +283,16 @@ class SelfAttentionCLSEncoder(nn.Module):
 
         # Transformer layers
         self.layers = nn.ModuleList([
-            FastSelfAttentionBlock(d_model, nhead, dropout)
+            FastSelfAttentionBlock(d_model, nhead, dropout, use_alibi=self.use_alibi)
             for _ in range(num_layers)
         ])
+
+        # Register per-head ALiBi slopes once if use_alibi is True
+        if self.use_alibi:
+            slopes = FastSelfAttentionBlock.build_alibi_slopes(nhead)
+            self.register_buffer("alibi_slopes", slopes)
+            for layer in self.layers:
+                layer.alibi_slopes = self.alibi_slopes
 
         self.output_projection = nn.Linear(d_model, output_dim)
     
@@ -300,15 +330,15 @@ class SelfAttentionCLSEncoder(nn.Module):
 
 class SharedSelfAttentionCLSModel(nn.Module):
     def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
-                 use_positional_encoding=False, cls_init='spatial_learned', transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
-                 batch_size=128, epochs=100):
+                 use_positional_encoding=False, cls_init='spatial_learned', use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
+                 batch_size=128, epochs=100, aug_prob=0.0):
         super().__init__()
         
         self.binarize = binarize 
         self.include_coords = True
         self.cls_init = cls_init # 'random_learned' 'spatial_fixed' 'spatial_learned' 
-        self.aug_prob=0
-
+        self.aug_prob = aug_prob
+        self.use_alibi = use_alibi
         # Transformer parameters
         self.input_dim = input_dim // 2
         self.token_encoder_dim = token_encoder_dim 
@@ -337,7 +367,8 @@ class SharedSelfAttentionCLSModel(nn.Module):
                                             num_layers=self.num_layers,
                                             dropout=self.transformer_dropout,
                                             use_positional_encoding=self.use_positional_encoding, 
-                                            cls_init=self.cls_init
+                                            cls_init=self.cls_init,
+                                            use_alibi=self.use_alibi
                                             )
         self.encoder = torch.compile(self.encoder)
         
