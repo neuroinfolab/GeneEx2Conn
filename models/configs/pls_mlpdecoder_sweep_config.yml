@@ -11,7 +11,7 @@ parameters:
   binarize: 
     value: !!int 0
   n_components:
-    values: [8, 10, 12, 15, 20, 25, 30]
+    values: [8, 10, 12, 15, 25, 30]
   max_iter:
     values: [1000]
   scale:
@@ -22,15 +22,15 @@ parameters:
     values:
     - [128, 64]
   learning_rate:
-    values: [0.0001, 0.00009]
+    values: [0.00009]
   batch_size:
-    values: [256, 512]
+    values: [512]
   dropout_rate:
     values: [0.0, 0.2]
   weight_decay:
     values: [0.0, 0.001, 0.0001]
   epochs:
-    values: [75, 100, 125]
+    values: [75, 100]
 
 best_parameters:
   input_dim: 
@@ -38,7 +38,7 @@ best_parameters:
   binarize: 
     value: !!int 0
   n_components:
-    values: [10]
+    values: [25]
   max_iter:
     values: [1000]
   scale:
@@ -57,4 +57,4 @@ best_parameters:
   weight_decay:
     values: [0.0001]
   epochs:
-    values: [100]
+    values: [10]

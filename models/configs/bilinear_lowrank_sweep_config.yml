@@ -4,40 +4,6 @@ metric:
   name: mean_val_loss
   goal: minimize
 
-### TRANSCRIPTOME, 100 parc full brain ###
-# BAYES 
-# parameters:
-  # input_dim:
-  #   value: !!int 0
-  # activation:
-  #   values: ['none'] # 'none','relu', 'sigmoid', 'softplus']
-  # learning_rate:
-  #   distribution: log_uniform_values
-  #   min: 0.0005
-  #   max: 0.002
-  # batch_size:
-  #   distribution: int_uniform
-  #   min: 128
-  #   max: 400
-  # regularization:
-  #   distribution: categorical
-  #   values: ['l2']
-  # lambda_reg:
-  #   distribution: log_uniform_values
-  #   min: 0.01
-  #   max: 0.2
-  # shared_weights:
-  #   distribution: categorical
-  #   values: [True]
-  # reduced_dim:
-  #   distribution: int_uniform
-  #   min: 5
-  #   max: 10
-  # epochs:
-  #   distribution: int_uniform
-  #   min: 100
-  #   max: 200
-
 # SMALL GRID 
 parameters:
   input_dim: 
@@ -59,7 +25,7 @@ parameters:
   reduced_dim:
     values: [8, 10, 12]
   epochs:
-    values: [100, 150]
+    values: [100, 125]
 
 # BEST
 best_parameters:
@@ -84,4 +50,4 @@ best_parameters:
   reduced_dim:
     values: [10]
   epochs:
-    values: [100]
+    values: [125]

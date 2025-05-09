@@ -31,7 +31,8 @@ def single_sim_run(
     skip_cv=False,
     model_type='dynamic_mlp',
     use_gpu=True, 
-    null_model='none'
+    null_model='none',
+    use_folds=[0, 1, 2, 3]
 ):
     """
     Runs a single simulation for a given feature type and model configuration.
@@ -144,7 +145,7 @@ def single_sim_run(
                 )
     
     if search_method[0] == 'wandb':
-        sim.run_sim_torch(search_method, track_wandb)
+        sim.run_sim_torch(search_method, track_wandb, use_folds)
     else:
         sim.run_sim(search_method, track_wandb)
     
@@ -166,6 +167,7 @@ if __name__ == "__main__":
     parser.add_argument('--feature_type', help='Override feature type from config')
     parser.add_argument('--random_seed', type=int, help='Override random seed from config')
     parser.add_argument('--null_model', help='Override null model type from config')
+    parser.add_argument('--use_folds', nargs='+', type=int, help='Override use folds from config')
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -184,6 +186,8 @@ if __name__ == "__main__":
         config['random_seed'] = args.random_seed
     if args.null_model:
         config['null_model'] = args.null_model
+    if args.use_folds:
+        config['use_folds'] = args.use_folds
 
     print(f"Running simulation with config: {args.config}")
     print(f"Model type: {config['model_type']}")
@@ -191,7 +195,7 @@ if __name__ == "__main__":
     print(f"Feature type: {config['feature_type']}")
     print(f"Random seed: {config['random_seed']}")
     print(f"Null model: {config['null_model']}")
-    
+    print(f"Use folds: {config['use_folds']}")
     print(torch.cuda.is_available())    
     print(os.environ.get("CUDA_VISIBLE_DEVICES"))
     for i in range(torch.cuda.device_count()):
