@@ -66,18 +66,12 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             # options are iPA_183, iPA_391, iPA_568
             BHA2_path = absolute_data_path + '/BHA2/'
             genes_data = pd.read_csv(os.path.join(BHA2_path, parcellation, 'transcriptomics.csv'), index_col=0).T
-            print(genes_data.head())
-            print(genes_data.shape)
-
             genes_list = genes_data.columns.tolist()
-            print(genes_list)
-            print(len(genes_list))
         
         # Choose gene list
         if 'iPA' in parcellation:
             genes_list_abagen = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_400.txt", header=None)[0].tolist()
             genes_list = list(set(genes_list).intersection(set(genes_list_abagen))) # drop last 3 genes to make token divisible
-            print(len(genes_list))
         elif gene_list == '0.2' or gene_list == '1':
             genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_{parcellation[1:]}.txt", header=None)[0].tolist()
         elif gene_list in ['brain', 'neuron', 'oligodendrocyte', 'synaptome', 'layers']:
@@ -127,8 +121,6 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
 
         # base return for iPA parcellation
         if 'iPA' in parcellation:
-            print(genes_data.shape)
-            print(genes_data.dtype)
             return genes_data
 
         # Drop subcortical regions if specified

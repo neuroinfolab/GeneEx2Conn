@@ -153,7 +153,6 @@ def single_sim_run(
     print(f'Simulation completed in {elapsed_time:.2f} seconds ({elapsed_time/60:.2f} minutes)')
     return
 
-
 def load_config(config_path):
     config_path = os.path.join(absolute_root_path, 'sim/experiment_configs', config_path)
     with open(config_path, 'r') as f:
@@ -164,7 +163,7 @@ if __name__ == "__main__":
     parser.add_argument('config', help='Path to config file')
     parser.add_argument('--model_type', help='Override model type from config')
     parser.add_argument('--n_cvs', type=int, help='Override number of CVs from config')
-    parser.add_argument('--feature_type', help='Override feature type from config')
+    parser.add_argument('--feature_type', nargs='+', help='Override feature type from config. Options: transcriptome, euclidean')
     parser.add_argument('--random_seed', type=int, help='Override random seed from config')
     parser.add_argument('--null_model', help='Override null model type from config')
     parser.add_argument('--use_folds', nargs='+', type=int, help='Override use folds from config')
@@ -181,9 +180,7 @@ if __name__ == "__main__":
         config['search_method'] = (search_method[0], search_method[1], args.n_cvs)
     if args.feature_type:
         # Split feature types and convert to list of dicts
-        # feature_types = args.feature_type.split()
-        # config['feature_type'] = [{ft: None} for ft in feature_types]
-        config['feature_type'] = [{args.feature_type: None}]
+        config['feature_type'] = [{ft: None} for ft in args.feature_type]
     if args.random_seed is not None:
         config['random_seed'] = args.random_seed
     if args.null_model:
