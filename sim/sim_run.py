@@ -180,7 +180,9 @@ if __name__ == "__main__":
         search_method = config.get('search_method', ('wandb', 'mse', 5))
         config['search_method'] = (search_method[0], search_method[1], args.n_cvs)
     if args.feature_type:
-        # Update feature_type list with new value
+        # Split feature types and convert to list of dicts
+        # feature_types = args.feature_type.split()
+        # config['feature_type'] = [{ft: None} for ft in feature_types]
         config['feature_type'] = [{args.feature_type: None}]
     if args.random_seed is not None:
         config['random_seed'] = args.random_seed

@@ -19,7 +19,7 @@ parameters:
   optimize_encoder:
     values: [False]
   learning_rate:
-    values: [0.0035, 0.003, 0.0025]
+    values: [0.0035, 0.003, 0.0027]
   batch_size:
     values: [512]
   weight_decay:

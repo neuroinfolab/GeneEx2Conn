@@ -1,5 +1,5 @@
 name: shared_transformer_cls
-method: grid
+method: random
 metric:
   name: mean_val_loss
   goal: minimize

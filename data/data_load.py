@@ -62,9 +62,23 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
             genes_data = genes_data.drop('label', axis=1)
             region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv').iterrows()]
+        elif 'iPA' in parcellation:
+            # options are iPA_183, iPA_391, iPA_568
+            BHA2_path = absolute_data_path + '/BHA2/'
+            genes_data = pd.read_csv(os.path.join(BHA2_path, parcellation, 'transcriptomics.csv'), index_col=0).T
+            print(genes_data.head())
+            print(genes_data.shape)
+
+            genes_list = genes_data.columns.tolist()
+            print(genes_list)
+            print(len(genes_list))
         
         # Choose gene list
-        if gene_list == '0.2' or gene_list == '1':
+        if 'iPA' in parcellation:
+            genes_list_abagen = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_400.txt", header=None)[0].tolist()
+            genes_list = list(set(genes_list).intersection(set(genes_list_abagen))) # drop last 3 genes to make token divisible
+            print(len(genes_list))
+        elif gene_list == '0.2' or gene_list == '1':
             genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_{parcellation[1:]}.txt", header=None)[0].tolist()
         elif gene_list in ['brain', 'neuron', 'oligodendrocyte', 'synaptome', 'layers']:
             genes_list = abagen.fetch_gene_group(gene_list)
@@ -110,6 +124,12 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         # Apply PCA if specified
         if run_PCA:
             genes_data = _apply_pca(genes_data)
+
+        # base return for iPA parcellation
+        if 'iPA' in parcellation:
+            print(genes_data.shape)
+            print(genes_data.dtype)
+            return genes_data
 
         # Drop subcortical regions if specified
         if omit_subcortical:
@@ -196,7 +216,11 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
             elif measure == 'SC':
                 matrix = np.log1p(loadmat('./data/HCP1200/4S456_DTI_count.mat')['connectivity'])
                 matrix = matrix / matrix.max()
-       
+        elif 'iPA' in parcellation:
+            BHA2_path = absolute_data_path + '/BHA2/'
+            matrix = np.array(pd.read_csv(os.path.join(BHA2_path, parcellation, 'fc/fc_mean.csv'), header=None))
+            return matrix
+        
         # Add diagonal as 1 if specified (diagonal is ignored in edge-wise reconstruction)
         if diag == 1:
             matrix = matrix + np.eye(matrix.shape[0])
@@ -260,7 +284,12 @@ def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
                                               UKBB_S456_atlas_info['mni_y'],
                                               UKBB_S456_atlas_info['mni_z'])]
         coordinates = np.array(mni_coords)
-                
+    elif 'iPA' in parcellation:
+        BHA2_path = absolute_data_path + '/BHA2/'
+        atlas_info = pd.read_csv(os.path.join(BHA2_path, parcellation, f'{parcellation}.csv'))
+        coordinates = atlas_info[['X_MNI', 'Y_MNI', 'Z_MNI']].values
+        return np.array(coordinates)
+    
     if omit_subcortical:
         n = (coordinates.shape[0] // 100) * 100 # retain only cortical regions by rounding down to nearest hundred
         coordinates = coordinates[:n, :]
@@ -313,6 +342,12 @@ def load_network_labels(parcellation='S100', omit_subcortical=False, dataset='HC
         
         labels = schaef456_atlas_info['label'].tolist()
         network_labels = schaef456_atlas_info['network_label'].values
+    elif 'iPA' in parcellation:
+        BHA2_path = absolute_data_path + '/BHA2/'
+        atlas_info = pd.read_csv(os.path.join(BHA2_path, parcellation, f'{parcellation}.csv'))
+        labels = atlas_info['ROI_number'].tolist()
+        network_labels = atlas_info['VOL'].values
+        return labels, network_labels
 
     # Add hemisphere prefix to labels
     labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in labels]
