@@ -486,7 +486,7 @@ def load_features(X, coords, verbose=False):
         start_time = time.time()
 
     # Filter valid data
-    valid_indices = ~np.isnan(X).all(axis=1)
+    valid_indices = ~np.isnan(X).all(axis=1)    
     X = X[valid_indices]
     coords = coords[valid_indices]
     
@@ -733,6 +733,227 @@ def generate_null_spins(n_rotations=100, seed=42, bin_size_mm=5, save_csv=False)
 
     if save_csv:
         spins_df.to_csv(f'./data/enigma/{n_rotations}_null_spins.csv', index=False)
+        
+    return spins_df
+
+def get_iPA_masks(parcellation):
+    """
+    Get hemisphere and subcortical masks for a given parcellation.
+    
+    Args:
+        parcellation (str): Name of parcellation (e.g. 'iPA_391')
+        
+    Returns:
+        tuple: (hemi_mask_list, subcort_mask_list)
+            - hemi_mask_list: List of 0s and 1s indicating right (1) vs left (0) hemisphere
+            - subcort_mask_list: List of 0s and 1s indicating subcortical (1) vs cortical (0) regions
+    """
+    absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'
+    BHA2_path = absolute_data_path + '/BHA2/'
+    metadata = pd.read_csv(os.path.join(BHA2_path, parcellation, f'{parcellation}.csv'), index_col=0)
+
+    # Create hemisphere mask based on right-sided regions
+    right_cols = [col for col in metadata.columns if '_R' in col]
+    hemi_mask = (metadata[right_cols] > 0).any(axis=1).astype(int)
+    hemi_mask_list = hemi_mask.tolist()
+
+    # Create subcortical mask based on subcortical regions 
+    subcort_cols = [col for col in metadata.columns if 'Subcortical' in col]
+    subcort_mask = (metadata[subcort_cols] > 0).any(axis=1).astype(int)
+    subcort_mask_list = subcort_mask.tolist()
+
+    return hemi_mask_list, subcort_mask_list
+
+def generate_null_spins_iPA(n_rotations=100, seed=42, bin_size_mm=5, parcellation='iPA_391', save_csv=False):
+    """Generate null spin models and compute distance decay parameters for both raw gene expression and PCA-transformed data.
+    
+    This function performs spatial rotations of brain regions to create null models while preserving spatial relationships.
+    It handles cortical and subcortical regions separately, computes various distance decay parameters including exponential
+    decay and polynomial fits, and standardizes the results relative to the true brain data.
+    
+    Args:
+        n_rotations (int): Number of spin rotations to generate
+        seed (int): Random seed for reproducibility 
+        bin_size_mm (float): Bin size in mm for distance decay calculations
+        save_csv (bool): Whether to save results to CSV
+        
+    Returns:
+        pd.DataFrame: DataFrame containing:
+            - Spin indices for cortical and subcortical regions
+            - Cost metrics for the spin rotations
+            - Standardized distance decay parameters (exponential and polynomial)
+            - Error metrics comparing null models to true brain data
+    """
+    # LOAD IN TRUE GENE EXPRESSION DATA, GENE EXPRESSION PCA, TRUE COORDINATES
+    genes_data = load_transcriptome(parcellation=parcellation, gene_list='0.2', run_PCA=False, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='expression', return_valid_genes=True, null_model='none', random_seed=42)
+    genes_data_PCA = load_transcriptome(parcellation=parcellation, gene_list='0.2', run_PCA=True, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='expression', return_valid_genes=False, null_model='none', random_seed=42)
+    all_region_coords = load_coords(parcellation=parcellation, omit_subcortical=False)
+
+    # GENERATE SPINS FOR EACH HEMISPHERE OF CORTEX MATCHED
+    #lh_annot, rh_annot = nndata.fetch_schaefer2018('fsaverage', data_dir='data/UKBB', verbose=1)['400Parcels7Networks']
+    #coords, hemi = nnsurf.find_parcel_centroids(lhannot=lh_annot, rhannot=rh_annot, version='fsaverage', surf='sphere')
+    hemi_mask_list, subcort_mask_list = get_iPA_masks('iPA_183')
+    hemi_cortical = [hemi for hemi, subcort in zip(hemi_mask_list, subcort_mask_list) if subcort == 0]
+    coords_cortical = all_region_coords[:len(hemi_cortical)]
+    
+    hemi_subcortical = [hemi for hemi, subcort in zip(hemi_mask_list, subcort_mask_list) if subcort == 1]
+    
+    cortical_spins, cortical_cost = nnstats.gen_spinsamples(coords_cortical, hemi_cortical, n_rotate=n_rotations, seed=seed, method='vasa',return_cost=True)
+
+    num_cortical_regions = len(hemi_cortical) # (genes_data.shape[0] // 100) * 100
+    cortical_genes_data = genes_data[:num_cortical_regions]
+    cortical_genes_data_PCA = genes_data_PCA[:num_cortical_regions]
+
+    # GENERATE SPINS FOR EACH HEMISPHERE OF SUBCORTEX MATCHED
+    subcortical_genes_data = genes_data[num_cortical_regions:]
+    subcortical_genes_data_PCA = genes_data_PCA[num_cortical_regions:]
+    subcortical_coords = all_region_coords[num_cortical_regions:]
+    x_coords = subcortical_coords[:, 0]
+    hemi_subcort = np.zeros_like(x_coords) # create mask for subcortical hemisphere
+    hemi_subcort[x_coords > 0] = 1
+    print(hemi_subcort)
+    subcortical_spins, subcortical_cost = nnstats.gen_spinsamples(subcortical_coords, hemi_subcort, n_rotate=n_rotations, seed=seed, method='vasa', return_cost=True)
+
+    # SAVE INDICES OF SPINS TO UNIFIED DATAFRAME
+    cortical_spin_indices_T = cortical_spins.T
+    subcortical_spin_indices_T = subcortical_spins.T
+    spins_df = pd.DataFrame({
+        'cortical_spins': cortical_spin_indices_T.tolist(),
+        'subcortical_spins': subcortical_spin_indices_T.tolist()
+    })
+
+    # SAVE COST OF SPINS
+    cortical_cost_T = cortical_cost.T
+    subcortical_cost_T = subcortical_cost.T
+    cortical_cost_sum = cortical_cost_T.sum(axis=1)
+    subcortical_cost_sum = subcortical_cost_T.sum(axis=1)
+    total_cost = subcortical_cost_sum + cortical_cost_sum
+    spins_df['cortical_cost'] = cortical_cost_sum
+    spins_df['subcortical_cost'] = subcortical_cost_sum 
+    spins_df['total_cost'] = total_cost
+
+    # INITIALIZE ARRAYS TO STORE SA EXPONENTIAL DECAY AND POLYNOMIAL COEFFICIENTS
+    sa_poly_params = np.zeros((len(spins_df), 6))
+    sa_poly_params_PCA = np.zeros((len(spins_df), 6))
+
+    for i in range(len(spins_df)): # loop takes ~3 mins for 1000 spatial spins
+        if i % 25 == 0:
+            print("processing spin", i)
+        # Process normal genes data
+        cortical_spun_genes_data = cortical_genes_data[:][cortical_spin_indices_T[i]]
+        subcortical_spun_genes_data = subcortical_genes_data[:][subcortical_spin_indices_T[i]]
+        spun_genes_data = np.vstack([cortical_spun_genes_data, subcortical_spun_genes_data])
+        X_corr, CGE_vec, dist_matrix, dist_vec = load_features(spun_genes_data, all_region_coords)
+
+        SA_lambda, SA_inf = compute_exponential_distance_decay(dist_vec, CGE_vec, bin_size_mm=bin_size_mm)
+        coefs = compute_distance_decay_poly3(dist_vec, CGE_vec, bin_size_mm=bin_size_mm)
+        a1, a2, a3, a4 = coefs    
+        sa_poly_params[i] = [SA_lambda, SA_inf, a1, a2, a3, a4]
+
+        # Process PCA genes data
+        cortical_spun_genes_data_PCA = cortical_genes_data_PCA[:][cortical_spin_indices_T[i]]
+        subcortical_spun_genes_data_PCA = subcortical_genes_data_PCA[:][subcortical_spin_indices_T[i]]
+        spun_genes_data_PCA = np.vstack([cortical_spun_genes_data_PCA, subcortical_spun_genes_data_PCA])
+        X_corr_PCA, CGE_vec_PCA, dist_matrix_PCA, dist_vec_PCA = load_features(spun_genes_data_PCA, all_region_coords)
+        
+        SA_lambda_PCA, SA_inf_PCA = compute_exponential_distance_decay(dist_vec_PCA, CGE_vec_PCA, bin_size_mm=bin_size_mm)
+        coefs_PCA = compute_distance_decay_poly3(dist_vec_PCA, CGE_vec_PCA, bin_size_mm=bin_size_mm)
+        a1_PCA, a2_PCA, a3_PCA, a4_PCA = coefs_PCA
+        sa_poly_params_PCA[i] = [SA_lambda_PCA, SA_inf_PCA, a1_PCA, a2_PCA, a3_PCA, a4_PCA]
+
+    # ADD PARAMS TO UNIFIED DATAFRAME
+    spins_df['SA_lambda'] = sa_poly_params[:,0]
+    spins_df['SA_inf'] = sa_poly_params[:,1]
+    spins_df['poly_a1'] = sa_poly_params[:,2] 
+    spins_df['poly_a2'] = sa_poly_params[:,3]
+    spins_df['poly_a3'] = sa_poly_params[:,4]
+    spins_df['poly_a4'] = sa_poly_params[:,5]
+
+    spins_df['SA_lambda_PCA'] = sa_poly_params_PCA[:,0]
+    spins_df['SA_inf_PCA'] = sa_poly_params_PCA[:,1]
+    spins_df['poly_a1_PCA'] = sa_poly_params_PCA[:,2]
+    spins_df['poly_a2_PCA'] = sa_poly_params_PCA[:,3]
+    spins_df['poly_a3_PCA'] = sa_poly_params_PCA[:,4]
+    spins_df['poly_a4_PCA'] = sa_poly_params_PCA[:,5]
+
+    # RELOAD IN TRUE BRAIN DATA AND COMPUTE TRUE PARAMETER VALUES
+    X, X_pca, Y, coords, labels, network_labels, X_corr, X_pca_corr, dist_matrix = load_and_plot_data(parcellation=parcellation, hemisphere='both', omit_subcortical=False, 
+                          sort_genes='expression', impute_strategy='mirror_interpolate', null_model='none', fontsize=26)
+
+    features, features_cortex, features_subcortex = subset_brain_data(X, X_pca, Y, coords, labels, network_labels, X_corr, X_pca_corr, dist_matrix)
+    dist_vec = features['distances']
+    CGE_vec = features['CGE']
+    PCA_CGE_vec = features['PCA_CGE']
+    true_SA_lambda, true_SA_inf = compute_exponential_distance_decay(dist_vec, CGE_vec, bin_size_mm=bin_size_mm)
+    true_coefs = compute_distance_decay_poly3(dist_vec, CGE_vec, bin_size_mm=bin_size_mm)
+    true_SA_lambda_PCA, true_SA_inf_PCA = compute_exponential_distance_decay(dist_vec, PCA_CGE_vec, bin_size_mm=bin_size_mm)
+    true_coefs_PCA = compute_distance_decay_poly3(dist_vec, PCA_CGE_vec, bin_size_mm=bin_size_mm)
+
+    # STANDARDIZE PARAMETERS AND COMPUTE ERROR TO TRUE VALUES
+    parameter_cols = ['SA_lambda', 'SA_inf', 'SA_lambda_PCA', 'SA_inf_PCA', 'poly_a1', 'poly_a2', 'poly_a3', 'poly_a4',
+                     'poly_a1_PCA', 'poly_a2_PCA', 'poly_a3_PCA', 'poly_a4_PCA']
+    standardized_df = spins_df.copy()
+
+    # Standardize params of spin nulls
+    standardized_df[parameter_cols] = (spins_df[parameter_cols] - spins_df[parameter_cols].mean()) / spins_df[parameter_cols].std()
+
+    # Standardize true parameters using same mean/std as spin nulls
+    true_SA_lambda_std = (true_SA_lambda - spins_df['SA_lambda'].mean()) / spins_df['SA_lambda'].std()
+    true_SA_inf_std = (true_SA_inf - spins_df['SA_inf'].mean()) / spins_df['SA_inf'].std()
+    true_SA_lambda_PCA_std = (true_SA_lambda_PCA - spins_df['SA_lambda_PCA'].mean()) / spins_df['SA_lambda_PCA'].std()
+    true_SA_inf_PCA_std = (true_SA_inf_PCA - spins_df['SA_inf_PCA'].mean()) / spins_df['SA_inf_PCA'].std()
+    true_coefs_std = (true_coefs - spins_df[['poly_a1', 'poly_a2', 'poly_a3', 'poly_a4']].mean()) / spins_df[['poly_a1', 'poly_a2', 'poly_a3', 'poly_a4']].std()
+    true_coefs_PCA_std = (true_coefs_PCA - spins_df[['poly_a1_PCA', 'poly_a2_PCA', 'poly_a3_PCA', 'poly_a4_PCA']].mean()) / spins_df[['poly_a1_PCA', 'poly_a2_PCA', 'poly_a3_PCA', 'poly_a4_PCA']].std()
+
+    # Extract parameter columns as numpy array
+    null_params = standardized_df[parameter_cols].to_numpy()
+
+    # Create array of true standardized values in same order as numeric columns
+    true_std_vals = np.array([
+        true_SA_lambda_std,
+        true_SA_inf_std, 
+        true_SA_lambda_PCA_std,
+        true_SA_inf_PCA_std,
+        true_coefs_std[0],
+        true_coefs_std[1],
+        true_coefs_std[2], 
+        true_coefs_std[3],
+        true_coefs_PCA_std[0],
+        true_coefs_PCA_std[1],
+        true_coefs_PCA_std[2],
+        true_coefs_PCA_std[3]
+    ])
+
+    # Compute residuals (differences) between each null spin and true values
+    residuals = null_params - true_std_vals[np.newaxis, :]
+
+    # Calculate summed absolute residuals for each parameter group 
+    # (L1 error i.e. sum of absolute differences)
+    standardized_SA_error = np.abs(residuals[:, 0:2]).sum(axis=1)  # SA_lambda and SA_inf
+    standardized_SA_PCA_error = np.abs(residuals[:, 2:4]).sum(axis=1)  # SA_lambda_PCA and SA_inf_PCA
+    standardized_poly_error = np.abs(residuals[:, 4:8]).sum(axis=1)  # poly_a1 through poly_a4
+    standardized_poly_PCA_error = np.abs(residuals[:, 8:12]).sum(axis=1)  # poly_a1_PCA through poly_a4_PCA
+
+    # ADD ERROR COLUMNS AND COMPUTE MEAN ERROR RANK
+    spins_df['standardized_SA_error'] = standardized_SA_error
+    spins_df['standardized_poly_error'] = standardized_poly_error 
+    spins_df['standardized_SA_PCA_error'] = standardized_SA_PCA_error
+    spins_df['standardized_poly_PCA_error'] = standardized_poly_PCA_error
+    
+    spins_df['total_cost_rank'] = spins_df['total_cost'].rank()
+    spins_df['SA_error_rank'] = spins_df['standardized_SA_error'].rank()
+    spins_df['poly_error_rank'] = spins_df['standardized_poly_error'].rank()
+    spins_df['mean_error_rank'] = (spins_df['total_cost_rank'] + 
+                                  spins_df['SA_error_rank'] + 
+                                  spins_df['poly_error_rank']).div(3)
+
+    spins_df = spins_df[['cortical_spins', 'subcortical_spins', 'cortical_cost', 'subcortical_cost', 'total_cost', 
+              'mean_error_rank', 'total_cost_rank', 'SA_error_rank', 'poly_error_rank', 'standardized_SA_error', 'standardized_poly_error', 'standardized_SA_PCA_error', 'standardized_poly_PCA_error',
+              'SA_lambda', 'SA_inf', 'SA_lambda_PCA', 'SA_inf_PCA', 'poly_a1', 'poly_a2', 'poly_a3', 'poly_a4',
+              'poly_a1_PCA', 'poly_a2_PCA', 'poly_a3_PCA', 'poly_a4_PCA']]
+
+    if save_csv:
+        spins_df.to_csv(f'./data/enigma/{n_rotations}_{parcellation}_null_spins.csv', index=False)
         
     return spins_df
 

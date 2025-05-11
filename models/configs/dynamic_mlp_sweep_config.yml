@@ -14,7 +14,7 @@ parameters:
     values:
      #  - [128, 64]
       - [256, 128]
-      - [512, 256, 128]
+     #  - [512, 256, 128]
   learning_rate:
     values: [0.00009, 0.0001]
   batch_size:
@@ -24,7 +24,7 @@ parameters:
   weight_decay:
     values: [0.0001, 0.00001, 0]
   epochs:
-    values: [75, 100, 125]
+    values: [75, 100]
 
 # REGRESSION
 best_parameters:

@@ -20,7 +20,7 @@ parameters:
   nhead:
     values: [2, 4]
   num_layers:
-    values: [2]
+    values: [2, 4]
   deep_hidden_dims:
     values:
     - [256, 128]
@@ -35,7 +35,7 @@ parameters:
   batch_size:
     values: [512]
   aug_prob:
-      values: [0.2]
+      values: [0.1, 0.3]
   epochs:
     values: [50]
 

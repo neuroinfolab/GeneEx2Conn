@@ -16,16 +16,16 @@ parameters:
   encoder_output_dim:
     values: [10]
   use_alibi:
-    values: [False]
+    values: [True, False]
   nhead:
     values: [2, 4] 
   num_layers:
-    values: [2]
+    values: [2, 4]
   deep_hidden_dims:
     values:
     - [256, 128]
   cls_init:
-    values: ['spatial_learned']
+    values: ['spatial_fixed', 'spatial_learned']
   transformer_dropout:
     values: [0.2]
   dropout_rate:
@@ -37,9 +37,9 @@ parameters:
   batch_size:
     values: [512]
   aug_prob:
-    values: [0.2]
+    values: [0.1, 0.3]
   epochs:
-    values: [50]
+    values: [60]
     
 best_parameters:
   input_dim:
@@ -53,11 +53,11 @@ best_parameters:
   encoder_output_dim:
     values: [10]
   use_alibi:
-    values: [False]
+    values: [True]
   nhead:
-    values: [2] 
+    values: [4] 
   num_layers:
-    values: [2]
+    values: [4]
   deep_hidden_dims:
     values:
     - [256, 128]
@@ -74,6 +74,6 @@ best_parameters:
   batch_size:
     values: [512]
   aug_prob:
-    values: [0.0]
+    values: [0.3]
   epochs:
     values: [50]
