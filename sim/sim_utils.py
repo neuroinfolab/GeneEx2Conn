@@ -376,7 +376,7 @@ def train_sweep(config, model_type, feature_type, connectome_target, cv_type, ou
     run.finish()
     return mean_metrics['mean_val_loss']
 
-def train_sweep_torch(config, model_type, train_indices, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, impute_strategy, sort_genes, null_model):
+def train_sweep_torch(config, model_type, train_indices, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, impute_strategy, sort_genes, null_model, save_checkpoint=True):
     """
     Training function for W&B sweeps for deep learning models.
     
@@ -488,6 +488,26 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
         'mean_val_pearson': np.mean(inner_fold_metrics['final_val_pearson'])
     }
     wandb.log(mean_metrics)
+    
+    # Save model checkpoint if requested
+    if save_checkpoint and model is not None:
+        scratch_dir = '/scratch/sg8603'
+        checkpoint_dir = os.path.join(scratch_dir, 'checkpoints')
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        checkpoint_filename = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{outer_fold_idx}_val{mean_metrics['mean_val_pearson']:.4f}.pt"
+        checkpoint_path = os.path.join(checkpoint_dir, checkpoint_filename)
+        
+        torch.save(model.state_dict(), checkpoint_path)
+        model_artifact = wandb.Artifact(
+            name=f"model_{run.id}", 
+            type="model",
+            description=f"Model checkpoint for {model_type} with val_pearson={mean_metrics['mean_val_pearson']:.4f}"
+        )
+        model_artifact.add_file(checkpoint_path)
+        run.log_artifact(model_artifact)
+        
+        print(f"Saved model checkpoint to {checkpoint_path} and logged to wandb")
+    
     run.finish()
     
-    return mean_metrics['mean_val_loss']
+    return mean_metrics['mean_val_loss'], model if save_checkpoint else mean_metrics['mean_val_loss']

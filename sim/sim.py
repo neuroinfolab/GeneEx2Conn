@@ -219,7 +219,7 @@ class Simulation:
         )
 
 
-    def run_innercv_wandb_torch(self, input_dim, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3), sweep_id=None):
+    def run_innercv_wandb_torch(self, input_dim, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3), sweep_id=None, save_best_model=True):
         """Inner cross-validation with W&B support for torch models"""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
@@ -231,7 +231,7 @@ class Simulation:
             best_val_loss = 0.0 # no CV --> no best val loss
         else:
             def train_sweep_wrapper(config=None):
-                return train_sweep_torch(
+                result = train_sweep_torch(
                     config=config,
                     train_indices=train_indices,
                     model_type=self.model_type,
@@ -252,15 +252,20 @@ class Simulation:
                     binarize=self.binarize,
                     impute_strategy=self.impute_strategy,
                     sort_genes=self.sort_genes,
-                    null_model=self.null_model
+                    null_model=self.null_model,
+                    save_checkpoint=False  # We'll save the best model at the end
                 )
+                # Extract just the validation loss for wandb hyperparameter optimization
+                if isinstance(result, tuple):
+                    return result[0]
+                return result
             
             # Run sweep
             wandb.agent(sweep_id, function=train_sweep_wrapper, count=search_method[2])
 
             # Get best run from sweep
             api = wandb.Api()
-            sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn/{sweep_id}")
+            sweep = api.sweep(f"sidharthgoel/gx2conn/{sweep_id}")
             best_run = sweep.best_run()
             wandb.teardown()
 
@@ -275,6 +280,47 @@ class Simulation:
             best_model = ModelClass(**best_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=self.region_pair_dataset).to(device)
         else:
             best_model = ModelClass(**best_config).to(device)
+        
+        # Save the best model checkpoint if requested
+        if save_best_model:
+            # Initialize a new wandb run for the best model
+            feature_str = "+".join(str(k) if v is None else f"{k}_{v}"
+                              for feat in self.feature_type 
+                              for k,v in feat.items())
+            run_name = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}_fold{outer_fold_idx}_best_model"
+            
+            best_run = wandb.init(
+                project="gx2conn",
+                name=run_name,
+                config=best_config,
+                tags=["best_model", f'cv_type_{self.cv_type}', f"fold{outer_fold_idx}", 
+                      f"model_{self.model_type}", f"split_{self.cv_type}{self.random_seed}"],
+                reinit=True
+            )
+            
+            scratch_dir = '/scratch/sg8603'
+            checkpoint_dir = os.path.join(scratch_dir, 'checkpoints')
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            checkpoint_filename = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}_fold{outer_fold_idx}_best.pt"
+            checkpoint_path = os.path.join(checkpoint_dir, checkpoint_filename)
+           
+            torch.save(best_model.state_dict(), checkpoint_path)
+            model_artifact = wandb.Artifact(
+                name=f"best_model_{best_run.id}", 
+                type="model",
+                description=f"Best model for {self.model_type} on fold {outer_fold_idx} with val_loss={best_val_loss:.4f}"
+            )
+            model_artifact.add_file(checkpoint_path)
+            best_run.log_artifact(model_artifact)
+            
+            # Also save model config for easy loading
+            config_filename = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}_fold{outer_fold_idx}_config.json"
+            config_path = os.path.join(checkpoint_dir, config_filename)
+            with open(config_path, 'w') as f:
+                json.dump(best_config, f)
+            
+            best_run.finish()
+            print(f"Saved best model checkpoint to {checkpoint_path} and logged to wandb")
             
         return best_model, best_val_loss, best_config, sweep_id
 
@@ -570,7 +616,7 @@ class Simulation:
 
             # Get best run from sweep
             api = wandb.Api()
-            sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn/{sweep_id}")
+            sweep = api.sweep(f"sidharthgoel/gx2conn/{sweep_id}")
             best_run = sweep.best_run()
             wandb.teardown()
 
