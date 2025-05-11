@@ -63,7 +63,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             genes_data = genes_data.drop('label', axis=1)
             region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv').iterrows()]
         elif 'iPA' in parcellation:
-            # options are iPA_183, iPA_391, iPA_568
+            # options are iPA_183, iPA_391, iPA_568. iPA_729
             BHA2_path = absolute_data_path + '/BHA2/'
             genes_data = pd.read_csv(os.path.join(BHA2_path, parcellation, 'transcriptomics.csv'), index_col=0).T
             genes_list = genes_data.columns.tolist()
