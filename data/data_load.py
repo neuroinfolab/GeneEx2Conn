@@ -1,8 +1,8 @@
 from env.imports import *
+# from sim.null import get_iPA_masks
 
 relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data'
 absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'
-
 
 def _apply_pca(data, var_thresh=0.95):
         """Helper to apply PCA with variance threshold."""
@@ -25,6 +25,38 @@ def _apply_pca(data, var_thresh=0.95):
         data_pca[valid_rows] = data_pca_valid[:, :n_components]
         
         return data_pca
+
+def get_iPA_masks(parcellation):
+    """
+    Get hemisphere and subcortical masks for a given parcellation.
+    
+    Args:
+        parcellation (str): Name of parcellation (e.g. 'iPA_391')
+        
+    Returns:
+        tuple: (hemi_mask_list, subcort_mask_list, n_cortical)
+            - hemi_mask_list: List of 0s and 1s indicating right (1) vs left (0) hemisphere
+            - subcort_mask_list: List of 0s and 1s indicating subcortical (1) vs cortical (0) regions
+            - n_cortical: Number of cortical regions (optional)
+    """
+    absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'
+    BHA2_path = absolute_data_path + '/BHA2/'
+    metadata = pd.read_csv(os.path.join(BHA2_path, parcellation, f'{parcellation}.csv'), index_col=0)
+
+    # Create hemisphere mask based on right-sided regions
+    right_cols = [col for col in metadata.columns if '_R' in col]
+    hemi_mask = (metadata[right_cols] > 0).any(axis=1).astype(int)
+    hemi_mask_list = hemi_mask.tolist()
+
+    # Create subcortical mask based on subcortical regions 
+    subcort_cols = [col for col in metadata.columns if 'Subcortical' in col]
+    subcort_mask = (metadata[subcort_cols] > 0).any(axis=1).astype(int)
+    subcort_mask_list = subcort_mask.tolist()
+
+    # Count number of cortical regions (where subcortical mask is 0)
+    n_cortical = sum(x == 0 for x in subcort_mask_list)
+
+    return hemi_mask_list, subcort_mask_list, n_cortical
 
 def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='refgenome', return_valid_genes=False, null_model='none', random_seed=42):
     """
@@ -121,6 +153,26 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
 
         # base return for iPA parcellation
         if 'iPA' in parcellation:
+            if null_model == 'spin':
+                hemi_mask, subcortical_mask, n_cortical = get_iPA_masks(parcellation)
+                # load spins
+                spins_df_10k = pd.read_csv(f'./data/enigma/10000_{parcellation}_null_spins.csv')
+                spins_df_10k = spins_df_10k.sort_values('mean_error_rank', ascending=True)
+                seed_to_index = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 9: 8, 42: 9}
+                # Get spin index based on random seed
+                spin_idx = seed_to_index.get(random_seed, 0)# Get spin indices
+                cortical_spins_list = spins_df_10k['cortical_spins'].tolist()
+                cortical_spins_list = [eval(x) for x in cortical_spins_list]
+                cortical_spin_indices = np.array(cortical_spins_list)
+                subcortical_spins_list = spins_df_10k['subcortical_spins'].tolist()
+                subcortical_spins_list = [eval(x) for x in subcortical_spins_list]
+                subcortical_spin_indices = np.array(subcortical_spins_list)
+        
+                cortical_spin_idx = cortical_spin_indices[spin_idx]
+                subcortical_spin_idx = subcortical_spin_indices[spin_idx]
+
+                genes_data = np.vstack([genes_data[cortical_spin_idx], genes_data[subcortical_spin_idx+n_cortical]])
+
             return genes_data
 
         # Drop subcortical regions if specified
