@@ -1,4 +1,5 @@
 from env.imports import *
+import datetime
 
 from models.metrics.eval import (
     pearson_numpy,
@@ -494,7 +495,8 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
         scratch_dir = '/scratch/sg8603'
         checkpoint_dir = os.path.join(scratch_dir, 'checkpoints')
         os.makedirs(checkpoint_dir, exist_ok=True)
-        checkpoint_filename = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{outer_fold_idx}_val{mean_metrics['mean_val_pearson']:.4f}.pt"
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        checkpoint_filename = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{outer_fold_idx}_seed{seed}_sweep{sweep_id.split('/')[-1] if sweep_id else 'nosweep'}_val{mean_metrics['mean_val_pearson']:.4f}_{timestamp}.pt"
         checkpoint_path = os.path.join(checkpoint_dir, checkpoint_filename)
         
         torch.save(model.state_dict(), checkpoint_path)

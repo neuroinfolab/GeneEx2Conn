@@ -4,6 +4,7 @@ import argparse
 relative_root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # print('relative_root_path', relative_root_path)
 absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
+local_root_path = '/home/sg8603/Gene2Conn'
 print('absolute_root_path', absolute_root_path)
 sys.path.append(absolute_root_path)
 

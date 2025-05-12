@@ -164,7 +164,7 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
             dropout=transformer_dropout,
             use_alibi=self.use_alibi
         )
-        self.encoder = torch.compile(self.encoder)
+        #self.encoder = torch.compile(self.encoder)
 
         prev_dim = (self.input_dim // self.token_encoder_dim * self.encoder_output_dim) * 2
         deep_layers = []
@@ -370,7 +370,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
                                             cls_init=self.cls_init,
                                             use_alibi=self.use_alibi
                                             )
-        self.encoder = torch.compile(self.encoder)
+        #self.encoder = torch.compile(self.encoder)
         
         # Use full sequence
         prev_dim = (self.input_dim // self.token_encoder_dim * self.encoder_output_dim) * 2 + 2 * self.encoder_output_dim # Concatenated outputs of encoder
@@ -577,7 +577,7 @@ class CrossAttentionModel(nn.Module):
             num_layers=num_layers,
             dropout=transformer_dropout
         )
-        self.encoder = torch.compile(self.encoder)
+        #self.encoder = torch.compile(self.encoder)
 
         prev_dim = (self.input_dim // self.token_encoder_dim * self.encoder_output_dim)
         self.deep_layers = nn.Sequential(

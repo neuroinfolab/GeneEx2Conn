@@ -1,4 +1,5 @@
 from env.imports import *
+import datetime
 
 from data.data_load import load_transcriptome, load_connectome, load_coords, load_network_labels
 
@@ -69,7 +70,7 @@ from sim.sim_utils import (
 )
 
 absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
-
+local_root_path = '/home/sg8603/Gene2Conn'
 
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, resolution=1.0, random_seed=42,
@@ -226,7 +227,7 @@ class Simulation:
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
 
         if self.skip_cv:
-            sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
+            sweep_config_path = os.path.join(local_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
             best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
             best_val_loss = 0.0 # no CV --> no best val loss
         else:
@@ -301,7 +302,9 @@ class Simulation:
             scratch_dir = '/scratch/sg8603'
             checkpoint_dir = os.path.join(scratch_dir, 'checkpoints')
             os.makedirs(checkpoint_dir, exist_ok=True)
-            checkpoint_filename = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}_fold{outer_fold_idx}_best.pt"
+            # Create a more unique checkpoint filename including sweep ID and performance metrics
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            checkpoint_filename = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}_fold{outer_fold_idx}_seed{self.random_seed}_sweep{sweep_id.split('/')[-1] if sweep_id else 'nosweep'}_val{best_val_loss:.4f}_{timestamp}_best.pt"
             checkpoint_path = os.path.join(checkpoint_dir, checkpoint_filename)
            
             torch.save(best_model.state_dict(), checkpoint_path)
@@ -313,8 +316,8 @@ class Simulation:
             model_artifact.add_file(checkpoint_path)
             best_run.log_artifact(model_artifact)
             
-            # Also save model config for easy loading
-            config_filename = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}_fold{outer_fold_idx}_config.json"
+            # Also save model config for easy loading with matching naming pattern
+            config_filename = f"{self.model_type}_{feature_str}_{self.connectome_target}_{self.cv_type}_fold{outer_fold_idx}_seed{self.random_seed}_sweep{sweep_id.split('/')[-1] if sweep_id else 'nosweep'}_val{best_val_loss:.4f}_{timestamp}_config.json"
             config_path = os.path.join(checkpoint_dir, config_filename)
             with open(config_path, 'w') as f:
                 json.dump(best_config, f)
@@ -341,7 +344,7 @@ class Simulation:
         sweep_id = None
         if (search_method[0] == 'wandb' or track_wandb): # not self.skip_cv and - still init the sweep and track group but don't call train sweep wrapper
             input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
-            sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
+            sweep_config_path = os.path.join(local_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
             sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
             sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
             print('Initialized sweep with ID:', sweep_id)
@@ -577,7 +580,7 @@ class Simulation:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Load sweep config
-        sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
+        sweep_config_path = os.path.join(local_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
         sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
         
         if self.skip_cv: 

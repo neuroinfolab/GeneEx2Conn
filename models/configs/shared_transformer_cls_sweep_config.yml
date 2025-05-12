@@ -1,5 +1,5 @@
 name: shared_transformer_cls
-method: grid # grid or random
+method: grid # grid random
 metric:
   name: mean_val_loss
   goal: minimize
@@ -10,13 +10,13 @@ parameters:
   binarize:
     value: !!int 0
   token_encoder_dim:
-    values: [40, 60, 80]
+    values: [30, 90]
   d_model:
     values: [128]
   encoder_output_dim:
     values: [10]
   use_alibi:
-    values: [False]
+    values: [True, False]
   nhead:
     values: [2, 4] 
   num_layers:
@@ -39,7 +39,7 @@ parameters:
   aug_prob:
     values: [0.0]
   epochs:
-    values: [10]
+    values: [15]
     
 best_parameters:
   input_dim:
@@ -47,7 +47,7 @@ best_parameters:
   binarize:
     value: !!int 0
   token_encoder_dim:
-    values: [60]
+    values: [30]
   d_model:
     values: [128]
   encoder_output_dim:
@@ -62,7 +62,7 @@ best_parameters:
     values:
     - [256, 128]
   cls_init:
-    values: ['spatial_fixed']
+    values: ['spatial_learned']
   transformer_dropout:
     values: [0.2]
   dropout_rate:
@@ -76,4 +76,4 @@ best_parameters:
   aug_prob:
     values: [0.0]
   epochs:
-    values: [50]
+    values: [70]
