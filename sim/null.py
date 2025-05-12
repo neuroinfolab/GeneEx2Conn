@@ -744,9 +744,10 @@ def get_iPA_masks(parcellation):
         parcellation (str): Name of parcellation (e.g. 'iPA_391')
         
     Returns:
-        tuple: (hemi_mask_list, subcort_mask_list)
+        tuple: (hemi_mask_list, subcort_mask_list, n_cortical)
             - hemi_mask_list: List of 0s and 1s indicating right (1) vs left (0) hemisphere
             - subcort_mask_list: List of 0s and 1s indicating subcortical (1) vs cortical (0) regions
+            - n_cortical: Number of cortical regions (optional)
     """
     absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'
     BHA2_path = absolute_data_path + '/BHA2/'
@@ -762,7 +763,10 @@ def get_iPA_masks(parcellation):
     subcort_mask = (metadata[subcort_cols] > 0).any(axis=1).astype(int)
     subcort_mask_list = subcort_mask.tolist()
 
-    return hemi_mask_list, subcort_mask_list
+    # Count number of cortical regions (where subcortical mask is 0)
+    n_cortical = sum(x == 0 for x in subcort_mask_list)
+
+    return hemi_mask_list, subcort_mask_list, n_cortical
 
 def generate_null_spins_iPA(n_rotations=100, seed=42, bin_size_mm=5, parcellation='iPA_391', save_csv=False):
     """Generate null spin models and compute distance decay parameters for both raw gene expression and PCA-transformed data.
@@ -792,7 +796,7 @@ def generate_null_spins_iPA(n_rotations=100, seed=42, bin_size_mm=5, parcellatio
     # GENERATE SPINS FOR EACH HEMISPHERE OF CORTEX MATCHED
     #lh_annot, rh_annot = nndata.fetch_schaefer2018('fsaverage', data_dir='data/UKBB', verbose=1)['400Parcels7Networks']
     #coords, hemi = nnsurf.find_parcel_centroids(lhannot=lh_annot, rhannot=rh_annot, version='fsaverage', surf='sphere')
-    hemi_mask_list, subcort_mask_list = get_iPA_masks('iPA_183')
+    hemi_mask_list, subcort_mask_list, n_cortical = get_iPA_masks(parcellation)
     hemi_cortical = [hemi for hemi, subcort in zip(hemi_mask_list, subcort_mask_list) if subcort == 0]
     coords_cortical = all_region_coords[:len(hemi_cortical)]
     
