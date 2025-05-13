@@ -54,7 +54,7 @@ best_parameters:
   encoder_output_dim:
     values: [10]
   use_alibi:
-    values: [False] # True
+    values: [True] # True
   nhead:
     values: [4] 
   num_layers:
@@ -75,6 +75,6 @@ best_parameters:
   batch_size:
     values: [512]
   aug_prob:
-    values: [0.45] # 0.45
+    values: [0.0] # 0.45 - drop epochs from 70 with lower aug prob
   epochs:
-    values: [70] # 70
+    values: [60] # 70

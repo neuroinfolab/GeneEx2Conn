@@ -51,11 +51,11 @@ best_parameters:
   encoder_output_dim:
     values: [10]
   use_alibi:
-    values: [True]
+    values: [False]
   nhead:
     values: [4] 
   num_layers:
-    values: [2]
+    values: [4]
   deep_hidden_dims:
     values:
     - [256, 128]
@@ -70,6 +70,6 @@ best_parameters:
   batch_size:
     values: [512]
   aug_prob:
-      values: [0.0]
+      values: [0.45]
   epochs:
-    values: [50]
+    values: [70]
