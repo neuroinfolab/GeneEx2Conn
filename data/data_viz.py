@@ -132,7 +132,7 @@ def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subc
     # Add colorbar
     plt.tight_layout()
     cbar = plt.colorbar(cax, shrink=0.8, pad=0.02)
-    cbar.set_label('Connectivity Strength', fontsize=fontsize-2)
+    cbar.set_label('FC Strength', fontsize=fontsize-2)
     cbar.ax.tick_params(labelsize=fontsize-2)    
     plt.show()
 
@@ -675,4 +675,147 @@ def visualize_3d(X, Y, coords, edge_threshold=0.5, valid_genes=None, gene_name=N
     # Remove tight_layout and use figure adjustments instead
     plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95)
     
+    plt.show()
+
+def plot_train_test_masked_connectome(Y, train_indices, test_indices, measure='FC', title_prefix='Fold 1', 
+                                    fontsize=20, figsize=(10, 8), mask_set='both', mask_alpha=0.6):
+    """
+    Plot the connectome matrix with transparent masks over the held-out regions.
+
+    Parameters:
+    -----------
+    Y : ndarray
+        The full connectivity matrix.
+    train_indices : list or array
+        Indices used for training.
+    test_indices : list or array
+        Indices used for testing.
+    measure : str
+        Type of connectivity ('FC' or 'SC') for colormap scaling.
+    title_prefix : str
+        Title prefix to distinguish different folds or splits.
+    fontsize : int
+        Font size for text in plot.
+    figsize : tuple
+        Size of the figure.
+    mask_set : str
+        Which set to mask out ('train', 'test', or 'both'). Default: 'both'
+    mask_alpha : float
+        Transparency level of the mask (0.0 to 1.0). Default: 0.6
+    """
+    mask = np.ones_like(Y, dtype=bool)
+    
+    if mask_set in ['both', 'test']:
+        # Unmask training block
+        mask[np.ix_(train_indices, train_indices)] = False
+        
+    if mask_set in ['both', 'train']:
+        # Unmask test block
+        mask[np.ix_(test_indices, test_indices)] = False
+
+    # Set up figure
+    fig, ax = plt.subplots(figsize=figsize, dpi=300)
+
+    # Determine colormap and limits
+    if measure == 'SC':
+        vmin, vmax = 0, 1
+        cmap = 'Reds'
+    else:  # FC
+        vmin, vmax = -0.8, 0.8
+        cmap = 'RdBu_r'
+
+    # Plot base matrix
+    cax = ax.imshow(Y, cmap=cmap, vmin=vmin, vmax=vmax)
+
+    # Overlay transparent gray mask
+    overlay = np.zeros((*Y.shape, 4))  # RGBA
+    overlay[..., :3] = 0.5  # Gray color
+    overlay[..., 3] = mask * mask_alpha  # User-controlled alpha
+    ax.imshow(overlay, interpolation='none')
+
+    # Title and colorbar
+    mask_text = {
+        'both': 'Train/Test',
+        'train': 'Train',
+        'test': 'Test'
+    }
+    ax.set_title(f'{title_prefix} — {mask_text[mask_set]} Masked Connectome', fontsize=fontsize)
+    plt.colorbar(cax, ax=ax, shrink=0.8, pad=0.02).ax.tick_params(labelsize=fontsize - 4)
+
+    # Remove ticks
+    ax.set_xticks([])
+    ax.set_yticks([])
+    plt.tight_layout()
+    plt.show()
+
+def plot_train_test_reordered_connectome(Y, train_indices, test_indices, measure='FC', title_prefix='Fold 1',
+                                         fontsize=20, figsize=(10, 8), mask_alpha=0.6):
+    """
+    Reorder and plot the connectome matrix so that the training set appears in the top-left block,
+    the test set in the bottom-right block, and all cross-set edges are transparently masked.
+
+    Parameters:
+    -----------
+    Y : ndarray
+        The full connectivity matrix.
+    train_indices : list or array
+        Indices used for training.
+    test_indices : list or array
+        Indices used for testing.
+    measure : str
+        Type of connectivity ('FC' or 'SC') for colormap scaling.
+    title_prefix : str
+        Title prefix to distinguish different folds or splits.
+    fontsize : int
+        Font size for text in plot.
+    figsize : tuple
+        Size of the figure.
+    mask_alpha : float
+        Transparency level of the mask (0.0 to 1.0). Default: 0.6
+    """
+    # Create new ordering: train indices followed by test indices
+    reordered_indices = np.concatenate([train_indices, test_indices])
+    Y_reordered = Y[np.ix_(reordered_indices, reordered_indices)]
+
+    # Create mask: mask cross edges between train and test
+    n_train = len(train_indices)
+    n_test = len(test_indices)
+    total = n_train + n_test
+
+    mask = np.zeros((total, total), dtype=bool)
+    mask[:n_train, n_train:] = True
+    mask[n_train:, :n_train] = True
+
+    # Set up figure
+    fig, ax = plt.subplots(figsize=figsize, dpi=300)
+
+    # Determine colormap and limits
+    if measure == 'SC':
+        vmin, vmax = 0, 1
+        cmap = 'Reds'
+    else:  # FC
+        vmin, vmax = -0.8, 0.8
+        cmap = 'RdBu_r'
+
+    # Plot base matrix
+    cax = ax.imshow(Y_reordered, cmap=cmap, vmin=vmin, vmax=vmax)
+
+    # Overlay transparent gray mask on cross edges
+    overlay = np.zeros((*Y_reordered.shape, 4))  # RGBA
+    overlay[..., :3] = 0.5  # Gray color
+    overlay[..., 3] = mask * mask_alpha
+    ax.imshow(overlay, interpolation='none')
+
+    # Add dividing lines
+    ax.axhline(y=n_train - 0.5, color='black', linewidth=1)
+    ax.axvline(x=n_train - 0.5, color='black', linewidth=1)
+
+    # Title and colorbar
+    ax.set_title(f'{title_prefix} — Reordered Connectome', fontsize=fontsize)
+    plt.colorbar(cax, ax=ax, shrink=0.8, pad=0.02).ax.tick_params(labelsize=fontsize - 4)
+
+    # Remove ticks
+    ax.set_xticks([])
+    ax.set_yticks([])
+    plt.tight_layout()
     plt.show()
