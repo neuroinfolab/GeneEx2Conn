@@ -152,7 +152,13 @@ class Simulation:
         Select cross-validation strategy
         """
         if self.cv_type == 'random':
-            self.cv_obj = RandomCVSplit(self.X, self.Y, num_splits=4, shuffled=True, use_random_state=True, random_seed=self.random_seed)
+            # Create a directory for saving CV indices
+            indices_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'cv_indices')
+            os.makedirs(indices_dir, exist_ok=True)
+            
+            self.cv_obj = RandomCVSplit(self.X, self.Y_fc, num_splits=4, use_random_state=True, 
+                                      random_seed=self.random_seed, save_dir=indices_dir, 
+                                      parcellation=self.parcellation)
         elif self.cv_type == 'schaefer':
             self.cv_obj = SchaeferCVSplit()
         elif self.cv_type == 'community': # for comparability to SC as target the splits should be based on the functional connectome
