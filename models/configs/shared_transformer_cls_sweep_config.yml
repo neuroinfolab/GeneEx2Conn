@@ -65,9 +65,9 @@ best_parameters:
   cls_init:
     values: ['spatial_learned']
   transformer_dropout:
-    values: [0.5]
+    values: [0.2]
   dropout_rate:
-    values: [0.5]
+    values: [0.2]
   learning_rate:
     values: [0.00009]
   weight_decay:
