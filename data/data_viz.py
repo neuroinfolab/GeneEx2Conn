@@ -9,7 +9,7 @@ from data.data_load import load_transcriptome, load_network_labels, load_connect
 
 def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subcortical=False, 
                   hemisphere='both', add_network_labels=False, add_hemisphere_labels=False,
-                  title=None, fontsize=24, figsize=(12, 10)):
+                  title=None, fontsize=24, figsize=(12, 10), show_ticks=True):
     """
     Function to plot the connectome with either network or hemisphere labels.
     
@@ -25,6 +25,7 @@ def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subc
     title (str): Title for the plot. Default: None
     fontsize (int): Font size for labels. Default: 20
     figsize (tuple): Figure size. Default: (12, 10)
+    show_ticks (bool): Whether to show tick labels. Default: True
     """
     if add_network_labels and add_hemisphere_labels:
         raise ValueError("Cannot display both network and hemisphere labels. Please choose one.")
@@ -85,9 +86,13 @@ def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subc
         tick_positions.append((start_idx + len(network_labels) - 1) / 2)
         tick_labels.append(prev_label)
         
-        # Add network labels
-        plt.xticks(tick_positions, tick_labels, rotation=45, ha='right', fontsize=fontsize-4)
-        plt.yticks(tick_positions, tick_labels, fontsize=fontsize-4)
+        # Add network labels if show_ticks is True
+        if show_ticks:
+            plt.xticks(tick_positions, tick_labels, rotation=45, ha='right', fontsize=fontsize-4)
+            plt.yticks(tick_positions, tick_labels, fontsize=fontsize-4)
+        else:
+            ax.set_xticks([])
+            ax.set_yticks([])
         
     elif add_hemisphere_labels:
         # Remove default ticks
@@ -114,10 +119,11 @@ def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subc
                 labels = ['LH', 'RH', 'SCTX']
                 lines = [0, 200, 400, 456]
         
-        # Add labels on left axis only
-        left_ay = ax.secondary_yaxis('left')
-        left_ay.set_yticks(ticks, labels)
-        left_ay.tick_params('y', length=0, labelsize=fontsize)
+        # Add labels on left axis only if show_ticks is True
+        if show_ticks:
+            left_ay = ax.secondary_yaxis('left')
+            left_ay.set_yticks(ticks, labels)
+            left_ay.tick_params('y', length=0, labelsize=fontsize)
         
         # Add lines
         left_ay_lines = ax.secondary_yaxis('left')
