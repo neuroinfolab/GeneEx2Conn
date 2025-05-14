@@ -14,7 +14,7 @@ from models.metrics import *
 ### SPATIAL AUTOCORRELATION ###
 def load_and_plot_data(parcellation='S400', hemisphere='both', omit_subcortical=False, 
                       sort_genes='expression', impute_strategy='mirror_interpolate', 
-                      null_model='none', fontsize=16):
+                      null_model='none', fontsize=16, subset_indices=None):
     """
     Load gene expression, connectivity and coordinate data and create visualization plots.
     
@@ -26,6 +26,7 @@ def load_and_plot_data(parcellation='S400', hemisphere='both', omit_subcortical=
         impute_strategy (str): Strategy for imputing missing values (default: 'mirror_interpolate')
         null_model (str): Type of null model to use (default: 'none')
         fontsize (int): Font size for plot labels (default: 16)
+        subset_indices (array-like): Optional indices to subset the data (default: None)
         
     Returns:
         tuple: Contains the following arrays:
@@ -65,6 +66,15 @@ def load_and_plot_data(parcellation='S400', hemisphere='both', omit_subcortical=
     coords = coords[valid_indices]
     labels = [labels[i] for i in range(len(labels)) if valid_indices[i]]
     network_labels = network_labels[valid_indices]
+
+    # Apply subset if provided
+    if subset_indices is not None:
+        X = X[subset_indices]
+        X_pca = X_pca[subset_indices]
+        Y = Y[subset_indices][:, subset_indices]
+        coords = coords[subset_indices]
+        labels = [labels[i] for i in subset_indices]
+        network_labels = network_labels[subset_indices]
 
     # Compute correlation matrices
     X_corr = np.corrcoef(X, rowvar=True)

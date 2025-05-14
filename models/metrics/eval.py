@@ -287,32 +287,35 @@ class Metrics:
         cbar.ax.tick_params(labelsize=TICK_SIZE)  # Correct way to set colorbar tick label size
         
         plt.show()
-
+        
     def visualize_predictions_subset(self):
         if self.square: # Compute geodesic distance if test data is a square connectome
             Y_pred_connectome = reconstruct_connectome(self.Y_pred, symmetric=True)
             Y_pred_connectome_asymmetric = reconstruct_connectome(self.Y_pred, symmetric=False)
             Y_true_connectome = reconstruct_connectome(self.Y_true)
 
-            plt.figure(figsize=(16, 4))
+            # Create high resolution figure
+            plt.figure(figsize=(16, 4), dpi=300)
+            
             plt.subplot(131)
-            plt.imshow(Y_true_connectome, cmap='viridis', vmin=Y_true_connectome.min(), vmax=Y_true_connectome.max())
+            plt.imshow(Y_true_connectome, cmap='RdBu_r', vmin=-0.8, vmax=0.8, interpolation='nearest')
             plt.colorbar(shrink=0.5)
-            plt.title('True Connectome')
+            plt.title('True Connectome', pad=10)
             
             plt.subplot(132) 
-            plt.imshow(Y_pred_connectome_asymmetric, cmap='viridis', vmin=Y_true_connectome.min(), vmax=Y_true_connectome.max())
+            plt.imshow(Y_pred_connectome_asymmetric, cmap='RdBu_r', vmin=-0.8, vmax=0.8, interpolation='nearest')
             plt.colorbar(shrink=0.5)
-            plt.title('Predicted Connectome') # (non-symmetrized)
+            plt.title('Predicted Connectome', pad=10) # (non-symmetrized)
 
             plt.subplot(133)
-            plt.imshow(abs(Y_true_connectome - Y_pred_connectome_asymmetric), cmap='RdYlGn_r')
+            plt.imshow(abs(Y_true_connectome - Y_pred_connectome_asymmetric), cmap='RdYlGn_r', interpolation='nearest')
             plt.colorbar(shrink=0.5)
-            plt.title('Prediction Difference')
+            plt.title('Prediction Difference', pad=10)
             
             plt.tight_layout()
+            plt.savefig('predictions_subset.png', dpi=300, bbox_inches='tight')
             plt.show()
-    
+        
     def visualize_predictions_full(self):
         n = int(self.Y.shape[0])  # Get dimensions of square connectome
         if self.binarize: 
