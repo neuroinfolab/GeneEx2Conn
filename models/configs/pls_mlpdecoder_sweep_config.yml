@@ -38,7 +38,7 @@ best_parameters:
   binarize: 
     value: !!int 0
   n_components:
-    values: [25]
+    values: [10]
   max_iter:
     values: [1000]
   scale:
@@ -57,4 +57,4 @@ best_parameters:
   weight_decay:
     values: [0.0001]
   epochs:
-    values: [10]
+    values: [100]
