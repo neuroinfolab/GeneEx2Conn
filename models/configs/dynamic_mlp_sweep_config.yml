@@ -12,7 +12,7 @@ parameters:
     value: !!int 0
   hidden_dims:
     values:
-     #  - [128, 64]
+      - [128, 64]
       - [256, 128]
       - [512, 256, 128]
   learning_rate:
@@ -34,17 +34,18 @@ best_parameters:
     value: !!int 0
   hidden_dims:
     values:     
-    - [256, 128]
+    # - [256, 128]
+    - [512, 256, 128]
   learning_rate:
     values: [0.00009]
   batch_size:
     values: [512]
   dropout_rate:
-    values: [0.2]
+    values: [0.1]
   weight_decay:
     values: [0.0001]
   epochs:
-    values: [100]
+    values: [125]
   
 # BINARY
 # best_parameters:
