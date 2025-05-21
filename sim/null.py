@@ -1172,7 +1172,7 @@ def run_spin_test_random(X, Y_true, valid_indices, spins_df, model_type='CM', n_
     return empirical_corr, p_value, null_corrs
 
 
-def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_type='CM', num_components=10, n_perms=1000, sort_spins='mean_error_rank', bins=25, fontsize=18, pre_fit=False):
+def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_type='CM', num_components=10, n_perms=1000, sort_spins='mean_error_rank', bins=25, fontsize=24, pre_fit=False):
     """
     Run spin test using precomputed spins to generate null distribution
     
@@ -1289,12 +1289,24 @@ def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_
     # Plot 1: Standard uncolored histogram
     axes[0].hist(null_corrs, bins=bins, alpha=0.6, color='gray', label='Null distribution')
     axes[0].axvline(empirical_corr, color='red', linestyle='--', 
-                    label=f'Empirical (r={empirical_corr:.3f}, p={p_value:.3f})')
+                    label=f'Empirical (r={empirical_corr:.2f})')
+    
+    # Add line for mean of top 10 lowest error rank spins
+    top_10_idx = np.argsort(error_metrics['mean_error_rank'])[:10]
+    top_10_mean = np.mean(null_corrs[top_10_idx])
+    axes[0].axvline(top_10_mean, color='blue', linestyle='--',
+                    label=f'Top 10 mean (r={top_10_mean:.2f})')
+    
     axes[0].set_xlabel('Pearson correlation', fontsize=fontsize)
     axes[0].set_ylabel('Count', fontsize=fontsize)
-    axes[0].set_title(f'Standard {model_type} Spin Test\nNull Distribution', fontsize=fontsize)
-    axes[0].legend(fontsize=fontsize-2)
+    axes[0].set_title(f'Standard {model_type} Spin Test\nNull Distribution', fontsize=fontsize, pad=20)
+    axes[0].legend(fontsize=fontsize-8)
     axes[0].tick_params(labelsize=fontsize-2)
+    
+    # Set x-axis ticks at 0.1 intervals
+    axes[0].set_xticks(np.arange(0.2, 0.6, 0.1))
+    # Set y-axis ticks at 500 intervals
+    axes[0].set_yticks(np.arange(0, 1001, 500))
     
     # Calculate bin edges and centers once
     counts, bin_edges = np.histogram(null_corrs, bins=bins)
@@ -1320,15 +1332,22 @@ def run_spin_test_precomputed_colored(X, Y_true, valid_indices, spins_df, model_
         sm = plt.cm.ScalarMappable(cmap='viridis', norm=norm)
         plt.colorbar(sm, ax=axes[idx], label=metric)
         
-        # Add empirical line
+        # Add empirical line and top 10 mean line
         axes[idx].axvline(empirical_corr, color='red', linestyle='--',
-                         label=f'Empirical (r={empirical_corr:.3f}, p={p_value:.3f})')
+                         label=f'Empirical (r={empirical_corr:.2f})')
+        axes[idx].axvline(top_10_mean, color='blue', linestyle='--',
+                         label=f'Top 10 mean (r={top_10_mean:.2f})')
         
         axes[idx].set_xlabel('Pearson correlation', fontsize=fontsize)
         axes[idx].set_ylabel('Count', fontsize=fontsize)
-        axes[idx].set_title(f'{model_type} Spin Test Distribution\nColored by {metric}', fontsize=fontsize)
-        axes[idx].legend(fontsize=fontsize-2)
+        axes[idx].set_title(f'{model_type} Spin Test Distribution\nColored by {metric}', fontsize=fontsize, pad=20)
+        axes[idx].legend(fontsize=fontsize-8)
         axes[idx].tick_params(labelsize=fontsize-2)
+        
+        # Set x-axis ticks at 0.1 intervals
+        axes[idx].set_xticks(np.arange(0.5, 0.8, 0.1))
+        # Set y-axis ticks at 500 intervals
+        axes[idx].set_yticks(np.arange(0, 1501, 500))
     
     plt.tight_layout()
     plt.show()
