@@ -46,13 +46,13 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
                 if hasattr(model, 'cls_init'):
                     save_path = os.path.join('models', 'saved_models')
                     os.makedirs(save_path, exist_ok=True)
-                    torch.save(model.state_dict(), os.path.join(save_path, 'best_cls_model_spin_full.pt'))
-                    print(f"Saved best model to {os.path.join(save_path, 'best_cls_model_spin_full.pt')}")
+                    torch.save(model.state_dict(), os.path.join(save_path, 'best_cls_model_iPA_spin_full.pt'))
+                    print(f"Saved best model to {os.path.join(save_path, 'best_cls_model_iPA_spin_full.pt')}")
                 elif hasattr(model, 'use_alibi') and not hasattr(model, 'cls_init'):
                     save_path = os.path.join('models', 'saved_models')
                     os.makedirs(save_path, exist_ok=True)
-                    torch.save(model.state_dict(), os.path.join(save_path, 'best_smt_model_full.pt'))
-                    print(f"Saved best model to {os.path.join(save_path, 'best_smt_model_full.pt')}")
+                    torch.save(model.state_dict(), os.path.join(save_path, 'best_smt_model_iPA_spin_full.pt'))
+                    print(f"Saved best model to {os.path.join(save_path, 'best_smt_model_iPA_spin_full.pt')}")
                 
                 
                 if patience_counter >= patience:
