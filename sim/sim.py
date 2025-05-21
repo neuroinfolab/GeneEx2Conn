@@ -151,7 +151,7 @@ class Simulation:
         Select cross-validation strategy
         """
         if self.cv_type == 'random':
-            self.cv_obj = RandomCVSplit(self.X, self.Y, num_splits=4, shuffled=True, use_random_state=True, random_seed=self.random_seed)
+            self.cv_obj = RandomCVSplit(self.X, self.Y, num_splits=100, shuffled=True, use_random_state=True, random_seed=self.random_seed) # temporarily changed to 100 split
         elif self.cv_type == 'schaefer':
             self.cv_obj = SchaeferCVSplit()
         elif self.cv_type == 'community': # for comparability to SC as target the splits should be based on the functional connectome
