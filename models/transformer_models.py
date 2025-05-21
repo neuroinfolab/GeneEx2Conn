@@ -201,7 +201,7 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
         output = self.output_layer(deep_output)
         return output.squeeze()
 
-    def predict(self, loader, collect_attn=False):
+    def predict(self, loader, collect_attn=False, save_attn_path=None):
         self.eval()
         predictions = []
         targets = []
@@ -236,6 +236,8 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
         if collect_attn and total_batches > 0:
             avg_attn /= total_batches  # Final average (nhead, L, L)
             plot_avg_attention(avg_attn.cpu())
+            if save_attn_path is not None:
+                np.save(save_attn_path, avg_attn.cpu().numpy())
 
         return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
 
@@ -416,7 +418,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
         
         return output.squeeze()
         
-    def predict(self, loader, collect_attn=False):
+    def predict(self, loader, collect_attn=False, save_attn_path=None):
         self.eval()
         predictions = []
         targets = []
@@ -452,6 +454,8 @@ class SharedSelfAttentionCLSModel(nn.Module):
         if collect_attn and total_batches > 0:
             avg_attn /= total_batches  # Final average (nhead, L, L)
             plot_avg_attention(avg_attn.cpu())
+            if save_attn_path is not None:
+                np.save(save_attn_path, avg_attn.cpu().numpy())
 
         return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
     

@@ -43,7 +43,6 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
                 
                 
                 # Save model if it has cls_init attribute
-                '''
                 if hasattr(model, 'cls_init'):
                     save_path = os.path.join('models', 'saved_models')
                     os.makedirs(save_path, exist_ok=True)
@@ -52,9 +51,9 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
                 elif hasattr(model, 'use_alibi') and not hasattr(model, 'cls_init'):
                     save_path = os.path.join('models', 'saved_models')
                     os.makedirs(save_path, exist_ok=True)
-                    torch.save(model.state_dict(), os.path.join(save_path, 'best_smt_model_spin_full.pt'))
-                    print(f"Saved best model to {os.path.join(save_path, 'best_smt_model_spin_full.pt')}")
-                '''
+                    torch.save(model.state_dict(), os.path.join(save_path, 'best_smt_model_full.pt'))
+                    print(f"Saved best model to {os.path.join(save_path, 'best_smt_model_full.pt')}")
+                
                 
                 if patience_counter >= patience:
                     print(f"\nEarly stopping triggered at epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}, Pearson Correlation: {pearson_corr:.4f}")
