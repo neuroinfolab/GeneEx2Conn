@@ -1,8 +1,7 @@
 from env.imports import *
-# from sim.null import get_iPA_masks
 
 relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data'
-absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'
+absolute_data_path = relative_data_path
 
 def _apply_pca(data, var_thresh=0.95):
         """Helper to apply PCA with variance threshold."""
@@ -39,7 +38,6 @@ def get_iPA_masks(parcellation):
             - subcort_mask_list: List of 0s and 1s indicating subcortical (1) vs cortical (0) regions
             - n_cortical: Number of cortical regions (optional)
     """
-    absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'
     BHA2_path = absolute_data_path + '/BHA2/'
     metadata = pd.read_csv(os.path.join(BHA2_path, parcellation, f'{parcellation}.csv'), index_col=0)
 

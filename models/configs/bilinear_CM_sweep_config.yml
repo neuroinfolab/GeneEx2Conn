@@ -14,7 +14,7 @@ parameters:
   batch_size:
     values: [256, 512]
   regularization:
-    values: ['l2'] # l2 in line with literature
+    values: ['l2']
   lambda_reg:
     values: [0, 0.001, 0.01, 0.1]
   epochs:

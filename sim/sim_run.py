@@ -2,10 +2,7 @@ import sys
 import os
 import argparse
 relative_root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-# print('relative_root_path', relative_root_path)
-absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
-print('absolute_root_path', absolute_root_path)
-sys.path.append(absolute_root_path)
+sys.path.append(relative_root_path)
 
 from env.imports import *
 from sim.sim import Simulation

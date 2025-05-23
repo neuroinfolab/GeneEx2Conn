@@ -759,7 +759,6 @@ def get_iPA_masks(parcellation):
             - subcort_mask_list: List of 0s and 1s indicating subcortical (1) vs cortical (0) regions
             - n_cortical: Number of cortical regions (optional)
     """
-    absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'
     BHA2_path = absolute_data_path + '/BHA2/'
     metadata = pd.read_csv(os.path.join(BHA2_path, parcellation, f'{parcellation}.csv'), index_col=0)
 

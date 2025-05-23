@@ -23,7 +23,7 @@ parameters:
   shared_weights:
     values: [True]
   reduced_dim:
-    values: [8, 10, 12]
+    values: [8, 10, 12, 15, 20]
   epochs:
     values: [100, 125]
 

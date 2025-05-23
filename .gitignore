@@ -14,7 +14,8 @@ notebooks/quick_experiments/
 *wandb
 *slurm
 slurm-*
-*alexander-ratzan-new-york-university
+*arny
+arny*
 *.netrc
 sim/sim_results/
 sim/sim_results/*
@@ -23,7 +24,8 @@ sim/logs/*
 sim/sbatch/
 sim/sbatch/*
 *.sh
-
+*/glass/
+glass/*
 !glass/cv_split_s400_structural_connectivity_spatial_split_10-3.gif
 !glass/cv_split_s400_structural_connectivity_random_split_4.gif
 !glass/S400_LAMA1_expression.png
