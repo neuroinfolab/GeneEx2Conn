@@ -77,4 +77,4 @@ best_parameters:
   aug_prob:
     values: [0.0] # 0.45 - drop epochs from 70 with lower aug prob
   epochs:
-    values: [70] # 70 
+    values: [60] # 70 
