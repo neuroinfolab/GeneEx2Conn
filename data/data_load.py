@@ -81,7 +81,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             region_labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in pd.read_csv('./data/enigma/schaef114_regions.txt', header=None).values.flatten().tolist()]
             genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r1_schaefer_{parcellation[1:]}.csv") # from https://github.com/saratheriver/enigma-extra/tree/master/ahba
         elif parcellation == 'S400':
-            AHBA_UKBB_path = absolute_data_path + '/Penn_UKBB_data/AHBA_population_MH/'
+            AHBA_UKBB_path = absolute_data_path + '/UKBB_data/AHBA_population_MH/'
             if impute_strategy == 'mirror':
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean_mirror.csv'))
             elif impute_strategy == 'interpolate':
