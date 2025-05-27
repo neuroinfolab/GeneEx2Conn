@@ -40,30 +40,25 @@ def connectome_r2(Y_pred, Y_ground_truth, include_diag=False, output=False):
 
 # Custom numpy and cupy scorers for inner-CV
 def pearson_numpy(y_true, y_pred):
-    """Compute Pearson correlation coefficient between true and predicted values using numpy."""
     return pearsonr(y_true, y_pred)[0]
 
 def mse_numpy(y_true, y_pred):
-    """Compute mean squared error between true and predicted values using numpy."""
     return np.mean(np.square(y_true - y_pred))
 
 def r2_numpy(y_true, y_pred):
-    """Compute R-squared score between true and predicted values using numpy."""
     y_true_mean = np.mean(y_true)
     total_ss = np.sum(np.square(y_true - y_true_mean))
     residual_ss = np.sum(np.square(y_true - y_pred))
     return 1 - (residual_ss / total_ss)
 
 def accuracy_numpy(y_true, y_pred):
-    """Compute accuracy score between true and predicted values using numpy."""
-    y_pred_labels = np.round(y_pred)  # Convert probabilities to binary labels (0 or 1)
+    y_pred_labels = np.round(y_pred)
     return accuracy_score(y_true, y_pred_labels)
+
 def logloss_numpy(y_true, y_pred):
-    """Compute log loss between true and predicted values using numpy."""
     return log_loss(y_true, y_pred)
 
 def pearson_cupy(y_true, y_pred):
-    """Compute Pearson correlation coefficient between true and predicted values using cupy."""
     y_pred = cp.asarray(y_pred)
     y_true = cp.asarray(y_true).ravel()
     y_pred = y_pred.ravel()
@@ -72,14 +67,12 @@ def pearson_cupy(y_true, y_pred):
     return corr_matrix[0, 1]
 
 def mse_cupy(y_true, y_pred):
-    """Compute mean squared error between true and predicted values using cupy."""
     y_pred = cp.asarray(y_pred)
     mse = cp.mean(cp.square(y_pred - y_true))
     cp.cuda.Stream.null.synchronize()
     return mse
     
 def r2_cupy(y_true, y_pred):
-    """Compute R-squared score between true and predicted values using cupy."""
     y_pred = cp.asarray(y_pred)
     y_true_mean = cp.mean(y_true)
     total_ss = cp.sum(cp.square(y_true - y_true_mean))
@@ -87,18 +80,16 @@ def r2_cupy(y_true, y_pred):
     return 1 - (residual_ss / total_ss)
 
 def accuracy_cupy(y_true, y_pred):
-    """Compute accuracy score between true and predicted values using cupy."""
     y_pred = cp.asarray(y_pred)
     y_true = cp.asarray(y_true)
 
-    y_pred_labels = cp.round(y_pred)  # Convert probabilities to binary labels (0 or 1)
+    y_pred_labels = cp.round(y_pred)
     accuracy = cp.mean(y_pred_labels == y_true)
     
     cp.cuda.Stream.null.synchronize()
     return accuracy.item()
 
 def logloss_cupy(y_true, y_pred):
-    """Compute log loss between true and predicted values using cupy."""
     # Convert inputs to cupy arrays
     y_pred = cp.asarray(y_pred)
     y_true = cp.asarray(y_true)
@@ -313,7 +304,6 @@ class Metrics:
             plt.title('Prediction Difference', pad=10)
             
             plt.tight_layout()
-            plt.savefig('predictions_subset.png', dpi=300, bbox_inches='tight')
             plt.show()
         
     def visualize_predictions_full(self):
@@ -335,7 +325,7 @@ class Metrics:
         
         # Plot full connectome with network labels
         plt.subplot(121)
-        plt.imshow(self.Y, cmap='viridis')
+        plt.imshow(self.Y, cmap='RdBu_r', vmin=-0.8, vmax=0.8)
         plt.colorbar(shrink=0.5)
         plt.title('Full Connectome', fontsize=14)
         
@@ -381,7 +371,7 @@ class Metrics:
         plt.subplot(122)
         plt.imshow(split_mask, cmap=cmap, interpolation='none', vmin=0, vmax=1)
         plt.colorbar(shrink=0.5)
-        plt.title('Prediction Differences for Training Pairs', fontsize=14)
+        plt.title('Prediction Differences', fontsize=14)
             
         plt.tight_layout()
         plt.show()
@@ -415,39 +405,6 @@ class ModelEvaluatorTorch:
             self.Y_pred, self.Y_true = self.model.predict(self.X, indices, train)
 
         return Metrics(self.Y, indices, self.Y_true, self.Y_pred, square, self.binarize, self.network_labels, distances).get_metrics()
-
-    def get_train_metrics(self):
-        return self.train_metrics
-
-    def get_test_metrics(self):
-        return self.test_metrics
-    
-
-class ModelEvaluator:
-    def __init__(self, model, Y, train_indices, test_indices, network_labels, X_train, Y_train, X_test, Y_test, train_shared_regions, test_shared_regions):        
-        self.Y = Y
-        self.train_indices = train_indices
-        self.test_indices = test_indices
-
-        self.model = model
-        self.X_train = X_train
-        self.Y_train = Y_train 
-        self.X_test = X_test
-        self.Y_test = Y_test
-
-        self.network_labels = network_labels
-
-        self.train_shared_regions = train_shared_regions
-        self.test_shared_regions = test_shared_regions
-
-        self.binarize = len(np.unique(Y_train)) == 2 and len(np.unique(Y_test)) == 2
-        
-        self.train_metrics = self.evaluate(X_train, Y_train, train_indices, not self.train_shared_regions)
-        self.test_metrics = self.evaluate(X_test, Y_test, test_indices, not self.test_shared_regions)
-
-    def evaluate(self, X, Y, indices, square):
-        self.Y_pred = self.model.predict(X)        
-        return Metrics(self.Y, indices, Y, self.Y_pred, square, self.binarize, self.network_labels).get_metrics()
 
     def get_train_metrics(self):
         return self.train_metrics
