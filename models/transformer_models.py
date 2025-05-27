@@ -251,11 +251,10 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
 
 # === SelfAttentionCLSEncoder using FastSelfAttentionBlock, FlashAttention, and CLS token === # 
 class SelfAttentionCLSEncoder(nn.Module):    
-    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_positional_encoding=False, cls_init='spatial_learned', use_alibi=False):
+    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, cls_init='spatial_learned', use_alibi=False):
         super().__init__()
         self.token_encoder_dim = token_encoder_dim
         self.d_model = d_model
-        self.use_positional_encoding = use_positional_encoding
         self.cls_init = cls_init
         self.use_alibi = use_alibi
         
@@ -332,7 +331,7 @@ class SelfAttentionCLSEncoder(nn.Module):
 
 class SharedSelfAttentionCLSModel(nn.Module):
     def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
-                 use_positional_encoding=False, cls_init='spatial_learned', use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
+                 cls_init='spatial_learned', use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
                  batch_size=128, epochs=100, aug_prob=0.0):
         super().__init__()
         
@@ -347,7 +346,6 @@ class SharedSelfAttentionCLSModel(nn.Module):
         self.d_model = d_model
         self.encoder_output_dim = encoder_output_dim
         self.transformer_dropout = transformer_dropout
-        self.use_positional_encoding = use_positional_encoding
         self.nhead = nhead
         self.num_layers = num_layers
 
@@ -368,7 +366,6 @@ class SharedSelfAttentionCLSModel(nn.Module):
                                             nhead=self.nhead, 
                                             num_layers=self.num_layers,
                                             dropout=self.transformer_dropout,
-                                            use_positional_encoding=self.use_positional_encoding, 
                                             cls_init=self.cls_init,
                                             use_alibi=self.use_alibi
                                             )
@@ -559,7 +556,7 @@ class CrossAttentionEncoder(nn.Module):
 # Update CrossAttentionModel to pass num_layers to encoder
 class CrossAttentionModel(nn.Module):
     def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128],
-                 use_positional_encoding=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
+                 transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
                  batch_size=128, epochs=100):
 
         super().__init__()

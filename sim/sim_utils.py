@@ -239,37 +239,6 @@ def find_best_params(grid_search_cv_results):
     
     return best_params
 
-
-# EXTRACT MODEL ATTRIBUTES
-def extract_feature_importances(model_type, best_model, save_model_json=False):
-    """
-    Extract feature importances and model JSON from trained models.
-    
-    Args:
-        model_type (str): Type of model ('pls', 'xgboost', 'ridge', etc.)
-        best_model: Trained model object
-        save_model_json (bool): Whether to save XGBoost model as JSON
-        
-    Returns:
-        tuple: (feature_importances, model_json)
-            - feature_importances: Array of feature importance values or None
-            - model_json: Model JSON string for XGBoost or None
-    """
-    model_json = None
-    feature_importances = None
-    
-    if model_type == 'pls':
-        feature_importances = best_model.x_weights_[:, 0]  # Weights for the first component
-    elif model_type == 'xgboost':
-        feature_importances = best_model.feature_importances_
-        if save_model_json:
-            booster = best_model.get_booster()
-            model_json = booster.save_raw("json").decode("utf-8")
-    elif model_type == 'ridge':
-        feature_importances = best_model.coef_
-        
-    return feature_importances, model_json
-
 def extract_model_params(model):
     """
     Dynamically extracts hyperparameters from a PyTorch model by analyzing
@@ -301,81 +270,6 @@ def extract_model_params(model):
 
 
 # WANDB
-def train_sweep(config, model_type, feature_type, connectome_target, cv_type, outer_fold_idx, inner_fold_splits, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, null_model):
-    """
-    Training function for W&B sweeps for deep learning models.
-    
-    Args:
-        config: W&B sweep configuration
-        model_type: Type of deep learning model
-        feature_type: List of feature dictionaries
-        connectome_target: Target connectome type
-        cv_type: Type of cross-validation
-        outer_fold_idx: Current outer fold index
-        inner_fold_splits: List of inner fold data splits
-        device: torch device (cuda/cpu)
-        sweep_id: Current W&B sweep ID
-    
-    Returns:
-        float: Mean validation loss across inner folds
-    """
-    feature_str = "+".join(str(k) if v is None else f"{k}_{v}"
-                         for feat in feature_type 
-                         for k,v in feat.items())
-    run_name = f"{model_type}_{feature_str}_{connectome_target}_{cv_type}_fold{outer_fold_idx}_innerCV" 
-
-    run = wandb.init(
-        project="gx2conn",
-        name=run_name,
-        group=f"sweep_{sweep_id}",
-        tags=["inner cross validation", f'cv_type_{cv_type}', f"fold{outer_fold_idx}", f"model_{model_type}", f"split_{cv_type}{seed}", f'feature_type_{feature_str}', f'target_{connectome_target}', f"parcellation_{parcellation}",  f"hemisphere_{hemisphere}", f"omit_subcortical_{omit_subcortical}", f"gene_list_{gene_list}", f"binarize_{binarize}", f"null_model_{null_model}"],
-        reinit=True
-    )
-
-    sweep_config = wandb.config
-    inner_fold_metrics = {
-        'train_losses': [], 'val_losses': []
-    }
-
-    # Get the appropriate model class
-    if model_type not in model_classes:
-        raise ValueError(f"Model type {model_type} not supported for W&B sweeps")
-    
-    ModelClass = model_classes[model_type]
-
-    # Process each inner fold
-    for fold_idx, (X_train, X_val, y_train, y_val) in enumerate(inner_fold_splits):
-        print(f'Processing inner fold {fold_idx}')
-        
-        # Initialize model dynamically based on sweep config
-        model = ModelClass(**sweep_config).to(device)
-
-        # Train model
-        history = model.fit(X_train, y_train, X_val, y_val)
-        
-        # Log epoch-wise metrics
-        for epoch, metrics in enumerate(zip(history['train_loss'], history['val_loss'])):
-            wandb.log({
-                'inner_fold': fold_idx,
-                f'fold{fold_idx}_epoch': epoch,
-                f'fold{fold_idx}_train_loss': metrics[0],
-                f'fold{fold_idx}_val_loss': metrics[1]
-            })
-        
-        # Store final metrics
-        inner_fold_metrics['train_losses'].append(history['train_loss'][-1])
-        inner_fold_metrics['val_losses'].append(history['val_loss'][-1])
-
-    # Log mean metrics across folds
-    mean_metrics = {
-        'mean_train_loss': np.mean(inner_fold_metrics['train_losses']),
-        'mean_val_loss': np.mean(inner_fold_metrics['val_losses'])
-    }
-    wandb.log(mean_metrics)
-    
-    run.finish()
-    return mean_metrics['mean_val_loss']
-
 def train_sweep_torch(config, model_type, train_indices, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, impute_strategy, sort_genes, null_model):
     """
     Training function for W&B sweeps for deep learning models.

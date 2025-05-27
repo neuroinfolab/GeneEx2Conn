@@ -13,7 +13,6 @@ from data.cv_split import (
 from data.data_utils import (
     process_cv_splits, 
     process_cv_splits_coords, 
-    expanded_inner_folds_combined_plus_indices, 
     expand_X_symmetric,
     expand_Y_symmetric,
     RegionPairDataset
@@ -41,7 +40,6 @@ MODEL_CLASSES = {
 }
 
 from models.metrics.eval import (
-    ModelEvaluator,
     ModelEvaluatorTorch
 )
 

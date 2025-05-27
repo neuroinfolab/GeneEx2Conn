@@ -74,6 +74,6 @@ best_parameters:
   batch_size:
     values: [512]
   aug_prob:
-    values: [0.45]
+    values: [0.5]
   epochs:
-    values: [70]
+    values: [100]
