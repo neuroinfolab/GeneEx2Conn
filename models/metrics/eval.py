@@ -138,11 +138,15 @@ class Metrics:
                 self.visualize_predictions_subset()
             except: 
                 print('No full or subset visualizations for this model')
+            
             try: 
                 if not self.binarize:
-                    self.visualize_predictions_scatter()
+                    self.visualize_predictions_distance_scatter()
+                    self.visualize_predictions_lateral_scatter()
+                    self.visualize_predictions_subnetwork_scatter()
             except: 
                 print('No scatter plot visualization for this model')
+        
         else:
             plt.close()
 
@@ -213,15 +217,180 @@ class Metrics:
                 'pearson_r': self.pearson_corr,
                 'short_r': self.short_r,
                 'mid_r': self.mid_r,
-                'long_r': self.long_r
-            
+                'long_r': self.long_r,
+                'left_hemi_r': self.left_left_r,
+                'right_hemi_r': self.right_right_r,
+                'inter_hemi_r': self.inter_hemi_r
             }
+            # Add network correlations if they exist
+            if hasattr(self, 'network_correlations'):
+                for network, corr in self.network_correlations.items():
+                    metrics[f'{network}_r'] = corr
         if self.square:
             metrics['geodesic_distance'] = self.geodesic_distance
         return metrics
+        
+    def visualize_predictions_lateral_scatter(self):
+        # Set global visualization parameters
+        TITLE_SIZE = 14
+        LABEL_SIZE = 22
+        LEGEND_SIZE = 20
+        TEXT_SIZE = 20
+        TICK_SIZE = 20
+        
+        plt.figure(figsize=(10, 7))        
 
-    
-    def visualize_predictions_scatter(self):
+        # Split predictions into hemispheric groups using indices
+        left_left_true = []
+        left_left_pred = []
+        right_right_true = []
+        right_right_pred = []
+        inter_hemi_true = []
+        inter_hemi_pred = []
+        # For each pair of regions in test set
+        for idx, (i, j) in enumerate(combinations(self.indices, 2)):
+            # Skip subcortical regions and lower triangle
+            if i >= 400 or j >= 400:
+                continue
+                
+            # Only take first direction (i->j) to get upper triangle
+            # Left-to-left connections
+            if i < 200 and j < 200:
+                left_left_true.append(self.Y_true_flat[2*idx])
+                left_left_pred.append(self.Y_pred_flat[2*idx])
+                
+            # Right-to-right connections    
+            elif 200 <= i < 400 and 200 <= j < 400:
+                right_right_true.append(self.Y_true_flat[2*idx])
+                right_right_pred.append(self.Y_pred_flat[2*idx])
+                
+            # Inter-hemispheric connections
+            elif (i < 200 and 200 <= j < 400) or (200 <= i < 400 and j < 200):
+                inter_hemi_true.append(self.Y_true_flat[2*idx])
+                inter_hemi_pred.append(self.Y_pred_flat[2*idx])
+
+        # Convert to arrays for correlation computation
+        left_left_true = np.array(left_left_true)
+        left_left_pred = np.array(left_left_pred)
+        right_right_true = np.array(right_right_true)
+        right_right_pred = np.array(right_right_pred)
+        inter_hemi_true = np.array(inter_hemi_true)
+        inter_hemi_pred = np.array(inter_hemi_pred)
+
+        # Calculate correlations for each type
+        self.left_left_r = pearsonr(left_left_true, left_left_pred)[0]
+        self.right_right_r = pearsonr(right_right_true, right_right_pred)[0]
+        self.inter_hemi_r = pearsonr(inter_hemi_true, inter_hemi_pred)[0]
+        # Create scatter plots with lighter colors
+        plt.scatter(left_left_true, left_left_pred,
+                   c='#4040FF', alpha=0.2, s=1, label=f'Left Intra (r={self.left_left_r:.3f})')  # Lighter blue
+        plt.scatter(right_right_true, right_right_pred,
+                   c='#FF4040', alpha=0.2, s=1, label=f'Right Intra (r={self.right_right_r:.3f})')  # Lighter red
+        plt.scatter(inter_hemi_true, inter_hemi_pred,
+                   c='#40FF40', alpha=0.2, s=1, label=f'Inter-hemi (r={self.inter_hemi_r:.3f})')  # Lighter green
+
+        # Add line of best fit
+        z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
+        p = np.poly1d(z)
+        plt.plot(self.Y_true_flat, p(self.Y_true_flat), "r:", alpha=0.5)
+        
+        # Add horizontal and vertical lines at 0
+        plt.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
+        plt.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
+        
+        # Set fixed axis limits and ticks
+        plt.xlim(-0.4, 1.0)
+        plt.ylim(-0.4, 1.0)
+        plt.xticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
+        plt.yticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
+        plt.gca().set_aspect('equal')
+        
+        plt.xlabel('True Values', fontsize=LABEL_SIZE)
+        plt.ylabel('Predicted Values', fontsize=LABEL_SIZE)
+        
+        plt.legend(fontsize=LEGEND_SIZE, markerscale=5)
+        plt.show()
+
+    def visualize_predictions_subnetwork_scatter(self):
+        # Set global visualization parameters
+        TITLE_SIZE = 14
+        LABEL_SIZE = 22
+        LEGEND_SIZE = 12  # Reduced from 20
+        TEXT_SIZE = 20
+        TICK_SIZE = 20
+        
+        plt.figure(figsize=(10, 7))        
+        
+        # Define the standard 7-network color scheme
+        network_colors = {
+            'Cont': '#D68E63',          # Darker Orange (Frontoparietal)
+            'Default': '#D67A7A',       # Darker Red (Default Mode)
+            'SalVentAttn': '#55B755',   # Darker Green (Salience/Ventral Attention)
+            'Limbic': '#D6CC7A',        # Darker Yellow (Limbic)
+            'DorsAttn': '#D67AD6',      # Darker Magenta (Dorsal Attention)
+            'SomMot': '#639CD6',        # Darker Light Blue (Somatomotor)
+            'Vis': '#7B3B7B',           # Darker Purple (Visual)
+            'Subcortical': '#808080',   # Gray (Subcortical)
+            'Cerebellum': '#2F4F4F'     # Dark slate gray (Cerebellum)
+        }
+
+        # Initialize dictionaries to store predictions by network
+        network_true = {net: [] for net in network_colors.keys()}
+        network_pred = {net: [] for net in network_colors.keys()}
+        network_corrs = {}
+
+        # For each pair of regions in test set
+        for idx, (i, j) in enumerate(combinations(self.indices, 2)):
+            # Get network labels for both regions
+            net_i = self.network_labels[i]
+            net_j = self.network_labels[j]
+            
+            # Only store if regions are in same network
+            if net_i == net_j:
+                network_true[net_i].append(self.Y_true_flat[2*idx])
+                network_pred[net_i].append(self.Y_pred_flat[2*idx])
+
+        # Calculate correlations and plot for each network
+        self.network_correlations = {}  # Store correlations as instance variable
+        for network in network_colors.keys():
+            if len(network_true[network]) > 0:  # Only plot if network has connections
+                true_vals = np.array(network_true[network])
+                pred_vals = np.array(network_pred[network])
+                
+                # Calculate correlation and store as instance variable
+                corr = pearsonr(true_vals, pred_vals)[0]
+                self.network_correlations[network] = corr
+                
+                # Create scatter plot with larger points and higher alpha
+                plt.scatter(true_vals, pred_vals,
+                          c=network_colors[network], alpha=0.4, s=3,  # Increased alpha and point size
+                          label=f'{network} ({corr:.3f})')  # Shortened label format
+
+        # Add line of best fit
+        z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
+        p = np.poly1d(z)
+        plt.plot(self.Y_true_flat, p(self.Y_true_flat), "r:", alpha=0.5)
+        
+        # Add horizontal and vertical lines at 0
+        plt.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
+        plt.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
+        
+        # Set fixed axis limits and ticks
+        plt.xlim(-0.4, 1.0)
+        plt.ylim(-0.4, 1.0)
+        plt.xticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
+        plt.yticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
+        plt.gca().set_aspect('equal')
+        
+        plt.xlabel('True Values', fontsize=LABEL_SIZE)
+        plt.ylabel('Predicted Values', fontsize=LABEL_SIZE)
+        
+        # Make legend more compact
+        plt.legend(fontsize=LEGEND_SIZE, markerscale=3, ncol=2, loc='upper left', bbox_to_anchor=(1.02, 1))
+        plt.tight_layout()  # Adjust layout to prevent legend cutoff
+        plt.show()
+
+    def visualize_predictions_distance_scatter(self):
         # Set global visualization parameters
         TITLE_SIZE = 14
         LABEL_SIZE = 22
@@ -253,6 +422,10 @@ class Metrics:
         z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
         p = np.poly1d(z)
         plt.plot(self.Y_true_flat, p(self.Y_true_flat), "r:", alpha=0.5)
+        
+        # Add horizontal and vertical lines at 0
+        plt.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
+        plt.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
         
         # Set equal axes ranges
         plt.xlim(min_val, max_val)
@@ -369,9 +542,30 @@ class Metrics:
         
         # Plot prediction differences with network labels
         plt.subplot(122)
-        plt.imshow(split_mask, cmap=cmap, interpolation='none', vmin=0, vmax=1)
+        plt.imshow(split_mask, cmap=cmap, interpolation='nearest', vmin=0, vmax=1)
         plt.colorbar(shrink=0.5)
         plt.title('Prediction Differences', fontsize=14)
+        
+        if self.network_labels is not None:
+            # Create tick positions and labels
+            tick_positions = []
+            tick_labels = []
+            start_idx = 0
+            prev_label = self.network_labels[0]
+            
+            for i in range(1, len(self.network_labels)):
+                if self.network_labels[i] != prev_label:
+                    tick_positions.append((start_idx + i - 1) / 2)
+                    tick_labels.append(prev_label)
+                    start_idx = i
+                    prev_label = self.network_labels[i]
+            
+            # Add the last group
+            tick_positions.append((start_idx + len(self.network_labels) - 1) / 2)
+            tick_labels.append(prev_label)
+
+            plt.xticks(tick_positions, tick_labels, rotation=45, ha='right', fontsize=12)
+            plt.yticks(tick_positions, tick_labels, fontsize=12)
             
         plt.tight_layout()
         plt.show()

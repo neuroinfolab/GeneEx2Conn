@@ -76,4 +76,4 @@ best_parameters:
   aug_prob:
     values: [0.45]
   epochs:
-    values: [100]
+    values: [70]

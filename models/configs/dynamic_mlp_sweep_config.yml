@@ -44,4 +44,4 @@ best_parameters:
   weight_decay:
     values: [0.0001]
   epochs:
-    values: [150]
+    values: [125]

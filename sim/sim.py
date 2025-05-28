@@ -375,7 +375,7 @@ class Simulation:
 
                 if track_wandb:
                     wandb.log({'final_train_metrics': train_metrics, 
-                            'final_test_metrics': test_metrics, 
+                            'final_test_metrics': test_metrics,
                             'best_val_loss': best_val_score})
                     final_eval_run.finish()
                     wandb.finish()
