@@ -11,8 +11,6 @@ from data.cv_split import (
 )
 
 from data.data_utils import (
-    process_cv_splits, 
-    process_cv_splits_coords, 
     expand_X_symmetric,
     expand_Y_symmetric,
     RegionPairDataset
@@ -55,12 +53,10 @@ from sim.sim_utils import (
     grid_search_init, 
     random_search_init, 
     drop_test_network, 
-    find_best_params,  
-    extract_feature_importances
-)
+    find_best_params
+    )
 
 from sim.sim_utils import (
-    train_sweep,
     train_sweep_torch,
     load_sweep_config, 
     load_best_parameters

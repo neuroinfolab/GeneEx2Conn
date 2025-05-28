@@ -178,6 +178,10 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
         self.deep_layers = nn.Sequential(*deep_layers)
         self.output_layer = nn.Linear(prev_dim, 1)
 
+        # Calculate and display total number of learnable parameters
+        num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"Number of learnable parameters in SMT model: {num_params}")
+        
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss()
         self.patience = 25
@@ -387,6 +391,10 @@ class SharedSelfAttentionCLSModel(nn.Module):
         self.deep_layers = nn.Sequential(*deep_layers)
         self.output_layer = nn.Linear(prev_dim, 1)
         
+        # Calculate and display total number of learnable parameters
+        num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"Number of learnable parameters in SMT w/ CLS model: {num_params}")
+
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss()
         self.patience = 25
