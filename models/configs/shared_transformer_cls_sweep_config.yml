@@ -60,7 +60,7 @@ best_parameters:
     values: [4]
   deep_hidden_dims:
     values:
-    - [256, 128]
+    - [512, 256, 128]
   cls_init:
     values: ['spatial_learned']
   transformer_dropout:

@@ -58,7 +58,7 @@ best_parameters:
     values: [4]
   deep_hidden_dims:
     values:
-    - [256, 128]
+    - [512, 256, 128]
   transformer_dropout:
     values: [0.2]
   dropout_rate:

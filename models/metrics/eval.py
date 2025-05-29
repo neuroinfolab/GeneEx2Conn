@@ -128,28 +128,21 @@ class Metrics:
         self.Y_pred_flat = self.Y_pred.flatten()
         self.square = square
         self.binarize = binarize
-
+    
         self.compute_metrics()
         
         if in_jupyter_notebook():
-            plt.show()
-            try:
-                self.visualize_predictions_full()
-                self.visualize_predictions_subset()
-            except: 
-                print('No full or subset visualizations for this model')
-            
-            try: 
-                if not self.binarize:
-                    self.visualize_predictions_distance_scatter()
-                    self.visualize_predictions_lateral_scatter()
-                    self.visualize_predictions_subnetwork_scatter()
-            except: 
-                print('No scatter plot visualization for this model')
-        
-        else:
-            plt.close()
-
+            self.visualize_predictions_full()
+            self.visualize_predictions_subset()
+    
+        try:
+            if not self.binarize:
+                self.visualize_predictions_distance_scatter()
+                self.visualize_predictions_lateral_scatter()
+                self.visualize_predictions_subnetwork_scatter()
+        except: 
+            print('No scatter plot visualization for this model')
+    
     def get_distance_based_correlations(self, distances, y_true, y_pred):
         """
         Calculate correlations for different distance ranges.
@@ -222,14 +215,77 @@ class Metrics:
                 'right_hemi_r': self.right_right_r,
                 'inter_hemi_r': self.inter_hemi_r
             }
-            # Add network correlations if they exist
-            if hasattr(self, 'network_correlations'):
+            if hasattr(self, 'network_correlations'): # Add network correlations if they exist
                 for network, corr in self.network_correlations.items():
                     metrics[f'{network}_r'] = corr
         if self.square:
             metrics['geodesic_distance'] = self.geodesic_distance
         return metrics
         
+    def visualize_predictions_distance_scatter(self):
+        # Set global visualization parameters
+        TITLE_SIZE = 14
+        LABEL_SIZE = 22
+        LEGEND_SIZE = 20
+        TEXT_SIZE = 20
+        TICK_SIZE = 20
+        
+        plt.figure(figsize=(10, 7))        
+        
+        min_val = min(self.Y_true_flat.min(), self.Y_pred_flat.min())
+        max_val = max(self.Y_true_flat.max(), self.Y_pred_flat.max())
+
+        # Get correlations for different distance ranges using helper function
+        overall_r, short_r, mid_r, long_r = self.get_distance_based_correlations(
+            self.distances, 
+            self.Y_true_flat, 
+            self.Y_pred_flat
+        )
+
+        if in_jupyter_notebook():
+            # Create distance-based colormap
+            norm = plt.Normalize(self.distances.min(), self.distances.max())
+            cmap = plt.cm.viridis  # Using viridis colormap for distance gradient
+            
+            # Create scatter plot with distance-based colors
+            scatter = plt.scatter(self.Y_true_flat, self.Y_pred_flat, 
+                                c=self.distances, cmap=cmap,
+                                alpha=0.5, s=4)
+        
+            # Add line of best fit
+            z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
+            p = np.poly1d(z)
+            plt.plot(self.Y_true_flat, p(self.Y_true_flat), "r:", alpha=0.5)
+            
+            # Add horizontal and vertical lines at 0
+            plt.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
+            plt.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
+            
+            # Set equal axes ranges
+            plt.xlim(min_val, max_val)
+            plt.ylim(min_val, max_val)
+            
+            # Add legend with correlations
+            legend_text = f'Overall r = {overall_r:.3f}\nShort-range r = {short_r:.3f}\nMid-range r = {mid_r:.3f}\nLong-range r = {long_r:.3f}'
+            plt.text(0.05, 0.95, legend_text, transform=plt.gca().transAxes, 
+                    bbox=dict(facecolor='white', alpha=0.8), verticalalignment='top',
+                    fontsize=LEGEND_SIZE)
+            
+            plt.xlabel('True Values', fontsize=LABEL_SIZE)
+            plt.ylabel('Predicted Values', fontsize=LABEL_SIZE)
+            #plt.title('Scatter Plot of True vs Predicted Values', fontsize=TITLE_SIZE)
+            
+            # Set tick label sizes
+            plt.xticks(fontsize=TICK_SIZE)
+            plt.yticks(fontsize=TICK_SIZE)
+            
+            # Add colorbar with consistent font sizes
+            cbar = plt.colorbar(scatter)
+            cbar.set_label('Distance (mm)', fontsize=LABEL_SIZE)
+            cbar.ax.tick_params(labelsize=TICK_SIZE)  # Correct way to set colorbar tick label size
+            
+            plt.show()
+    
     def visualize_predictions_lateral_scatter(self):
         # Set global visualization parameters
         TITLE_SIZE = 14
@@ -281,35 +337,37 @@ class Metrics:
         self.left_left_r = pearsonr(left_left_true, left_left_pred)[0]
         self.right_right_r = pearsonr(right_right_true, right_right_pred)[0]
         self.inter_hemi_r = pearsonr(inter_hemi_true, inter_hemi_pred)[0]
-        # Create scatter plots with lighter colors
-        plt.scatter(left_left_true, left_left_pred,
-                   c='#4040FF', alpha=0.2, s=1, label=f'Left Intra (r={self.left_left_r:.3f})')  # Lighter blue
-        plt.scatter(right_right_true, right_right_pred,
-                   c='#FF4040', alpha=0.2, s=1, label=f'Right Intra (r={self.right_right_r:.3f})')  # Lighter red
-        plt.scatter(inter_hemi_true, inter_hemi_pred,
-                   c='#40FF40', alpha=0.2, s=1, label=f'Inter-hemi (r={self.inter_hemi_r:.3f})')  # Lighter green
 
-        # Add line of best fit
-        z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
-        p = np.poly1d(z)
-        plt.plot(self.Y_true_flat, p(self.Y_true_flat), "r:", alpha=0.5)
-        
-        # Add horizontal and vertical lines at 0
-        plt.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
-        plt.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
-        
-        # Set fixed axis limits and ticks
-        plt.xlim(-0.4, 1.0)
-        plt.ylim(-0.4, 1.0)
-        plt.xticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
-        plt.yticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
-        plt.gca().set_aspect('equal')
-        
-        plt.xlabel('True Values', fontsize=LABEL_SIZE)
-        plt.ylabel('Predicted Values', fontsize=LABEL_SIZE)
-        
-        plt.legend(fontsize=LEGEND_SIZE, markerscale=5)
-        plt.show()
+        if in_jupyter_notebook():
+            # Create scatter plots with lighter colors
+            plt.scatter(left_left_true, left_left_pred,
+                    c='#4040FF', alpha=0.2, s=1, label=f'Left Intra (r={self.left_left_r:.3f})')  # Lighter blue
+            plt.scatter(right_right_true, right_right_pred,
+                    c='#FF4040', alpha=0.2, s=1, label=f'Right Intra (r={self.right_right_r:.3f})')  # Lighter red
+            plt.scatter(inter_hemi_true, inter_hemi_pred,
+                    c='#40FF40', alpha=0.2, s=1, label=f'Inter-hemi (r={self.inter_hemi_r:.3f})')  # Lighter green
+
+            # Add line of best fit
+            z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
+            p = np.poly1d(z)
+            plt.plot(self.Y_true_flat, p(self.Y_true_flat), "r:", alpha=0.5)
+            
+            # Add horizontal and vertical lines at 0
+            plt.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
+            plt.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
+            
+            # Set fixed axis limits and ticks
+            plt.xlim(-0.4, 1.0)
+            plt.ylim(-0.4, 1.0)
+            plt.xticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
+            plt.yticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
+            plt.gca().set_aspect('equal')
+            
+            plt.xlabel('True Values', fontsize=LABEL_SIZE)
+            plt.ylabel('Predicted Values', fontsize=LABEL_SIZE)
+            
+            plt.legend(fontsize=LEGEND_SIZE, markerscale=5)
+            plt.show()
 
     def visualize_predictions_subnetwork_scatter(self):
         # Set global visualization parameters
@@ -365,92 +423,31 @@ class Metrics:
                 plt.scatter(true_vals, pred_vals,
                           c=network_colors[network], alpha=0.4, s=3,  # Increased alpha and point size
                           label=f'{network} ({corr:.3f})')  # Shortened label format
-
-        # Add line of best fit
-        z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
-        p = np.poly1d(z)
-        plt.plot(self.Y_true_flat, p(self.Y_true_flat), "r:", alpha=0.5)
         
-        # Add horizontal and vertical lines at 0
-        plt.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
-        plt.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
-        
-        # Set fixed axis limits and ticks
-        plt.xlim(-0.4, 1.0)
-        plt.ylim(-0.4, 1.0)
-        plt.xticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
-        plt.yticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
-        plt.gca().set_aspect('equal')
-        
-        plt.xlabel('True Values', fontsize=LABEL_SIZE)
-        plt.ylabel('Predicted Values', fontsize=LABEL_SIZE)
-        
-        # Make legend more compact
-        plt.legend(fontsize=LEGEND_SIZE, markerscale=3, ncol=2, loc='upper left', bbox_to_anchor=(1.02, 1))
-        plt.tight_layout()  # Adjust layout to prevent legend cutoff
-        plt.show()
-
-    def visualize_predictions_distance_scatter(self):
-        # Set global visualization parameters
-        TITLE_SIZE = 14
-        LABEL_SIZE = 22
-        LEGEND_SIZE = 20
-        TEXT_SIZE = 20
-        TICK_SIZE = 20
-        
-        plt.figure(figsize=(10, 7))        
-        
-        min_val = min(self.Y_true_flat.min(), self.Y_pred_flat.min())
-        max_val = max(self.Y_true_flat.max(), self.Y_pred_flat.max())
-
-        # Get correlations for different distance ranges using helper function
-        overall_r, short_r, mid_r, long_r = self.get_distance_based_correlations(
-            self.distances, 
-            self.Y_true_flat, 
-            self.Y_pred_flat
-        )
-        # Create distance-based colormap
-        norm = plt.Normalize(self.distances.min(), self.distances.max())
-        cmap = plt.cm.viridis  # Using viridis colormap for distance gradient
-        
-        # Create scatter plot with distance-based colors
-        scatter = plt.scatter(self.Y_true_flat, self.Y_pred_flat, 
-                            c=self.distances, cmap=cmap,
-                            alpha=0.5, s=4)
-        
-        # Add line of best fit
-        z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
-        p = np.poly1d(z)
-        plt.plot(self.Y_true_flat, p(self.Y_true_flat), "r:", alpha=0.5)
-        
-        # Add horizontal and vertical lines at 0
-        plt.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
-        plt.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
-        
-        # Set equal axes ranges
-        plt.xlim(min_val, max_val)
-        plt.ylim(min_val, max_val)
-        
-        # Add legend with correlations
-        legend_text = f'Overall r = {overall_r:.3f}\nShort-range r = {short_r:.3f}\nMid-range r = {mid_r:.3f}\nLong-range r = {long_r:.3f}'
-        plt.text(0.05, 0.95, legend_text, transform=plt.gca().transAxes, 
-                bbox=dict(facecolor='white', alpha=0.8), verticalalignment='top',
-                fontsize=LEGEND_SIZE)
-        
-        plt.xlabel('True Values', fontsize=LABEL_SIZE)
-        plt.ylabel('Predicted Values', fontsize=LABEL_SIZE)
-        #plt.title('Scatter Plot of True vs Predicted Values', fontsize=TITLE_SIZE)
-        
-        # Set tick label sizes
-        plt.xticks(fontsize=TICK_SIZE)
-        plt.yticks(fontsize=TICK_SIZE)
-        
-        # Add colorbar with consistent font sizes
-        cbar = plt.colorbar(scatter)
-        cbar.set_label('Distance (mm)', fontsize=LABEL_SIZE)
-        cbar.ax.tick_params(labelsize=TICK_SIZE)  # Correct way to set colorbar tick label size
-        
-        plt.show()
+        if in_jupyter_notebook():
+            # Add line of best fit
+            z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
+            p = np.poly1d(z)
+            plt.plot(self.Y_true_flat, p(self.Y_true_flat), "r:", alpha=0.5)
+            
+            # Add horizontal and vertical lines at 0
+            plt.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
+            plt.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
+            
+            # Set fixed axis limits and ticks
+            plt.xlim(-0.4, 1.0)
+            plt.ylim(-0.4, 1.0)
+            plt.xticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
+            plt.yticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
+            plt.gca().set_aspect('equal')
+            
+            plt.xlabel('True Values', fontsize=LABEL_SIZE)
+            plt.ylabel('Predicted Values', fontsize=LABEL_SIZE)
+            
+            # Make legend more compact
+            plt.legend(fontsize=LEGEND_SIZE, markerscale=3, ncol=2, loc='upper left', bbox_to_anchor=(1.02, 1))
+            plt.tight_layout()  # Adjust layout to prevent legend cutoff
+            plt.show()
         
     def visualize_predictions_subset(self):
         if self.square: # Compute geodesic distance if test data is a square connectome

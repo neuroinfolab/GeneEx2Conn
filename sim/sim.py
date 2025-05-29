@@ -124,7 +124,6 @@ class Simulation:
         self.network_labels = self.network_labels[valid_indices]
         self.labels = [self.labels[i] for i in range(len(self.labels)) if valid_indices[i]]
         
-
         print(f"X shape: {self.X.shape}")
         print(f"X_pca shape: {self.X_pca.shape}")
         print(f"Y_sc shape: {self.Y_sc.shape}")
@@ -132,7 +131,7 @@ class Simulation:
         print(f"Y_sc_spectralA shape: {self.Y_sc_spectralA.shape}")
         print(f"Y_fc shape: {self.Y_fc.shape}")
         print(f"Coordinates shape: {self.coords.shape}")
-
+        
         # Define target connectome
         if self.binarize:
             self.Y = self.Y_fc_binary if self.connectome_target == 'FC' else self.Y_sc_binary

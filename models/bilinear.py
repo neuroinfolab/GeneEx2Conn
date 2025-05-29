@@ -38,8 +38,12 @@ class BilinearLowRank(nn.Module):
         self.linear = nn.Linear(input_dim//2, reduced_dim, bias=False)
         if not shared_weights:
             self.linear2 = nn.Linear(input_dim//2, reduced_dim, bias=False)
+        
         num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
-        print(f"Number of learnable parameters in bilinear low rank model: {num_params}")
+        print(f"Number of learnable parameters in Bilinear low rank model: {num_params}")
+        print(f"  Linear layer 1: {self.linear.weight.numel()} parameters")
+        if not self.shared_weights:
+            print(f"  Linear layer 2: {self.linear2.weight.numel()} parameters")
         
         if activation == 'sigmoid':
             self.activation = nn.Sigmoid()
@@ -105,8 +109,9 @@ class BilinearCM(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.bilinear = nn.Bilinear(input_dim//2, input_dim//2, 1, bias=bias)
-        num_params = sum(p.numel() for p in self.bilinear.parameters() if p.requires_grad)
-        print(f"Number of learnable parameters in bilinear CM layer: {num_params}")
+
+        num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"Total number of learnable parameters in BilinearCMmodel: {num_params}")
         
         self.criterion = BilinearLoss(self.parameters(), regularization=regularization, lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate)
