@@ -184,7 +184,7 @@ class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionMo
         
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss()
-        self.patience = 30
+        self.patience = 40
         self.scheduler = ReduceLROnPlateau(
             self.optimizer,
             mode='min',
@@ -397,7 +397,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
 
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss()
-        self.patience = 25
+        self.patience = 40
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
@@ -599,7 +599,7 @@ class CrossAttentionModel(nn.Module):
 
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss()
-        self.patience = 30
+        self.patience = 40
         self.scheduler = ReduceLROnPlateau(
             self.optimizer,
             mode='min',

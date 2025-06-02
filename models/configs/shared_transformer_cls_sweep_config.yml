@@ -47,7 +47,7 @@ best_parameters:
   binarize:
     value: !!int 0
   token_encoder_dim:
-    values: [60]
+    values: [20] # 20, 60
   d_model:
     values: [128]
   encoder_output_dim:
@@ -60,7 +60,7 @@ best_parameters:
     values: [4]
   deep_hidden_dims:
     values:
-    - [512, 256, 128]
+      - [512, 256, 128]
   cls_init:
     values: ['spatial_learned']
   transformer_dropout:

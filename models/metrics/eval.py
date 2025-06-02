@@ -134,7 +134,7 @@ class Metrics:
         if in_jupyter_notebook():
             self.visualize_predictions_full()
             self.visualize_predictions_subset()
-    
+
         try:
             if not self.binarize:
                 self.visualize_predictions_distance_scatter()
@@ -203,22 +203,30 @@ class Metrics:
                 'auc_roc': self.auc_roc
             }
         else:
+            # Define all possible metrics
             metrics = {
-                'mse': self.mse,
-                'mae': self.mae,
-                'r2': self.r2,
-                'pearson_r': self.pearson_corr,
-                'short_r': self.short_r,
-                'mid_r': self.mid_r,
-                'long_r': self.long_r,
-                'left_hemi_r': self.left_left_r,
-                'right_hemi_r': self.right_right_r,
-                'inter_hemi_r': self.inter_hemi_r
+                'mse': getattr(self, 'mse', 0),
+                'mae': getattr(self, 'mae', 0),
+                'r2': getattr(self, 'r2', 0),
+                'pearson_r': getattr(self, 'pearson_corr', 0),
+                'short_r': getattr(self, 'short_r', 0), 
+                'mid_r': getattr(self, 'mid_r', 0),
+                'long_r': getattr(self, 'long_r', 0),
+                'left_hemi_r': getattr(self, 'left_left_r', 0),
+                'right_hemi_r': getattr(self, 'right_right_r', 0),
+                'inter_hemi_r': getattr(self, 'inter_hemi_r', 0)
             }
-            if hasattr(self, 'network_correlations'): # Add network correlations if they exist
-                for network, corr in self.network_correlations.items():
-                    metrics[f'{network}_r'] = corr
-        if self.square:
+            
+            # Add network metrics
+            network_metrics = ['Cont', 'Default', 'SalVentAttn', 'Limbic', 
+                             'DorsAttn', 'SomMot', 'Vis', 'Subcortical', 'Cerebellum']
+            
+            # Add network correlations if they exist, defaulting to 0 if not
+            for network in network_metrics:
+                metrics[f'{network}_r'] = (self.network_correlations.get(network, 0) 
+                                         if hasattr(self, 'network_correlations') else 0)
+
+        if self.square and hasattr(self, 'geodesic_distance'):
             metrics['geodesic_distance'] = self.geodesic_distance
         return metrics
         
