@@ -52,6 +52,10 @@ def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subc
     # Create the heatmap
     cax = ax.imshow(Y, cmap=cmap, vmin=vmin, vmax=vmax)
     
+    # Add border around main connectome
+    for spine in ax.spines.values():
+        spine.set_linewidth(2.5)
+    
     if add_network_labels:
         # Get network labels
         _, network_labels = load_network_labels(
@@ -60,13 +64,26 @@ def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subc
             hemisphere=hemisphere
         )
         
-        # Draw lines between different adjacent labels
+        # Draw boxes around network blocks
         prev_label = network_labels[0]
+        start_idx = 0
+        
         for i in range(1, len(network_labels)):
             if network_labels[i] != prev_label:
-                ax.axhline(y=i-0.5, color='black', linewidth=1.0)
-                ax.axvline(x=i-0.5, color='black', linewidth=1.0)
+                # Draw rectangle around the block
+                rect = plt.Rectangle((start_idx-0.5, start_idx-0.5), 
+                                  i-start_idx, i-start_idx,
+                                  fill=False, color='black', linewidth=2)
+                ax.add_patch(rect)
+                start_idx = i
                 prev_label = network_labels[i]
+        
+        # Add the last block
+        rect = plt.Rectangle((start_idx-0.5, start_idx-0.5),
+                           len(network_labels)-start_idx, 
+                           len(network_labels)-start_idx,
+                           fill=False, color='black', linewidth=2)
+        ax.add_patch(rect)
         
         # Create tick positions and labels
         tick_positions = []
@@ -136,8 +153,8 @@ def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subc
     
     # Add colorbar
     plt.tight_layout()
-    cbar = plt.colorbar(cax, shrink=0.8, pad=0.02)
-    cbar.set_label('FC Strength', fontsize=fontsize-2)
+    cbar = plt.colorbar(cax, shrink=0.8, pad=0.02, ticks=np.arange(-0.8, 0.81, 0.4))
+    #cbar.set_label('FC Strength', fontsize=fontsize-2)
     cbar.ax.tick_params(labelsize=fontsize-2)    
     plt.show()
 

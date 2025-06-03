@@ -53,16 +53,16 @@ best_parameters:
   use_alibi:
     values: [True]
   nhead:
-    values: [4] 
+    values: [2] 
   num_layers:
-    values: [4]
+    values: [2]
   deep_hidden_dims:
     values:
-      - [512, 256, 128]
+      - [8192, 4096, 2048, 1024, 512, 256, 128]
   transformer_dropout:
-    values: [0.4]
+    values: [0.2]
   dropout_rate:
-    values: [0.4]
+    values: [0.2]
   learning_rate:
     values: [0.00009]
   weight_decay:
@@ -70,6 +70,6 @@ best_parameters:
   batch_size:
     values: [512]
   aug_prob:
-      values: [0.45]
+      values: [0.25]
   epochs:
-    values: [70]
+    values: [75]
