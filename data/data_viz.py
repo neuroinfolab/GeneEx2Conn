@@ -402,7 +402,8 @@ def create_color_gradient(base_color, expression_values):
     return colors
 
 def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, valid_genes=None, gene_name=None,
-                       title_prefix="CV Split", save_gif=False):
+                       title_prefix="CV Split", save_gif=False, show_train_edges=True, show_test_edges=True,
+                       fontsize=25):
     """
     General helper function to visualize train/test splits in 3D space with weighted connectivity edges
     and optional gene expression coloring.
@@ -426,6 +427,12 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
         Prefix for the plot title to indicate split type
     edge_threshold : float, optional
         Threshold for displaying edges (only edges with weight > threshold are shown)
+    show_train_edges : bool, optional
+        Whether to display edges between training points
+    show_test_edges : bool, optional
+        Whether to display edges between test points
+    fontsize : int, optional
+        Base font size for plot text elements
         
     Returns:
     --------
@@ -451,7 +458,7 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
             title_prefix = f"{title_prefix}, {gene_used} Expression"
     
     for fold_idx, (train_indices, test_indices) in enumerate(splits, 1):
-        fig = plt.figure(figsize=(14, 12), dpi=300)
+        fig = plt.figure(figsize=(20, 10), dpi=300)
         ax = fig.add_subplot(111, projection='3d', computed_zorder=False)
         
         # Plot edges if connectivity matrix is provided
@@ -477,8 +484,8 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
                     base_alpha = norm_weight * 0.5  # Scale alpha with weight
                     base_width = norm_weight * 2    # Scale width with weight
                     
-                    # Only draw edges within train or within test sets
-                    if i in train_indices and j in train_indices:
+                    # Only draw edges within train or within test sets based on flags
+                    if show_train_edges and i in train_indices and j in train_indices:
                         color = '#1f77b4'  # Darker blue
                         alpha = base_alpha * 0.8
                         width = base_width * 1.0
@@ -486,7 +493,7 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
                                [start[1], end[1]], 
                                [start[2], end[2]], 
                                color=color, alpha=alpha, linewidth=width)
-                    elif i in test_indices and j in test_indices:
+                    elif show_test_edges and i in test_indices and j in test_indices:
                         color = 'orange'
                         alpha = base_alpha * 1.0
                         width = base_width * 1.5
@@ -504,38 +511,41 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
                                      coords[train_indices, 1], 
                                      coords[train_indices, 2], 
                                      c=train_colors, label='Train', 
-                                     s=50, edgecolor='gray', linewidth=0.5)
+                                     s=45, edgecolor='gray', linewidth=0.5)
             
             test_scatter = ax.scatter(coords[test_indices, 0], 
                                     coords[test_indices, 1], 
                                     coords[test_indices, 2], 
                                     c=test_colors, label='Test', 
-                                    s=50, edgecolor='gray', linewidth=0.5)
+                                    s=45, edgecolor='gray', linewidth=0.5)
         else:
             # Plot points with smaller size
             train_scatter = ax.scatter(coords[train_indices, 0], 
                                      coords[train_indices, 1], 
                                      coords[train_indices, 2], 
                                      c='blue', label='Train', alpha=0.9,
-                                     s=50, edgecolor='gray', linewidth=0.5)
+                                     s=45, edgecolor='gray', linewidth=0.5)
             
             test_scatter = ax.scatter(coords[test_indices, 0], 
                                     coords[test_indices, 1], 
                                     coords[test_indices, 2], 
                                     c='orange', label='Test', alpha=0.9,
-                                    s=50, edgecolor='gray', linewidth=0.5)
+                                    s=45, edgecolor='gray', linewidth=0.5)
         
-        # Increase font sizes for axes labels
-        ax.set_xlabel('X (Lateral)', fontsize=20, labelpad=5)
-        ax.set_ylabel('Y (Posterior-Anterior)', fontsize=20, labelpad=5)
-        ax.set_zlabel('Z (Dorsal-Ventral)', fontsize=20, labelpad=5)
+        # Set axis labels on the inside of the plot
+        ax.set_xlabel('X (Lateral)', fontsize=fontsize, labelpad=-5)
+        ax.set_ylabel('Y (Posterior-Anterior)', fontsize=fontsize, labelpad=-5)
+        ax.set_zlabel('Z (Dorsal-Ventral)', fontsize=fontsize, labelpad=-5)
         
-        # Increase title font size substantially
-        #plt.suptitle(f'Fold {fold_idx}, {title_prefix} Visualization', 
-        #            fontsize=24, y=0.1)
+        # Remove tick labels but keep marks
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+        ax.set_zticklabels([])
+        ax.tick_params(axis='both', which='major', labelsize=fontsize*0.6)
         
-        # Increase tick label font size
-        ax.tick_params(axis='both', which='major', labelsize=12)
+        # Reduce number of ticks
+        for axis in [ax.xaxis, ax.yaxis, ax.zaxis]:
+            axis.set_major_locator(plt.MaxNLocator(5))  # Show only 5 ticks per axis
         
         # Create legend with larger font and adjusted position
         legend_elements = [
@@ -545,17 +555,17 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
         legend_labels = ['Train Regions', 'Test Regions']
         
         if Y is not None:
-            legend_elements.extend([
-                Line2D([0], [0], color='#1f77b4', alpha=0.6, linewidth=2),
-                Line2D([0], [0], color='orange', alpha=0.6, linewidth=2)
-            ])
-            legend_labels.extend(['Train Connections', 
-                                'Test Connections'])
+            if show_train_edges:
+                legend_elements.append(Line2D([0], [0], color='#1f77b4', alpha=0.6, linewidth=2))
+                legend_labels.append('Train Connections')
+            if show_test_edges:
+                legend_elements.append(Line2D([0], [0], color='orange', alpha=0.6, linewidth=2))
+                legend_labels.append('Test Connections')
         
         # Adjust legend font size and position
         ax.legend(legend_elements, legend_labels, 
-                 fontsize=18, loc='upper right',
-                 bbox_to_anchor=(0.97, 0.85))  # Move legend closer to plot
+                 fontsize=fontsize*0.9, loc='upper right',
+                 bbox_to_anchor=(0.97, 0.95))  # Move legend higher up
         
         # Style adjustments
         ax.view_init(elev=20, azim=45)
@@ -582,6 +592,7 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
         # Save as GIF
         imageio.mimsave(f"glass/{gif_path}", figures, fps=1)
         print(f"GIF saved to glass/{gif_path}")
+
 
 def visualize_3d(X, Y, coords, edge_threshold=0.5, valid_genes=None, gene_name=None):
     """

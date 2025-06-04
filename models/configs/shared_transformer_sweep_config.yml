@@ -58,7 +58,7 @@ best_parameters:
     values: [2]
   deep_hidden_dims:
     values:
-      - [8192, 4096, 2048, 1024, 512, 256, 128]
+      - [8192, 4096, 2048, 1024, 512, 256, 128] # 512, 256, 128]
   transformer_dropout:
     values: [0.2]
   dropout_rate:
@@ -70,6 +70,6 @@ best_parameters:
   batch_size:
     values: [512]
   aug_prob:
-      values: [0.25]
+      values: [0.3]
   epochs:
-    values: [75]
+    values: [70]

@@ -282,7 +282,7 @@ def plot_distance_decay_poly3(features, y_feature='FC', bin_size_mm=5, coverage=
     plt.tight_layout()
     plt.show()
 
-def plot_distance_fits(features, y_feature, bin_size_mm=10, coverage='Full Brain', include_linear=False, fontsize=28):
+def plot_distance_fits(features, y_feature, bin_size_mm=10, coverage='Full Brain', include_linear=False, fontsize=28, show_params=True):
     """
     Plot distance relationships with exponential decay, polynomial and linear fits
     
@@ -293,6 +293,7 @@ def plot_distance_fits(features, y_feature, bin_size_mm=10, coverage='Full Brain
         coverage (str): Brain coverage description for title
         include_linear (bool): Whether to include linear fit (default False)
         fontsize (int): Base font size for plot text elements (default 18)
+        show_params (bool): Whether to display parameter text box (default True)
     """
     # Calculate binned statistics
     bins = np.arange(0, max(features['distances']) + bin_size_mm, bin_size_mm)
@@ -329,13 +330,15 @@ def plot_distance_fits(features, y_feature, bin_size_mm=10, coverage='Full Brain
     if include_linear:
         y_linear = linear[0] * x_fit + linear[1]
 
-    # Create plot
-    fig, ax = plt.subplots(figsize=(12, 8))
+    # Create high resolution plot
+    plt.rcParams['figure.dpi'] = 300
+    fig, ax = plt.subplots(figsize=(9, 6.1))
+    
     # Set y-axis label based on feature type
     if y_feature == 'FC':
         y_label = 'Functional Connectivity (FC)'
     elif y_feature == 'CGE':
-        y_label = 'Correlated Gene Expression (CGE)'
+        y_label = 'Correlated Gene Expression'
     elif y_feature == 'PCA_CGE':
         y_label = 'PCA CGE'
     else:
@@ -343,43 +346,46 @@ def plot_distance_fits(features, y_feature, bin_size_mm=10, coverage='Full Brain
 
     # Plot raw data and binned statistics
     plt.bar(bin_centers, bin_means, width=bin_size_mm, color='#808080', alpha=0.5)
-    plt.scatter(features['distances'], features[y_feature], color='gray', alpha=0.1, s=1)
-    # plt.errorbar(bin_centers, bin_means, yerr=bin_std, color='black', fmt='o',
-    #              markersize=2, capsize=2, linewidth=0.5,
-    #              label=f"Mean {y_feature} ({bin_size_mm}mm bins)")
+    plt.scatter(features['distances'], features[y_feature], color='gray', alpha=0.05, s=1)
 
     # Plot fits
-    plt.plot(x_fit, y_poly, "darkorange", linewidth=3, label="3rd Order Polynomial")
-    plt.plot(x_fit, y_exp, "red", linewidth=3, label="Exponential Decay")
+    plt.plot(x_fit, y_poly, "darkorange", linewidth=3, label="Polynomial")
+    plt.plot(x_fit, y_exp, "red", linewidth=3, label="Exponential")
     if include_linear:
         plt.plot(x_fit, y_linear, "blue", linewidth=4, label="Linear Fit")
 
-    plt.xlabel('Distance (mm)', fontsize=fontsize-2)
-    plt.ylabel(y_label, fontsize=fontsize-2)
-    # plt.title(f'Distance vs {y_label} ({coverage})', fontsize=fontsize+2)
-    plt.tick_params(axis='both', which='major', labelsize=fontsize-2)
-    # plt.legend(fontsize=fontsize-4, loc='upper right')
+    plt.xlabel('Distance (mm)', fontsize=fontsize, labelpad=3)
+    plt.ylabel(y_label, fontsize=fontsize, labelpad=3)
+    plt.tick_params(axis='both', which='both', length=0)
+    
+    # Add more space between tick marks
+    ax.xaxis.set_major_locator(plt.MaxNLocator(5))  # Fewer x-axis ticks
+    ax.yaxis.set_major_locator(plt.MaxNLocator(5))  # Fewer y-axis ticks
+    
+    # Set tick label size to match axis label size
+    plt.tick_params(axis='both', which='major', labelsize=fontsize-4)
 
-    # Add fit parameters text box in lower right corner
-    param_text = (
-        "Exponential:\n"
-        f"SA-∞ = {exp_params[0]:.3f}\n"
-        f"SA-λ = {exp_params[1]:.3f}\n\n"
-        "Polynomial:\n"
-        f"$a_3$ = {poly_coefs[3]:.2e}\n"
-        f"$a_2$ = {poly_coefs[2]:.2e}\n"
-        f"$a_1$ = {poly_coefs[1]:.2e}\n"
-        f"$a_0$ = {poly_coefs[0]:.2e}"
-    )
-    
-    if include_linear:
-        param_text += f"\n\nLinear:\nslope = {linear[0]:.2e}\nintercept = {linear[1]:.2e}"
-    
-    plt.text(0.78, 0.02, param_text, fontsize=fontsize-9,
-             bbox=dict(facecolor='white', alpha=0.8),
-             transform=ax.transAxes,
-             verticalalignment='bottom',
-             horizontalalignment='left')
+    # Add fit parameters text box in lower right corner if requested
+    if show_params:
+        param_text = (
+            "Exponential:\n"
+            f"SA-∞ = {exp_params[0]:.3f}\n"
+            f"SA-λ = {exp_params[1]:.3f}\n\n"
+            "Polynomial:\n"
+            f"$a_3$ = {poly_coefs[3]:.2e}\n"
+            f"$a_2$ = {poly_coefs[2]:.2e}\n"
+            f"$a_1$ = {poly_coefs[1]:.2e}\n"
+            f"$a_0$ = {poly_coefs[0]:.2e}"
+        )
+        
+        if include_linear:
+            param_text += f"\n\nLinear:\nslope = {linear[0]:.2e}\nintercept = {linear[1]:.2e}"
+        
+        plt.text(0.78, 0.02, param_text, fontsize=fontsize-9,
+                bbox=dict(facecolor='white', alpha=0.8),
+                transform=ax.transAxes,
+                verticalalignment='bottom',
+                horizontalalignment='left')
 
     plt.tight_layout()
     plt.show()
