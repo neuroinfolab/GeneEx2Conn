@@ -41,7 +41,7 @@ single_sim_run(
 
 ## Repo Overview
 
-- **`/sim`** → Simulation class, cross-validation logic, wandb tracking  
+- **`/sim`** → Simulation class, cross-validation logic, wandb tracking, null spin generation
 - **`/data`** → Data loading, preprocessing, custom train-test splits
 - **`/glass`** → Select visualizations  
 - **`/models`** → ML & DL models, hyperparameter tuning, training pipeline  
@@ -53,7 +53,7 @@ single_sim_run(
 
 ## Setting up Jupyter notebook on NYU HPC (Greene)
 
-To setup your Jupyter notebook on the HPC cluster, follow the instructions here [here](https://sites.google.com/nyu.edu/nyu-hpc/hpc-systems/greene/software/open-ondemand-ood-with-condasingularity?authuser=0). The key difference is that instead of setting up your own Singularity image, you can point your Jupyter config to our existing Singularity image (which contains all the necessary python packages).
+To setup your Jupyter notebook on the HPC cluster, follow the instructions here [here](https://sites.google.com/nyu.edu/nyu-hpc/hpc-systems/greene/software/open-ondemand-ood-with-condasingularity?authuser=0). The key difference is that instead of setting up your own Singularity image, you can point your Jupyter config to our existing Singularity image, which contains all the necessary python packages.
 
 Specifically, all you need to do is 
 
@@ -80,7 +80,7 @@ This tells your Jupyter notebook to load its environment from this Singularity i
 
 ## Developer notes
 - If doing any substantial development with the repo, the assumption is that there is a `/GeneEx2Conn_data` folder one directory up from where the repo is setup. If you don't have access to this folder or if there are issues in pulling data from here, reach out to asr655 for access to this folder.
-- To use this repo outside of NYU HPC Greene, setup a conda environment using `GeneEx2Conn_env_combined.yml` from 'env' directory. If there are missing packages delete and recreate the environment with `GeneEx2Conn_env_all.yml`. Then setup ENIGMA below. If necessary, manually install the latest version of torch for deep learning functionality, `pip3 install torch torchvision torchaudio`.
+- To use this repo outside of NYU HPC Greene, setup a conda environment using `env/GeneEx2Conn.yml` from 'env' directory. This should download all relevant packages and toolboxes besides ENIGMA.
 - A few extra steps may be required to get `enigmatoolbox` working:
     - Manually install enigma: `git clone https://github.com/MICA-MNI/ENIGMA.git; cd ENIGMA; python setup.py install`
     - Replace all references to `error_bad_lines=False` in code with `on_bad_lines='skip'` following [this](https://stackoverflow.com/questions/69513799/pandas-read-csv-the-error-bad-lines-argument-has-been-deprecated-and-will-be-re).
