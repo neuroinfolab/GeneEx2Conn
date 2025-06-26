@@ -92,6 +92,7 @@ import torch
 import torch.nn as nn
 import torchmetrics
 import torch.distributed as dist
+import flash_attn
 from torch.utils.data import TensorDataset, DataLoader, Subset
 from torch.optim import Adam, AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
