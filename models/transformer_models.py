@@ -97,6 +97,7 @@ class FastSelfAttentionBlock(nn.Module):
                     qkv,
                     dropout_p=0.0,
                     causal=False,
+                    # window_size=(128, 128),
                     alibi_slopes=self.alibi_slopes if self.use_alibi else None
                 )
                 # ALiBi indicates positionality in the transformer by simply modifying the attention mechanism,
@@ -136,7 +137,7 @@ class FastSelfAttentionEncoder(nn.Module):
         x = x.flatten(start_dim=1)
         return x
 
-class SharedSelfAttentionModel(nn.Module): # true name FastSharedSelfAttentionModel
+class SharedSelfAttentionModel(nn.Module):
     def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128],
                  use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
                  batch_size=256, aug_prob=0.0, epochs=100):
