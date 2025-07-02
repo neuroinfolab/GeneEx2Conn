@@ -1,4 +1,5 @@
 from env.imports import *
+import gc 
 
 from models.metrics.eval import (
     pearson_numpy,
@@ -350,6 +351,7 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
                 inner_fold_metrics['final_val_pearson'].append(history['val_pearson'])
             else: 
                 history = model.fit(dataset, train_indices_expanded, test_indices_expanded)
+                
                 # Log epoch-wise metrics
                 for epoch, metrics in enumerate(zip(history['train_loss'], history['val_loss'])):
                     wandb.log({
@@ -368,11 +370,16 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
                 train_pearson = pearsonr(predictions, targets)[0]
                 predictions, targets = model.predict(val_loader)
                 val_pearson = pearsonr(predictions, targets)[0]
+
                 # Store final metrics
                 inner_fold_metrics['final_train_loss'].append(history['train_loss'][-1])
                 inner_fold_metrics['final_val_loss'].append(history['val_loss'][-1])
                 inner_fold_metrics['final_train_pearson'].append(train_pearson)
                 inner_fold_metrics['final_val_pearson'].append(val_pearson)
+
+            del model
+            torch.cuda.empty_cache()
+            gc.collect()
 
     # Log mean metrics across folds
     mean_metrics = {

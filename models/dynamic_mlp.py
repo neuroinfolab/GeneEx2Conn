@@ -2,51 +2,6 @@ from env.imports import *
 from data.data_utils import create_data_loader
 from models.train_val import train_model
 
-class TweedieLoss(nn.Module):
-    def __init__(self, p: float = 1.5, reduction: str = "mean", eps: float = 1e-8):
-        """
-        Tweedie Loss for log-link regression, adapted for min-max scaled count data.
-
-        Args:
-            p (float, optional): Tweedie variance power (1 ≤ p < 2).
-                - `p ≈ 1`: Approaches Poisson distribution.
-                - `p ≈ 2`: Approaches Gamma distribution.
-                - Default `p=1.5` models compound Poisson-Gamma.
-            reduction (str, optional): Reduction method, either "mean", "sum", or "none".
-            eps (float, optional): Small constant for numerical stability (default: 1e-8).
-        """
-        super().__init__()
-        assert 1.0 <= p < 2.0, "p must be in the range [1, 2)"
-        self.p = p
-        self.reduction = reduction
-        self.eps = eps
-
-    def forward(self, y_pred, y_true):
-        """
-        Compute Tweedie loss.
-
-        Args:
-            y_pred (torch.Tensor): Model output (log scale, needs exponentiation).
-            y_true (torch.Tensor): Target values (assumed min-max scaled and log-transformed).
-
-        Returns:
-            torch.Tensor: Tweedie loss.
-        """
-        # Ensure predictions are positive by exponentiating outputs
-        y_pred = torch.exp(y_pred)  # This ensures positivity
-
-        # Compute Tweedie loss
-        loss = - (y_true * (y_pred ** (1 - self.p))) / (1 - self.p) + \
-                 (y_pred ** (2 - self.p)) / (2 - self.p)
-
-        # Apply reduction
-        if self.reduction == "mean":
-            return torch.mean(loss)
-        elif self.reduction == "sum":
-            return torch.sum(loss)
-        else:
-            return loss  # Return per-sample loss
-
 class DynamicMLP(nn.Module):
     def __init__(self, input_dim, binarize, hidden_dims=[256, 128], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0.0, batch_size=64, epochs=100):
         super().__init__()
@@ -117,6 +72,56 @@ class DynamicMLP(nn.Module):
     def fit(self, dataset, train_indices, test_indices, verbose=True):
         train_dataset = Subset(dataset, train_indices)
         test_dataset = Subset(dataset, test_indices)
+
+        # base data loaders faster than multiple workers
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+
+
+
+class TweedieLoss(nn.Module):
+    def __init__(self, p: float = 1.5, reduction: str = "mean", eps: float = 1e-8):
+        """
+        Tweedie Loss for log-link regression, adapted for min-max scaled count data.
+
+        Args:
+            p (float, optional): Tweedie variance power (1 ≤ p < 2).
+                - `p ≈ 1`: Approaches Poisson distribution.
+                - `p ≈ 2`: Approaches Gamma distribution.
+                - Default `p=1.5` models compound Poisson-Gamma.
+            reduction (str, optional): Reduction method, either "mean", "sum", or "none".
+            eps (float, optional): Small constant for numerical stability (default: 1e-8).
+        """
+        super().__init__()
+        assert 1.0 <= p < 2.0, "p must be in the range [1, 2)"
+        self.p = p
+        self.reduction = reduction
+        self.eps = eps
+
+    def forward(self, y_pred, y_true):
+        """
+        Compute Tweedie loss.
+
+        Args:
+            y_pred (torch.Tensor): Model output (log scale, needs exponentiation).
+            y_true (torch.Tensor): Target values (assumed min-max scaled and log-transformed).
+
+        Returns:
+            torch.Tensor: Tweedie loss.
+        """
+        # Ensure predictions are positive by exponentiating outputs
+        y_pred = torch.exp(y_pred)  # This ensures positivity
+
+        # Compute Tweedie loss
+        loss = - (y_true * (y_pred ** (1 - self.p))) / (1 - self.p) + \
+                 (y_pred ** (2 - self.p)) / (2 - self.p)
+
+        # Apply reduction
+        if self.reduction == "mean":
+            return torch.mean(loss)
+        elif self.reduction == "sum":
+            return torch.sum(loss)
+        else:
+            return loss  # Return per-sample loss

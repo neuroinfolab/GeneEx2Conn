@@ -610,3 +610,4 @@ class ModelEvaluatorTorch:
 
     def get_test_metrics(self):
         return self.test_metrics
+

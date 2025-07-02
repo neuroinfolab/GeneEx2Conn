@@ -66,7 +66,7 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
             try: 
                 print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Time: {epoch_time:.2f}s")
             except: 
-                print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Time: {epoch_time:.2f}s")
+                print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Time per epoch: {epoch_time:.2f}s")
 
     return train_history
 

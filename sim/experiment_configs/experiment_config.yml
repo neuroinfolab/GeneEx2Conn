@@ -21,9 +21,9 @@ null_model: 'none'
 cv_type: spatial
 resolution: 1.0
 random_seed: 42
-search_method: ['wandb', 'mse', 5]
+search_method: ['wandb', 'mse', 3]
 track_wandb: true
-skip_cv: true
+skip_cv: false
 use_folds: [0, 1, 2, 3]
 
 # Model

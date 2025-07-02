@@ -4,9 +4,10 @@ from models.train_val import train_model
 import torch.nn.functional as F
 from flash_attn import flash_attn_func, flash_attn_qkvpacked_func
 from torch.cuda.amp import autocast
+import os
 
 
-def scaled_dot_product_attention_with_weights(query, key, value, dropout_p=0.0, is_causal=False, scale=None):
+def scaled_dot_product_attention_with_weights(query, key, value, dropout_p=0.0, is_causal=False, scale=None, apply_dropout=False):
     '''
     Helper function to compute attention output and weights at inference
     '''
@@ -14,7 +15,7 @@ def scaled_dot_product_attention_with_weights(query, key, value, dropout_p=0.0, 
     scale_factor = 1 / math.sqrt(query.size(-1)) if scale is None else scale
     scores = torch.matmul(query, key.transpose(-2, -1)) * scale_factor
     weights = torch.softmax(scores, dim=-1)
-    weights = F.dropout(weights, p=dropout_p, training=True)
+    weights = F.dropout(weights, p=dropout_p, training=apply_dropout)
     output = torch.matmul(weights, value)
     return output, weights
 
@@ -140,7 +141,7 @@ class FastSelfAttentionEncoder(nn.Module):
 class SharedSelfAttentionModel(nn.Module):
     def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128],
                  use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
-                 batch_size=256, aug_prob=0.0, epochs=100):
+                 batch_size=256, aug_prob=0.0, epochs=100, num_workers=2, prefetch_factor=2):
         super().__init__()
         
         self.binarize = binarize
@@ -154,6 +155,8 @@ class SharedSelfAttentionModel(nn.Module):
         self.epochs = epochs
         self.aug_prob = aug_prob
         self.use_alibi = use_alibi
+        self.num_workers = num_workers
+        self.prefetch_factor = prefetch_factor
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.encoder = FastSelfAttentionEncoder(
@@ -249,8 +252,16 @@ class SharedSelfAttentionModel(nn.Module):
     def fit(self, dataset, train_indices, test_indices, verbose=True):
         train_dataset = Subset(dataset, train_indices)
         test_dataset = Subset(dataset, test_indices)
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        
+        # basic loaders
+        # train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+        # test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        
+        # parallel loaders
+        print(f"Using {self.num_workers} workers and {self.prefetch_factor} prefetch factor")
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True, num_workers=self.num_workers, persistent_workers=True, prefetch_factor=self.prefetch_factor)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True, num_workers=self.num_workers, persistent_workers=True, prefetch_factor=self.prefetch_factor)
+        
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose, dataset=dataset)
 
 

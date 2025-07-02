@@ -18,16 +18,17 @@ parameters:
   use_alibi:
     values: [True, False]
   nhead:
-    values: [2, 4] 
+    values: [2, 4]
   num_layers:
     values: [2, 4]
   deep_hidden_dims:
     values:
-    - [256, 128]
+    # - [256, 128]
+    - [512, 256, 128]
   transformer_dropout:
-    values: [0, 0.2]
+    values: [0.1, 0.4]
   dropout_rate:
-    values: [0, 0.2]
+    values: [0.1, 0.4]
   learning_rate:
     values: [0.00009]
   weight_decay:
@@ -35,9 +36,13 @@ parameters:
   batch_size:
     values: [512]
   aug_prob:
-    values: [0, 0.1, 0.3, 0.45]
+    values: [0] #, 0.1, 0.3, 0.45]
   epochs:
-    values: [50, 70]
+    values: [30]
+  num_workers:
+    values: [2]
+  prefetch_factor:
+    values: [2]
 
 best_parameters:
   input_dim:
@@ -68,8 +73,12 @@ best_parameters:
   weight_decay:
     values: [0.0001]
   batch_size:
-    values: [512]
+    values: [1024]
   aug_prob:
-      values: [0.0]
+    values: [0.0]
   epochs:
     values: [70]
+  num_workers:
+    values: [2]
+  prefetch_factor:
+    values: [2]

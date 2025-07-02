@@ -106,7 +106,7 @@ class Simulation:
         # Remove rows that are all NaN - necessary for gene expression data with unsampled regions
         valid_indices = ~np.isnan(self.X).all(axis=1)
 
-        # Create index map so we know original (i.e. true) indices of valid data
+        # Create index map so we know original (i.e. true) indices of valid data after subsetting
         valid_indices_values = np.where(valid_indices)[0]
         valid2true_index_mapping = dict(enumerate(valid_indices_values))
         self.valid2true_index_mapping = valid2true_index_mapping
@@ -156,14 +156,16 @@ class Simulation:
         """
         Expand data based on feature+processing type, and target
         """        
-        # create a list of features to be expanded into edge-wise dataset
-        features = []
+        # Create a list of features to be expanded into edge-wise dataset
+        self.features = []
         for feature_dict in self.feature_type:
             for feature_name, processing_type in feature_dict.items():
-                print('feature_name: ', feature_name)
-                print('processing_type: ', processing_type)
-                features.append(feature_name if processing_type is None else f"{feature_name}_{processing_type}")
+                print(f'feature_name: {feature_name}, processing_type: {processing_type}')
+                self.features.append(feature_name if processing_type is None else f"{feature_name}_{processing_type}")
 
+        print('features', self.features)
+
+        # Possible features types
         feature_dict = {'transcriptome': self.X,
                         'transcriptome_PCA': self.X_pca,
                         'structural': self.Y_sc,
@@ -174,14 +176,11 @@ class Simulation:
                         'structural_spatial_null': np.hstack((self.coords, self.Y_sc)), # cannot be combined with other feats
                         'transcriptome_spatial_autocorr_null': np.hstack((self.coords, self.Y_sc, self.X_pca, self.X)), # cannot be combined with other feats
                         }
-        
-        self.features = features 
-        print('features', self.features)
-
+    
         X_all = []
-        for feature in features:
+        for feature in self.features:
             if 'spectral' in feature:
-                feature_type = '_'.join(feature.split('_')[:-1])  # take provided number of spectral components
+                feature_type = '_'.join(feature.split('_')[:-1])  # subset provided number of spectral components
                 feature_X = feature_dict[feature_type]
                 num_latents = int(feature.split('_')[-1])
                 feature_X = feature_X[:, num_latents:] if num_latents < 0 else feature_X[:, :num_latents] # take first num_latents components if positive, last if negative
@@ -195,25 +194,23 @@ class Simulation:
                 else:
                     spatial_null=False
                     transcriptome_spatial_null=None
-    
                 feature_X = feature_dict[feature]
-            
             X_all.append(feature_X)
-        
         self.X_all = np.hstack(X_all)
-        print('X generated... expanding to pairwise dataset')
+        print('Feature matrix, X, generated... expanding to pairwise dataset')
 
         # Create custom dataset for region pair data
         self.region_pair_dataset = RegionPairDataset(
-            self.X_all, 
+            self.X_all,
             self.Y,
             self.coords,
             self.valid2true_index_mapping
         )
-
-
+    
     def run_innercv_wandb_torch(self, input_dim, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3), sweep_id=None):
-        """Inner cross-validation with W&B support for torch models"""
+        """
+        Inner cross-validation with W&B support for torch models
+        """
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         inner_cv_obj = SubnetworkCVSplit(train_indices, train_network_dict)
@@ -271,7 +268,6 @@ class Simulation:
             
         return best_model, best_val_loss, best_config, sweep_id
 
-
     def run_sim_torch(self, search_method=('random', 'mse', 5), track_wandb=False, use_folds=[0, 1, 2, 3]):
         """
         Main simulation method
@@ -284,7 +280,7 @@ class Simulation:
         if search_method[0] == 'wandb' or track_wandb:
             wandb.login()
         
-        # Initialize sweep regardless of inner CV
+        # Initialize sweep
         sweep_id = None
         if (search_method[0] == 'wandb' or track_wandb):
             input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
@@ -294,8 +290,9 @@ class Simulation:
             print('Initialized sweep with ID:', sweep_id)
 
         network_dict = self.cv_obj.networks
+        
         for fold_idx, (train_indices, test_indices) in enumerate(self.cv_obj.split(self.X, self.Y)):
-            if fold_idx in use_folds: 
+            if fold_idx in use_folds:
                 train_region_pairs = expand_X_symmetric(train_indices.reshape(-1, 1)).astype(int)
                 test_region_pairs = expand_X_symmetric(test_indices.reshape(-1, 1)).astype(int)
 
@@ -367,8 +364,8 @@ class Simulation:
                 train_metrics = evaluator.get_train_metrics()
                 test_metrics = evaluator.get_test_metrics()
 
-                print("\nTRAIN METRICS:", train_metrics)
-                print("TEST METRICS:", test_metrics)
+                # print("\nTRAIN METRICS:", train_metrics)
+                # print("TEST METRICS:", test_metrics)
                 print('BEST VAL SCORE', best_val_score)
                 print('BEST MODEL HYPERPARAMS', best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model))
 

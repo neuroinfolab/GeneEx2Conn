@@ -6,7 +6,7 @@
 #SBATCH --time=04:00:00
 #SBATCH --mem=64GB
 #SBATCH --gres=gpu:1
-#SBATCH --constraint=a100|h100
+#SBATCH --constraint=a100
 #SBATCH --job-name=gx2c_sim
 #SBATCH --output=/scratch/asr655/neuroinformatics/GeneEx2Conn/sim/logs/sim_%j.out
 #SBATCH --error=/scratch/asr655/neuroinformatics/GeneEx2Conn/sim/logs/sim_%j.err

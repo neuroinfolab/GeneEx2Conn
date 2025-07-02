@@ -1,14 +1,13 @@
 import sys
 import os
 import argparse
-relative_root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-# print('relative_root_path', relative_root_path)
-absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
-print('absolute_root_path', absolute_root_path)
-sys.path.append(absolute_root_path)
-
+import multiprocessing as mp
 from env.imports import *
 from sim.sim import Simulation
+
+relative_root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
+sys.path.append(absolute_root_path)
 
 
 def single_sim_run(
@@ -117,12 +116,10 @@ def single_sim_run(
     null_model : str
         Whether to generate a spatial null model of the transcriptome
         Options: 'none', 'random', 'spatial'
-    Returns:
-    -------
-    single_model_results : list
-        List containing simulation results for the specified model configuration
     """
+    
     start_time = time.time()
+    
     sim = Simulation(
                     feature_type=feature_type,
                     use_shared_regions=use_shared_regions,
@@ -159,6 +156,9 @@ def load_config(config_path):
         return yaml.safe_load(f)
 
 if __name__ == "__main__":
+    
+    mp.set_start_method("fork", force=True)
+
     parser = argparse.ArgumentParser(description='Run simulation with config file and optional overrides')
     parser.add_argument('config', help='Path to config file')
     parser.add_argument('--model_type', help='Override model type from config')
@@ -167,6 +167,7 @@ if __name__ == "__main__":
     parser.add_argument('--random_seed', type=int, help='Override random seed from config')
     parser.add_argument('--null_model', help='Override null model type from config')
     parser.add_argument('--use_folds', nargs='+', type=int, help='Override use folds from config')
+    
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -174,12 +175,10 @@ if __name__ == "__main__":
     # Override config values if command line arguments are provided
     if args.model_type:
         config['model_type'] = args.model_type
-    if args.n_cvs is not None:
-        # Update the search_method tuple with new n_cvs value
+    if args.n_cvs is not None: # Update the search_method tuple with new n_cvs value
         search_method = config.get('search_method', ('wandb', 'mse', 5))
         config['search_method'] = (search_method[0], search_method[1], args.n_cvs)
-    if args.feature_type:
-        # Split feature types and convert to list of dicts
+    if args.feature_type: # Split feature types and convert to list of dicts
         config['feature_type'] = [{ft: None} for ft in args.feature_type]
     if args.random_seed is not None:
         config['random_seed'] = args.random_seed
@@ -195,7 +194,7 @@ if __name__ == "__main__":
     print(f"Random seed: {config['random_seed']}")
     print(f"Null model: {config['null_model']}")
     print(f"Use folds: {config['use_folds']}")
-    print(torch.cuda.is_available())    
+    print(torch.cuda.is_available())
     print(os.environ.get("CUDA_VISIBLE_DEVICES"))
     for i in range(torch.cuda.device_count()):
         print(f"GPU {i}: {torch.cuda.get_device_name(i)} - Memory Allocated: {torch.cuda.memory_allocated(i)/1024**3:.2f} GB")
