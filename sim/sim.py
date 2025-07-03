@@ -363,9 +363,6 @@ class Simulation:
 
                 train_metrics = evaluator.get_train_metrics()
                 test_metrics = evaluator.get_test_metrics()
-
-                # print("\nTRAIN METRICS:", train_metrics)
-                # print("TEST METRICS:", test_metrics)
                 print('BEST VAL SCORE', best_val_score)
                 print('BEST MODEL HYPERPARAMS', best_model.get_params() if hasattr(best_model, 'get_params') else extract_model_params(best_model))
 
@@ -376,6 +373,10 @@ class Simulation:
                     final_eval_run.finish()
                     wandb.finish()
                     print("Final evaluation metrics logged successfully.")
+            
+            del best_model
+            torch.cuda.empty_cache()
+            gc.collect()
             
         print_system_usage() # Display CPU and RAM utilization
         if self.gpu_acceleration: GPUtil.showUtilization() # Display GPU utilization

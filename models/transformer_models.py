@@ -1,11 +1,11 @@
 from env.imports import *
 from data.data_utils import create_data_loader
 from models.train_val import train_model
+import torch
 import torch.nn.functional as F
 from flash_attn import flash_attn_func, flash_attn_qkvpacked_func
 from torch.cuda.amp import autocast
 import os
-
 
 def scaled_dot_product_attention_with_weights(query, key, value, dropout_p=0.0, is_causal=False, scale=None, apply_dropout=False):
     '''
@@ -168,7 +168,7 @@ class SharedSelfAttentionModel(nn.Module):
             dropout=transformer_dropout,
             use_alibi=self.use_alibi
         )
-        self.encoder = torch.compile(self.encoder)
+        self.encoder = torch.compile(self.encoder) # doubles training speed
 
         prev_dim = (self.input_dim // self.token_encoder_dim * self.encoder_output_dim) * 2
         deep_layers = []

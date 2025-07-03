@@ -2,612 +2,283 @@ from env.imports import *
 from data.data_utils import reconstruct_connectome
 import models.metrics.distance_FC
 from models.metrics.distance_FC import *
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, log_loss
 from matplotlib.colors import ListedColormap
 from scipy.optimize import curve_fit
 from scipy.stats import binned_statistic
 from IPython import get_ipython
 
+# Import all evaluation utilities
+from models.metrics.eval_utils import (
+    PlotConfig,
+    in_jupyter_notebook,
+    # Custom scorers
+    pearson_numpy,
+    pearson_cupy,
+    mse_numpy,
+    mse_cupy,
+    r2_numpy,
+    r2_cupy,
+    accuracy_numpy,
+    accuracy_cupy,
+    logloss_numpy,
+    logloss_cupy,
+    # Modern metric functions
+    compute_basic_metrics,
+    compute_distance_metrics,
+    compute_strength_metrics,
+    compute_hemispheric_metrics,
+    compute_subnetwork_metrics,
+    # Plotting functions
+    plot_distance_scatter,
+    plot_hemispheric_scatter,
+    plot_subnetwork_scatter,
+    plot_connectome_predictions_subset,
+    plot_connectome_predictions_full,
+    # Formatting functions
+    format_metrics_output)
 
-# Evaluation funcs that preserve connectome properties 
-def connectome_correlation(Y_pred, Y_ground_truth, include_diag=False, output=False):
-    pred_corrs = []
-    for i in range(Y_pred.shape[0]):
-        if include_diag:
-            pred_corrs.append(pearsonr(Y_pred[i, :], Y_ground_truth[i, :])[0])
-        else:
-            pred_no_diag = np.concatenate((Y_pred[i, :i], Y_pred[i, i + 1:]))
-            ground_truth_no_diag = np.concatenate((Y_ground_truth[i, :i], Y_ground_truth[i, i + 1:]))
-            pred_corrs.append(pearsonr(pred_no_diag, ground_truth_no_diag)[0])
-    if output:
-        print(pred_corrs)
-        print(np.mean(pred_corrs))
-    return np.mean(pred_corrs)
 
-def connectome_r2(Y_pred, Y_ground_truth, include_diag=False, output=False):
-    pred_r2s = []
-    for i in range(Y_pred.shape[0]):
-        if include_diag:
-            pred_r2s.append(r2_score(Y_ground_truth[i, :], Y_pred[i, :]))
-        else:
-            pred_no_diag = np.concatenate((Y_pred[i, :i], Y_pred[i, i + 1:]))
-            ground_truth_no_diag = np.concatenate((Y_ground_truth[i, :i], Y_ground_truth[i, i + 1:]))
-            pred_r2s.append(r2_score(ground_truth_no_diag, pred_no_diag))
-    if output:
-        print(pred_r2s)
-        print(np.mean(pred_r2s))
-    return np.mean(pred_r2s)
-
-# Custom numpy and cupy scorers for inner-CV
-def pearson_numpy(y_true, y_pred):
-    return pearsonr(y_true, y_pred)[0]
-
-def mse_numpy(y_true, y_pred):
-    return np.mean(np.square(y_true - y_pred))
-
-def r2_numpy(y_true, y_pred):
-    y_true_mean = np.mean(y_true)
-    total_ss = np.sum(np.square(y_true - y_true_mean))
-    residual_ss = np.sum(np.square(y_true - y_pred))
-    return 1 - (residual_ss / total_ss)
-
-def accuracy_numpy(y_true, y_pred):
-    y_pred_labels = np.round(y_pred)
-    return accuracy_score(y_true, y_pred_labels)
-
-def logloss_numpy(y_true, y_pred):
-    return log_loss(y_true, y_pred)
-
-def pearson_cupy(y_true, y_pred):
-    y_pred = cp.asarray(y_pred)
-    y_true = cp.asarray(y_true).ravel()
-    y_pred = y_pred.ravel()
-    corr_matrix = cp.corrcoef(y_true, y_pred)
-    cp.cuda.Stream.null.synchronize()
-    return corr_matrix[0, 1]
-
-def mse_cupy(y_true, y_pred):
-    y_pred = cp.asarray(y_pred)
-    mse = cp.mean(cp.square(y_pred - y_true))
-    cp.cuda.Stream.null.synchronize()
-    return mse
-    
-def r2_cupy(y_true, y_pred):
-    y_pred = cp.asarray(y_pred)
-    y_true_mean = cp.mean(y_true)
-    total_ss = cp.sum(cp.square(y_true - y_true_mean))
-    residual_ss = cp.sum(cp.square(y_true - y_pred))
-    return 1 - (residual_ss / total_ss)
-
-def accuracy_cupy(y_true, y_pred):
-    y_pred = cp.asarray(y_pred)
-    y_true = cp.asarray(y_true)
-
-    y_pred_labels = cp.round(y_pred)
-    accuracy = cp.mean(y_pred_labels == y_true)
-    
-    cp.cuda.Stream.null.synchronize()
-    return accuracy.item()
-
-def logloss_cupy(y_true, y_pred):
-    # Convert inputs to cupy arrays
-    y_pred = cp.asarray(y_pred)
-    y_true = cp.asarray(y_true)
-    
-    # Clip predictions to avoid log(0) 
-    eps = 1e-15
-    y_pred = cp.clip(y_pred, eps, 1 - eps)
-    
-    # Calculate log loss
-    losses = -(y_true * cp.log(y_pred) + (1 - y_true) * cp.log(1 - y_pred))
-    loss = cp.mean(losses)
-    
-    cp.cuda.Stream.null.synchronize()
-    return loss.item()
-
-def in_jupyter_notebook():
-    try:
-        if 'IPKernelApp' in get_ipython().config:
-            return True
-    except:
-        pass
-    return False
-
-class Metrics:
-    def __init__(self, Y, indices, Y_true, Y_pred, square=False, binarize=False, network_labels=None, distances=None):
-        self.Y = Y
-        self.distances = distances
-        self.indices = indices
-        self.network_labels = network_labels
-
-        # convert cupy arrays to numpy arrays if necessary
-        self.Y_true = getattr(Y_true, 'get', lambda: Y_true)()
-        self.Y_pred = getattr(Y_pred, 'get', lambda: Y_pred)()
-
-        self.Y_true_flat = self.Y_true.flatten()
-        self.Y_pred_flat = self.Y_pred.flatten()
-        self.square = square
-        self.binarize = binarize
-    
-        self.compute_metrics()
-        
-        if in_jupyter_notebook():
-            self.visualize_predictions_full()
-            self.visualize_predictions_subset()
-
-        try:
-            if not self.binarize:
-                self.visualize_predictions_distance_scatter()
-                self.visualize_predictions_lateral_scatter()
-                self.visualize_predictions_subnetwork_scatter()
-        except: 
-            print('No scatter plot visualization for this model')
-    
-    def get_distance_based_correlations(self, distances, y_true, y_pred):
+class ModelEvaluator:
+    """
+    Unified model evaluator for torch-based models with comprehensive evaluation capabilities
+    """
+    def __init__(self, region_pair_dataset=None, model=None, Y=None,
+                 train_loader=None, train_indices=None, train_indices_expanded=None,
+                 test_loader=None, test_indices=None, test_indices_expanded=None,
+                 network_labels=None, train_shared_regions=None, test_shared_regions=None,
+                 plot_mode='basic'):
+        """        
+        Args:
+            region_pair_dataset: Dataset for region pairs
+            model: Torch model to evaluate
+            Y: Full target connectome matrix
+            train_loader/test_loader: Data loaders
+            train_indices/test_indices: Region indices for train/test splits
+            train_indices_expanded/test_indices_expanded: Expanded indices for region pairs
+            network_labels: Network labels for each region
+            train_shared_regions/test_shared_regions: Whether using shared regions
+            plot_mode: 'metrics' (no plots), 'basic' (key plots), 'verbose' (all plots)
         """
-        Calculate correlations for different distance ranges.
-        """
-        # Calculate fixed distance cutoffs for short/mid/long range
-        dist_min = 0
-        dist_max = 175
-        dist_range = dist_max - dist_min
-        dist_33 = dist_min + (dist_range / 3)
-        dist_67 = dist_min + (2 * dist_range / 3)
-        
-        # Create masks for different ranges
-        short_mask = distances <= dist_33
-        mid_mask = (distances > dist_33) & (distances <= dist_67)
-        long_mask = distances > dist_67
-        
-        # Calculate correlations for each range
-        overall_corr = pearsonr(y_true, y_pred)[0]
-        short_range_corr = pearsonr(y_true[short_mask], y_pred[short_mask])[0]
-        mid_range_corr = pearsonr(y_true[mid_mask], y_pred[mid_mask])[0]
-        long_range_corr = pearsonr(y_true[long_mask], y_pred[long_mask])[0]
-        
-        return overall_corr, short_range_corr, mid_range_corr, long_range_corr
-    
-    def compute_metrics(self):
-        if self.binarize: # Compute classification metrics
-            self.accuracy = accuracy_score(self.Y_true_flat, self.Y_pred_flat)
-            self.precision = precision_score(self.Y_true_flat, self.Y_pred_flat)
-            self.recall = recall_score(self.Y_true_flat, self.Y_pred_flat)
-            self.f1 = f1_score(self.Y_true_flat, self.Y_pred_flat)
-            self.auc_roc = roc_auc_score(self.Y_true_flat, self.Y_pred_flat)
-        else: # Compute regression metrics
-            self.mse = mean_squared_error(self.Y_true_flat, self.Y_pred_flat)
-            self.mae = mean_absolute_error(self.Y_true_flat, self.Y_pred_flat)
-            self.r2 = r2_score(self.Y_true_flat, self.Y_pred_flat)
-            self.pearson_corr = pearsonr(self.Y_true_flat, self.Y_pred_flat)[0]
-            try: 
-                self.overall_r, self.short_r, self.mid_r, self.long_r = self.get_distance_based_correlations(
-                self.distances, 
-                self.Y_true_flat, 
-                self.Y_pred_flat)
-            except: 
-                print('No distance-based correlations for this model')
-            
-            if self.square: # Compute geodesic distance if test data is a square connectome
-                Y_pred_connectome = reconstruct_connectome(self.Y_pred, symmetric=True)
-                Y_pred_connectome_asymmetric = reconstruct_connectome(self.Y_pred, symmetric=False)
-                Y_true_connectome = reconstruct_connectome(self.Y_true)
-                self.geodesic_distance = distance_FC(Y_true_connectome, Y_pred_connectome).geodesic()
-        
-    def get_metrics(self):
-        if self.binarize:
-            metrics = {
-                'accuracy': self.accuracy,
-                'precision': self.precision,
-                'recall': self.recall,
-                'f1': self.f1,
-                'auc_roc': self.auc_roc
-            }
-        else:
-            # Define all possible metrics
-            metrics = {
-                'mse': getattr(self, 'mse', 0),
-                'mae': getattr(self, 'mae', 0),
-                'r2': getattr(self, 'r2', 0),
-                'pearson_r': getattr(self, 'pearson_corr', 0),
-                'short_r': getattr(self, 'short_r', 0), 
-                'mid_r': getattr(self, 'mid_r', 0),
-                'long_r': getattr(self, 'long_r', 0),
-                'left_hemi_r': getattr(self, 'left_left_r', 0),
-                'right_hemi_r': getattr(self, 'right_right_r', 0),
-                'inter_hemi_r': getattr(self, 'inter_hemi_r', 0)
-            }
-            
-            # Add network metrics
-            network_metrics = ['Cont', 'Default', 'SalVentAttn', 'Limbic', 
-                             'DorsAttn', 'SomMot', 'Vis', 'Subcortical', 'Cerebellum']
-            
-            # Add network correlations if they exist, defaulting to 0 if not
-            for network in network_metrics:
-                metrics[f'{network}_r'] = (self.network_correlations.get(network, 0) 
-                                         if hasattr(self, 'network_correlations') else 0)
-
-        if self.square and hasattr(self, 'geodesic_distance'):
-            metrics['geodesic_distance'] = self.geodesic_distance
-        return metrics
-        
-    def visualize_predictions_distance_scatter(self):
-        # Set global visualization parameters
-        TITLE_SIZE = 14
-        LABEL_SIZE = 22
-        LEGEND_SIZE = 20
-        TEXT_SIZE = 20
-        TICK_SIZE = 20
-        
-        plt.figure(figsize=(10, 7))        
-        
-        min_val = min(self.Y_true_flat.min(), self.Y_pred_flat.min())
-        max_val = max(self.Y_true_flat.max(), self.Y_pred_flat.max())
-
-        # Get correlations for different distance ranges using helper function
-        overall_r, short_r, mid_r, long_r = self.get_distance_based_correlations(
-            self.distances, 
-            self.Y_true_flat, 
-            self.Y_pred_flat
-        )
-
-        if in_jupyter_notebook():
-            # Create distance-based colormap
-            norm = plt.Normalize(self.distances.min(), self.distances.max())
-            cmap = plt.cm.viridis  # Using viridis colormap for distance gradient
-            
-            # Create scatter plot with distance-based colors
-            scatter = plt.scatter(self.Y_true_flat, self.Y_pred_flat, 
-                                c=self.distances, cmap=cmap,
-                                alpha=0.5, s=4)
-        
-            # Add line of best fit
-            z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
-            p = np.poly1d(z)
-            plt.plot(self.Y_true_flat, p(self.Y_true_flat), "r:", alpha=0.5)
-            
-            # Add horizontal and vertical lines at 0
-            plt.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
-            plt.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
-            
-            # Set equal axes ranges
-            plt.xlim(min_val, max_val)
-            plt.ylim(min_val, max_val)
-            
-            # Add legend with correlations
-            legend_text = f'Overall r = {overall_r:.3f}\nShort-range r = {short_r:.3f}\nMid-range r = {mid_r:.3f}\nLong-range r = {long_r:.3f}'
-            plt.text(0.05, 0.95, legend_text, transform=plt.gca().transAxes, 
-                    bbox=dict(facecolor='white', alpha=0.8), verticalalignment='top',
-                    fontsize=LEGEND_SIZE)
-            
-            plt.xlabel('True Values', fontsize=LABEL_SIZE)
-            plt.ylabel('Predicted Values', fontsize=LABEL_SIZE)
-            #plt.title('Scatter Plot of True vs Predicted Values', fontsize=TITLE_SIZE)
-            
-            # Set tick label sizes
-            plt.xticks(fontsize=TICK_SIZE)
-            plt.yticks(fontsize=TICK_SIZE)
-            
-            # Add colorbar with consistent font sizes
-            cbar = plt.colorbar(scatter)
-            cbar.set_label('Distance (mm)', fontsize=LABEL_SIZE)
-            cbar.ax.tick_params(labelsize=TICK_SIZE)  # Correct way to set colorbar tick label size
-            
-            plt.show()
-    
-    def visualize_predictions_lateral_scatter(self):
-        # Set global visualization parameters
-        TITLE_SIZE = 14
-        LABEL_SIZE = 22
-        LEGEND_SIZE = 20
-        TEXT_SIZE = 20
-        TICK_SIZE = 20
-        
-        plt.figure(figsize=(10, 7))        
-
-        # Split predictions into hemispheric groups using indices
-        left_left_true = []
-        left_left_pred = []
-        right_right_true = []
-        right_right_pred = []
-        inter_hemi_true = []
-        inter_hemi_pred = []
-        # For each pair of regions in test set
-        for idx, (i, j) in enumerate(combinations(self.indices, 2)):
-            # Skip subcortical regions and lower triangle
-            if i >= 400 or j >= 400:
-                continue
-                
-            # Only take first direction (i->j) to get upper triangle
-            # Left-to-left connections
-            if i < 200 and j < 200:
-                left_left_true.append(self.Y_true_flat[2*idx])
-                left_left_pred.append(self.Y_pred_flat[2*idx])
-                
-            # Right-to-right connections    
-            elif 200 <= i < 400 and 200 <= j < 400:
-                right_right_true.append(self.Y_true_flat[2*idx])
-                right_right_pred.append(self.Y_pred_flat[2*idx])
-                
-            # Inter-hemispheric connections
-            elif (i < 200 and 200 <= j < 400) or (200 <= i < 400 and j < 200):
-                inter_hemi_true.append(self.Y_true_flat[2*idx])
-                inter_hemi_pred.append(self.Y_pred_flat[2*idx])
-
-        # Convert to arrays for correlation computation
-        left_left_true = np.array(left_left_true)
-        left_left_pred = np.array(left_left_pred)
-        right_right_true = np.array(right_right_true)
-        right_right_pred = np.array(right_right_pred)
-        inter_hemi_true = np.array(inter_hemi_true)
-        inter_hemi_pred = np.array(inter_hemi_pred)
-
-        # Calculate correlations for each type
-        self.left_left_r = pearsonr(left_left_true, left_left_pred)[0]
-        self.right_right_r = pearsonr(right_right_true, right_right_pred)[0]
-        self.inter_hemi_r = pearsonr(inter_hemi_true, inter_hemi_pred)[0]
-
-        if in_jupyter_notebook():
-            # Create scatter plots with lighter colors
-            plt.scatter(left_left_true, left_left_pred,
-                    c='#4040FF', alpha=0.2, s=1, label=f'Left Intra (r={self.left_left_r:.3f})')  # Lighter blue
-            plt.scatter(right_right_true, right_right_pred,
-                    c='#FF4040', alpha=0.2, s=1, label=f'Right Intra (r={self.right_right_r:.3f})')  # Lighter red
-            plt.scatter(inter_hemi_true, inter_hemi_pred,
-                    c='#40FF40', alpha=0.2, s=1, label=f'Inter-hemi (r={self.inter_hemi_r:.3f})')  # Lighter green
-
-            # Add line of best fit
-            z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
-            p = np.poly1d(z)
-            plt.plot(self.Y_true_flat, p(self.Y_true_flat), "r:", alpha=0.5)
-            
-            # Add horizontal and vertical lines at 0
-            plt.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
-            plt.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
-            
-            # Set fixed axis limits and ticks
-            plt.xlim(-0.4, 1.0)
-            plt.ylim(-0.4, 1.0)
-            plt.xticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
-            plt.yticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
-            plt.gca().set_aspect('equal')
-            
-            plt.xlabel('True Values', fontsize=LABEL_SIZE)
-            plt.ylabel('Predicted Values', fontsize=LABEL_SIZE)
-            
-            plt.legend(fontsize=LEGEND_SIZE, markerscale=5)
-            plt.show()
-
-    def visualize_predictions_subnetwork_scatter(self):
-        # Set global visualization parameters
-        TITLE_SIZE = 14
-        LABEL_SIZE = 22
-        LEGEND_SIZE = 12  # Reduced from 20
-        TEXT_SIZE = 20
-        TICK_SIZE = 20
-        
-        plt.figure(figsize=(10, 7))        
-        
-        # Define the standard 7-network color scheme
-        network_colors = {
-            'Cont': '#D68E63',          # Darker Orange (Frontoparietal)
-            'Default': '#D67A7A',       # Darker Red (Default Mode)
-            'SalVentAttn': '#55B755',   # Darker Green (Salience/Ventral Attention)
-            'Limbic': '#D6CC7A',        # Darker Yellow (Limbic)
-            'DorsAttn': '#D67AD6',      # Darker Magenta (Dorsal Attention)
-            'SomMot': '#639CD6',        # Darker Light Blue (Somatomotor)
-            'Vis': '#7B3B7B',           # Darker Purple (Visual)
-            'Subcortical': '#808080',   # Gray (Subcortical)
-            'Cerebellum': '#2F4F4F'     # Dark slate gray (Cerebellum)
-        }
-
-        # Initialize dictionaries to store predictions by network
-        network_true = {net: [] for net in network_colors.keys()}
-        network_pred = {net: [] for net in network_colors.keys()}
-        network_corrs = {}
-
-        # For each pair of regions in test set
-        for idx, (i, j) in enumerate(combinations(self.indices, 2)):
-            # Get network labels for both regions
-            net_i = self.network_labels[i]
-            net_j = self.network_labels[j]
-            
-            # Only store if regions are in same network
-            if net_i == net_j:
-                network_true[net_i].append(self.Y_true_flat[2*idx])
-                network_pred[net_i].append(self.Y_pred_flat[2*idx])
-
-        # Calculate correlations and plot for each network
-        self.network_correlations = {}  # Store correlations as instance variable
-        for network in network_colors.keys():
-            if len(network_true[network]) > 0:  # Only plot if network has connections
-                true_vals = np.array(network_true[network])
-                pred_vals = np.array(network_pred[network])
-                
-                # Calculate correlation and store as instance variable
-                corr = pearsonr(true_vals, pred_vals)[0]
-                self.network_correlations[network] = corr
-                
-                # Create scatter plot with larger points and higher alpha
-                plt.scatter(true_vals, pred_vals,
-                          c=network_colors[network], alpha=0.4, s=3,  # Increased alpha and point size
-                          label=f'{network} ({corr:.3f})')  # Shortened label format
-        
-        if in_jupyter_notebook():
-            # Add line of best fit
-            z = np.polyfit(self.Y_true_flat, self.Y_pred_flat, 1)
-            p = np.poly1d(z)
-            plt.plot(self.Y_true_flat, p(self.Y_true_flat), "r:", alpha=0.5)
-            
-            # Add horizontal and vertical lines at 0
-            plt.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
-            plt.axvline(x=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
-            
-            # Set fixed axis limits and ticks
-            plt.xlim(-0.4, 1.0)
-            plt.ylim(-0.4, 1.0)
-            plt.xticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
-            plt.yticks(np.arange(-0.4, 1.2, 0.2), fontsize=TICK_SIZE)
-            plt.gca().set_aspect('equal')
-            
-            plt.xlabel('True Values', fontsize=LABEL_SIZE)
-            plt.ylabel('Predicted Values', fontsize=LABEL_SIZE)
-            
-            # Make legend more compact
-            plt.legend(fontsize=LEGEND_SIZE, markerscale=3, ncol=2, loc='upper left', bbox_to_anchor=(1.02, 1))
-            plt.tight_layout()  # Adjust layout to prevent legend cutoff
-            plt.show()
-        
-    def visualize_predictions_subset(self):
-        if self.square: # Compute geodesic distance if test data is a square connectome
-            Y_pred_connectome = reconstruct_connectome(self.Y_pred, symmetric=True)
-            Y_pred_connectome_asymmetric = reconstruct_connectome(self.Y_pred, symmetric=False)
-            Y_true_connectome = reconstruct_connectome(self.Y_true)
-
-            # Create high resolution figure
-            plt.figure(figsize=(16, 4), dpi=300)
-            
-            plt.subplot(131)
-            plt.imshow(Y_true_connectome, cmap='RdBu_r', vmin=-0.8, vmax=0.8, interpolation='nearest')
-            plt.colorbar(shrink=0.5)
-            plt.title('True Connectome', pad=10)
-            
-            plt.subplot(132) 
-            plt.imshow(Y_pred_connectome_asymmetric, cmap='RdBu_r', vmin=-0.8, vmax=0.8, interpolation='nearest')
-            plt.colorbar(shrink=0.5)
-            plt.title('Predicted Connectome', pad=10) # (non-symmetrized)
-
-            plt.subplot(133)
-            plt.imshow(abs(Y_true_connectome - Y_pred_connectome_asymmetric), cmap='RdYlGn_r', interpolation='nearest')
-            plt.colorbar(shrink=0.5)
-            plt.title('Prediction Difference', pad=10)
-            
-            plt.tight_layout()
-            plt.show()
-        
-    def visualize_predictions_full(self):
-        n = int(self.Y.shape[0])  # Get dimensions of square connectome
-        if self.binarize: 
-            split_mask = np.zeros((n, n)) + 0.1
-        else: 
-            split_mask = np.zeros((n, n))
-            
-        # Calculate prediction differences for region pairs
-        diff = abs(self.Y_true - self.Y_pred)
-        
-        # For each pair of regions in indices
-        for idx, (i, j) in enumerate(combinations(self.indices, 2)): # Each pair appears twice in diff - once in each direction
-            split_mask[i,j] = diff[2*idx]   # First direction: i->j is at 2*idx
-            split_mask[j,i] = diff[2*idx + 1]   # Second direction: j->i is at 2*idx + 1
-                
-        plt.figure(figsize=(16, 6))
-        
-        # Plot full connectome with network labels
-        plt.subplot(121)
-        plt.imshow(self.Y, cmap='RdBu_r', vmin=-0.8, vmax=0.8)
-        plt.colorbar(shrink=0.5)
-        plt.title('Full Connectome', fontsize=14)
-        
-        if self.network_labels is not None:
-            # Create tick positions and labels
-            tick_positions = []
-            tick_labels = []
-            start_idx = 0
-            prev_label = self.network_labels[0]
-            
-            for i in range(1, len(self.network_labels)):
-                if self.network_labels[i] != prev_label:
-                    tick_positions.append((start_idx + i - 1) / 2)
-                    tick_labels.append(prev_label)
-                    start_idx = i
-                    prev_label = self.network_labels[i]
-            
-            # Add the last group
-            tick_positions.append((start_idx + len(self.network_labels) - 1) / 2)
-            tick_labels.append(prev_label)
-
-            plt.xticks(tick_positions, tick_labels, rotation=45, ha='right', fontsize=12)
-            plt.yticks(tick_positions, tick_labels, fontsize=12)
-        
-        if self.binarize: 
-            colors = [
-                (0.0, "green"),  
-                (0.1, "#2A0A4A"), 
-                (1.0, "red"), 
-            ]
-            cmap = mcolors.LinearSegmentedColormap.from_list("custom_cmap", colors)
-        else: 
-            colors = [
-                (0.0, "#2A0A4A"),  # 0 -> dark purple
-                (0.001, "green"),   # Near zero -> green
-                (0.1, "green"),    # 0.1 -> still green
-                (0.2, "yellow"),   # 0.2 -> yellow
-                (1.0, "red"),      # 1.0 -> red
-            ]
-            cmap = mcolors.LinearSegmentedColormap.from_list("custom_cmap", colors)
-        
-        # Plot prediction differences with network labels
-        plt.subplot(122)
-        plt.imshow(split_mask, cmap=cmap, interpolation='nearest', vmin=0, vmax=1)
-        plt.colorbar(shrink=0.5)
-        plt.title('Prediction Differences', fontsize=14)
-        
-        if self.network_labels is not None:
-            # Create tick positions and labels
-            tick_positions = []
-            tick_labels = []
-            start_idx = 0
-            prev_label = self.network_labels[0]
-            
-            for i in range(1, len(self.network_labels)):
-                if self.network_labels[i] != prev_label:
-                    tick_positions.append((start_idx + i - 1) / 2)
-                    tick_labels.append(prev_label)
-                    start_idx = i
-                    prev_label = self.network_labels[i]
-            
-            # Add the last group
-            tick_positions.append((start_idx + len(self.network_labels) - 1) / 2)
-            tick_labels.append(prev_label)
-
-            plt.xticks(tick_positions, tick_labels, rotation=45, ha='right', fontsize=12)
-            plt.yticks(tick_positions, tick_labels, fontsize=12)
-            
-        plt.tight_layout()
-        plt.show()
-
-class ModelEvaluatorTorch:
-    def __init__(self, region_pair_dataset, model, Y, train_loader, train_indices, train_indices_expanded, test_loader, test_indices, test_indices_expanded, network_labels, train_shared_regions, test_shared_regions):        
+        # Full dataset components
         self.region_pair_dataset = region_pair_dataset
         self.X = region_pair_dataset.X.numpy()
-        self.train_distances_expanded = self.region_pair_dataset.distances_expanded[train_indices_expanded]
-        self.test_distances_expanded = self.region_pair_dataset.distances_expanded[test_indices_expanded]    
+        self.Y = Y
+        self.coords = region_pair_dataset.coords.numpy()
+        self.network_labels = network_labels
         
+        # Model, data loaders, indices
         self.model = model
         self.train_loader = train_loader
         self.train_indices = train_indices
+        self.train_indices_expanded = train_indices_expanded 
         self.test_loader = test_loader
         self.test_indices = test_indices
-        self.network_labels = network_labels
+        self.test_indices_expanded = test_indices_expanded
+
+        # Config parameters 
+        self.binarize = len(np.unique(Y)) == 2 if Y is not None else False
         self.train_shared_regions = train_shared_regions
         self.test_shared_regions = test_shared_regions
-        self.Y = Y
+        self.config = PlotConfig(plot_mode=plot_mode)
 
-        self.binarize = len(np.unique(Y)) == 2
+        # Set up distance data if available
+        self.train_distances = region_pair_dataset.distances_expanded[train_indices_expanded]
+        self.test_distances = region_pair_dataset.distances_expanded[test_indices_expanded]
         
-        self.train_metrics = self.evaluate(self.train_loader, self.train_indices, self.train_distances_expanded, not self.train_shared_regions, train=True)
-        self.test_metrics = self.evaluate(self.test_loader, self.test_indices, self.test_distances_expanded, not self.test_shared_regions, train=False)
+        # Run evaluation
+        print("Running train evaluation...")
+        self.train_metrics = self._evaluate_split('train')
+        print("Running test evaluation...")
+        self.test_metrics = self._evaluate_split('test')
+        
+    def evaluate(self, y_true, y_pred, indices, distances=None, mode='test', square=False):
+        """
+        Core evaluation method for computing metrics and generating plots
+        
+        Args:
+            y_true: Ground truth values
+            y_pred: Predicted values
+            indices: Region indices for this evaluation subset
+            distances: Distance matrix for distance-based metrics
+            mode: 'train' or 'test' for proper labeling
+            square: Whether connectome is square (for geodesic metrics)
+        """
+        print(f"\n=== {mode.upper()} EVALUATION ===")
+        self.config.mode_title = f'{mode.capitalize()} Set'
 
-    def evaluate(self, loader, indices, distances, square, train=False):
-        try: # for most deep learning models
-            self.Y_pred, self.Y_true = self.model.predict(loader)
-        except: # this is for PLS like models
-            self.Y_pred, self.Y_true = self.model.predict(self.X, indices, train)
+        # Convert cupy arrays to numpy if necessary
+        y_true = getattr(y_true, 'get', lambda: y_true)()
+        y_pred = getattr(y_pred, 'get', lambda: y_pred)()
+        
+        y_true_flat = y_true.flatten()
+        y_pred_flat = y_pred.flatten()
+        
+        print(f"Evaluating {len(indices)} regions, {len(y_true_flat)} connections")
+        
+        # Data structure for all metrics
+        metrics = {}
+        metrics.update(compute_basic_metrics(y_true_flat, y_pred_flat, self.binarize))
+        
+        # Geodesic metrics for square connectomes
+        if square and not self.binarize:
+            try:
+                Y_pred_connectome = reconstruct_connectome(y_pred, symmetric=True)
+                Y_true_connectome = reconstruct_connectome(y_true)
+                geodesic_distance = distance_FC(Y_true_connectome, Y_pred_connectome).geodesic()
+                metrics['geodesic_distance'] = geodesic_distance
+            except Exception as e:
+                print(f"Warning: Could not compute geodesic distance: {e}")
+        
+        # Distance-based metrics
+        if distances is not None and not self.binarize:
+            try:
+                distance_metrics = compute_distance_metrics(y_true_flat, y_pred_flat, distances)
+                metrics.update(distance_metrics)
+            except Exception as e:
+               print(f"Warning: Could not compute all distance metrics: {e}")
 
-        return Metrics(self.Y, indices, self.Y_true, self.Y_pred, square, self.binarize, self.network_labels, distances).get_metrics()
+        # Connection strength metrics
+        if not self.binarize:
+            try:
+                strength_metrics = compute_strength_metrics(y_true_flat, y_pred_flat)
+                metrics.update(strength_metrics)
+            except Exception as e:
+                print(f"Warning: Could not compute strength metrics: {e}")
+        
+        # Hemispheric metrics
+        if not self.binarize:
+            try:
+                hemispheric_metrics = compute_hemispheric_metrics(y_true_flat, y_pred_flat, indices, self.coords)
+                metrics.update(hemispheric_metrics)
+            except Exception as e:
+                print(f"Warning: Could not compute hemispheric metrics: {e}")
+        
+        # Functional subnetwork metrics
+        if self.network_labels is not None and not self.binarize:
+            try:
+                network_metrics = compute_subnetwork_metrics(y_true_flat, y_pred_flat, indices, self.network_labels)
+                metrics.update(network_metrics)
+            except Exception as e:
+                print(f"Warning: Could not compute subnetwork metrics: {e}")
+        
+        return metrics
+    
+    def _evaluate_split(self, mode):
+        """Evaluate either train or test split using torch model"""
+        if mode == 'train':
+            loader = self.train_loader
+            indices = self.train_indices
+            distances = self.train_distances
+            square = not self.train_shared_regions if self.train_shared_regions is not None else False
+        else:  # test
+            loader = self.test_loader
+            indices = self.test_indices  
+            distances = self.test_distances
+            square = not self.test_shared_regions if self.test_shared_regions is not None else False
+            
+        # Get predictions
+        try:
+            Y_pred, Y_true = self.model.predict(loader)
+        except: # Fallback for PLS-like models
+            Y_pred, Y_true = self.model.predict(self.X, indices, mode == 'train')
+        
+        # Compute metrics
+        metrics = self.evaluate(Y_true, Y_pred, indices, distances, mode=mode, square=square)
+        
+        # Generate plots
+        self.plot(Y_true, Y_pred, indices, distances, mode=mode, square=square)
+        
+        return metrics
+
+    def plot(self, y_true, y_pred, indices, distances=None, mode='test', square=False):
+        """
+        Generate plots based on plot_mode configuration
+        
+        Args:
+            y_true: Ground truth values
+            y_pred: Predicted values
+            indices: Region indices for this evaluation subset
+            distances: Distance matrix for distance-based metrics
+            mode: 'train' or 'test' for proper labeling
+            square: Whether connectome is square (for geodesic metrics)
+        """
+        if not self.config.show_plots or self.config.plot_mode == 'metrics':
+            return
+            
+        self.config.mode_title = f'{mode.capitalize()} Set'
+        
+        # Convert cupy arrays to numpy if necessary
+        y_true = getattr(y_true, 'get', lambda: y_true)()
+        y_pred = getattr(y_pred, 'get', lambda: y_pred)()
+        
+        y_true_flat = y_true.flatten()
+        y_pred_flat = y_pred.flatten()
+        
+        try:
+            if self.config.plot_mode == 'basic':
+                # Basic plots: connectome predictions and distance scatter
+                plot_connectome_predictions_full(self.Y, y_true, y_pred, indices, 
+                                                self.network_labels, self.binarize, self.config)
+                if square:
+                    plot_connectome_predictions_subset(y_true, y_pred, self.config)
+                
+                if distances is not None and not self.binarize:
+                    plot_distance_scatter(y_true_flat, y_pred_flat, distances, mode, self.config)
+                    
+            elif self.config.plot_mode == 'verbose':
+                # All possible plots
+                plot_connectome_predictions_full(self.Y, y_true, y_pred, indices, 
+                                                self.network_labels, self.binarize, self.config)
+                
+                if square:
+                    plot_connectome_predictions_subset(y_true, y_pred, self.config)
+                
+                if not self.binarize:
+                    if distances is not None:
+                        plot_distance_scatter(y_true_flat, y_pred_flat, distances, mode, self.config)
+                    
+                    plot_hemispheric_scatter(y_true_flat, y_pred_flat, indices, self.coords, mode, self.config)
+                    
+                    if self.network_labels is not None:
+                        plot_subnetwork_scatter(y_true_flat, y_pred_flat, indices, self.network_labels, mode, self.config)
+        except Exception as e:
+            print(f"Warning: Could not generate plots: {e}")
+
+    def plot_manual(self, mode='test'):
+        """Convenience method for manual plotting calls"""
+        # Get the appropriate data based on mode
+        if mode == 'train':
+            loader = self.train_loader
+            indices = self.train_indices
+            distances = self.train_distances
+            square = not self.train_shared_regions if self.train_shared_regions is not None else False
+        else:  # test
+            loader = self.test_loader
+            indices = self.test_indices  
+            distances = self.test_distances
+            square = not self.test_shared_regions if self.test_shared_regions is not None else False
+            
+        # Get predictions
+        try:
+            Y_pred, Y_true = self.model.predict(loader)
+        except: # Fallback for PLS-like models
+            Y_pred, Y_true = self.model.predict(self.X, indices, mode == 'train')
+        
+        self.plot(Y_true, Y_pred, indices, distances, mode=mode, square=square)
 
     def get_train_metrics(self):
+        """Get training metrics"""
+        if self.train_metrics is None:
+            raise ValueError("No train metrics available. Either run full evaluation or call evaluate() directly.")
+        format_metrics_output(self.train_metrics, 'train')
         return self.train_metrics
 
     def get_test_metrics(self):
+        """Get test metrics"""
+        if self.test_metrics is None:
+            raise ValueError("No test metrics available. Either run full evaluation or call evaluate() directly.")
+        format_metrics_output(self.test_metrics, 'test')
         return self.test_metrics
 
+# Backwards compatibility alias
+ModelEvaluatorTorch = ModelEvaluator

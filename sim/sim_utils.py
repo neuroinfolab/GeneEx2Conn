@@ -330,6 +330,11 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
     # Process each inner fold
     for fold_idx, (train_indices, test_indices) in enumerate(cv_obj.split()):
         print(f'Processing inner fold {fold_idx}')
+        
+        torch._dynamo.reset()  # Clear compiled graph cache
+        gc.collect()
+        torch.cuda.empty_cache()
+
         if fold_idx == 0:  # Only run CV on the first inner fold to test more parameters
             train_region_pairs = expand_X_symmetric(np.array(train_indices).reshape(-1, 1)).astype(int)
             test_region_pairs = expand_X_symmetric(np.array(test_indices).reshape(-1, 1)).astype(int)
