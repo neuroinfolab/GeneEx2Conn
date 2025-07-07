@@ -1,0 +1,21 @@
+name: cge
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+parameters:
+  input_dim: 
+    value: !!int 0
+  binarize:
+    value: !!int 0
+  scale_range:
+    values: [True, False]
+
+best_parameters:
+  input_dim: 
+    value: !!int 0
+  binarize:
+    value: !!int 0
+  scale_range:
+    value: False

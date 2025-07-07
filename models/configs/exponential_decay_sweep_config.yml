@@ -1,0 +1,25 @@
+name: exponential_decay
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+parameters:
+  input_dim: 
+    value: !!int 0
+  binarize:
+    value: !!int 0
+  SA_inf:
+    values: [-1.0, -0.5, -0.1, 0.0]
+  SA_lambda:
+    values: [1.0, 5.0, 10.0, 20.0, 50.0]
+
+best_parameters:
+  input_dim: 
+    value: !!int 0
+  binarize:
+    value: !!int 0
+  SA_inf:
+    values: [0.0]
+  SA_lambda:
+    values: [10.0]

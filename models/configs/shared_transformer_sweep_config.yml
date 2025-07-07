@@ -23,7 +23,7 @@ parameters:
     values: [2, 4]
   deep_hidden_dims:
     values:
-    # - [256, 128]
+    - [256, 128]
     - [512, 256, 128]
   transformer_dropout:
     values: [0.1, 0.4]

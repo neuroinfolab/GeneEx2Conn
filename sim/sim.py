@@ -17,13 +17,18 @@ from data.data_utils import (
 )
 
 from models.base_models import ModelBuild, BaseModel
+# from models.feature_based 
 from models.bilinear import BilinearLowRank, BilinearCM
 from models.pls import PLSTwoStepModel, PLS_MLPDecoderModel, PLS_BilinearDecoderModel
 from models.dynamic_mlp import DynamicMLP
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
 from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionCLSModel, CrossAttentionModel
+from models.feature_based import CGEModel, GaussianKernelModel, ExponentialDecayModel
 
 MODEL_CLASSES = {
+    'cge': CGEModel,
+    'gaussian_kernel': GaussianKernelModel,
+    'exponential_decay': ExponentialDecayModel,
     'bilinear_lowrank': BilinearLowRank,
     'bilinear_CM': BilinearCM,
     'pls_twostep': PLSTwoStepModel,
@@ -374,7 +379,6 @@ class Simulation:
                     wandb.finish()
                     print("Final evaluation metrics logged successfully.")
             
-            del best_model
             torch.cuda.empty_cache()
             gc.collect()
             
