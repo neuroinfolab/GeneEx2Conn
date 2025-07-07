@@ -372,6 +372,8 @@ class SharedSelfAttentionCLSModel(nn.Module):
         self.weight_decay = weight_decay
         self.batch_size = batch_size
         self.epochs = epochs
+        self.num_workers=num_workers
+        self.prefetch_factor=prefetch_factor
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Create self-attention encoder
@@ -386,6 +388,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
                                             use_alibi=self.use_alibi
                                             )
         self.encoder = torch.compile(self.encoder)
+        
         
         # Use full sequence
         prev_dim = (self.input_dim // self.token_encoder_dim * self.encoder_output_dim) * 2 + 2 * self.encoder_output_dim # Concatenated outputs of encoder
@@ -489,7 +492,6 @@ class SharedSelfAttentionCLSModel(nn.Module):
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True, num_workers=self.num_workers, persistent_workers=True, prefetch_factor=self.prefetch_factor)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True, num_workers=self.num_workers, persistent_workers=True, prefetch_factor=self.prefetch_factor)
         
-
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose, dataset=dataset)
 
 

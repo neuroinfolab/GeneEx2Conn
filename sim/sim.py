@@ -379,6 +379,7 @@ class Simulation:
                     wandb.finish()
                     print("Final evaluation metrics logged successfully.")
             
+            #torch._dynamo.reset()
             torch.cuda.empty_cache()
             gc.collect()
             

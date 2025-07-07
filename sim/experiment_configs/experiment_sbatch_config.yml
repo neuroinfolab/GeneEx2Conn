@@ -18,7 +18,7 @@ gene_list: '0.2'
 null_model: 'none'
 
 # Cross-validation
-cv_type: random
+cv_type: spatial
 resolution: 1.0
 random_seed: 42
 search_method: ['wandb', 'mse', 5]
@@ -27,5 +27,5 @@ skip_cv: false
 use_folds: [0, 1, 2, 3]
 
 # Model
-model_type: dynamic_mlp
+model_type: shared_transformer
 use_gpu: true

@@ -16,7 +16,7 @@ parameters:
   regularization:
     values: ['l2'] # l2 in line with literature
   lambda_reg:
-    values: [0, 0.001, 0.01, 0.1]
+    values: [0, 0.0001, 0.001, 0.01, 0.1]
   epochs:
     values: [75, 100, 125]
 

@@ -60,11 +60,10 @@ class PLSEncoder(nn.Module):
             # x_scores_j = torch.matmul(x_j, self.x_projector)
         
         return x_scores_i, x_scores_j
-
 class PLS_BilinearDecoderModel(nn.Module):
     def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset,
-                 binarize=False, n_components=10, max_iter=1000, scale=True, optimize_encoder=False, 
-                 learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100):
+                 binarize=False, n_components=10, max_iter=1000, scale=True, optimize_encoder=False,
+                 learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100, closed_form=True):
         super().__init__()
         
         self.binarize = binarize
@@ -72,6 +71,8 @@ class PLS_BilinearDecoderModel(nn.Module):
         self.epochs = epochs
         self.optimize_encoder = optimize_encoder
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.lambda_reg = weight_decay
+        self.closed_form = closed_form
         
         # Initialize PLS encoder
         self.encoder = PLSEncoder(
@@ -86,11 +87,8 @@ class PLS_BilinearDecoderModel(nn.Module):
             
         self.criterion = nn.MSELoss() # nn.BCEWithLogitsLoss() if binarize else 
 
-        # Initialize decoder        
-        self.linear = nn.Linear(n_components * 2, 1)
-        nn.init.xavier_uniform_(self.linear.weight)
-        nn.init.zeros_(self.linear.bias)
-        self.bilinear = nn.Bilinear(n_components, n_components, 1)
+        # Initialize decoder
+        self.bilinear = nn.Bilinear(n_components, n_components, 1, bias=True)
         
         print(f"Total number of parameters: {sum(p.numel() for p in self.parameters())}")
 
@@ -108,8 +106,6 @@ class PLS_BilinearDecoderModel(nn.Module):
         
     def forward(self, x, idx):
         encoded_i, encoded_j = self.encoder(x, idx)
-        #concatenated_embedding = torch.cat((encoded_i, encoded_j), dim=1)
-        #output = self.linear(concatenated_embedding)
         output = self.bilinear(encoded_i, encoded_j)
         return output.squeeze()
     
@@ -132,7 +128,83 @@ class PLS_BilinearDecoderModel(nn.Module):
         test_dataset = Subset(dataset, expanded_test_indices)
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
-        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+        
+        if self.closed_form:
+            return self.fit_closed_form(dataset, expanded_train_indices, expanded_test_indices, train_loader, test_loader)
+        else:
+            return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+
+    def fit_closed_form(self, dataset, train_indices, test_indices, train_loader, test_loader):
+        """
+        Fit model using closed form solution in original matrix form.
+        First encodes data using PLS then solves for bilinear weights.
+        """
+        # Map expanded indices to valid region pairs and get unique region indices
+        train_pairs = [dataset.expanded_idx_to_valid_pair[idx] for idx in train_indices]
+        test_pairs = [dataset.expanded_idx_to_valid_pair[idx] for idx in test_indices]
+        
+        train_indices_set = sorted(list(set(idx for pair in train_pairs for idx in pair)))
+        test_indices_set = sorted(list(set(idx for pair in test_pairs for idx in pair)))
+
+        # Get encoded matrices using PLS encoder
+        with torch.no_grad():
+            X_full = self.encoder.cached_projection  # Already encoded and cached during PLS init
+            X = X_full[train_indices_set]
+            X_test = X_full[test_indices_set]
+            
+            # Get original Y matrices
+            Y = dataset.Y[train_indices_set][:,train_indices_set].to(self.device)
+            Y_test = dataset.Y[test_indices_set][:,test_indices_set].to(self.device)
+
+        # Compute inverse of regularized Gram matrix
+        A = torch.mm(X.T, X) + self.lambda_reg * torch.eye(X.shape[1], device=self.device)
+        A_inv = torch.linalg.inv(A)
+        
+        # Estimate O from closed-form solution
+        O = torch.mm(A_inv, torch.mm(X.T, torch.mm(Y, torch.mm(X, A_inv))))
+        
+        # Compute bilinear prediction
+        Y_lin = torch.mm(torch.mm(X, O), X.T)
+        Y_lin_test = torch.mm(torch.mm(X_test, O), X_test.T)
+        
+        # Learn scalar bias to minimize mean residual
+        b = torch.mean(Y - Y_lin)
+        
+        # Map parameters to bilinear layer
+        O_reshaped = O.reshape(1, X.shape[1], X.shape[1])
+        self.bilinear.weight.data = O_reshaped
+        if self.bilinear.bias is not None:
+            self.bilinear.bias.data = b.reshape(1)
+        
+        # Get predictions using dataloaders
+        train_predictions = []
+        train_targets = []
+        for batch_X, batch_y, _, batch_idx in train_loader:
+            batch_X = batch_X.to(self.device)
+            batch_y = batch_y.to(self.device)
+            batch_preds = self(batch_X, batch_idx)
+            train_predictions.append(batch_preds)
+            train_targets.append(batch_y)
+            
+        test_predictions = []
+        test_targets = []
+        for batch_X, batch_y, _, batch_idx in test_loader:
+            batch_X = batch_X.to(self.device)
+            batch_y = batch_y.to(self.device) 
+            batch_preds = self(batch_X, batch_idx)
+            test_predictions.append(batch_preds)
+            test_targets.append(batch_y)
+            
+        Y_train_pred = torch.cat(train_predictions)
+        Y_train = torch.cat(train_targets)
+        Y_test_pred = torch.cat(test_predictions)
+        Y_test = torch.cat(test_targets)
+        
+        # Compute losses
+        train_loss = self.criterion(Y_train_pred, Y_train).item()
+        val_loss = self.criterion(Y_test_pred, Y_test).item()
+        
+        return {'train_loss': [train_loss], 'val_loss': [val_loss]}
 
 
 class PLS_MLPDecoderModel(nn.Module):

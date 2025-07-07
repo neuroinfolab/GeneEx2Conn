@@ -96,16 +96,16 @@ class BilinearLowRank(nn.Module):
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
 
-
 class BilinearCM(nn.Module):
     def __init__(self, input_dim, binarize=False,learning_rate=0.01, epochs=100, 
-                 batch_size=128, regularization='l2', lambda_reg=1.0, bias=True):
+                 batch_size=128, regularization='l2', lambda_reg=1.0, bias=True, closed_form=True):
         super().__init__()
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.batch_size = batch_size
         self.regularization = regularization
         self.lambda_reg = lambda_reg
+        self.closed_form = closed_form
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.bilinear = nn.Bilinear(input_dim//2, input_dim//2, 1, bias=bias)
@@ -145,14 +145,95 @@ class BilinearCM(nn.Module):
         predictions = np.concatenate(predictions)
         targets = np.concatenate(targets)
         return predictions, targets
-    
     def fit(self, dataset, train_indices, test_indices, verbose=True):
         train_dataset = Subset(dataset, train_indices)
         test_dataset = Subset(dataset, test_indices)
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
-        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer)
+        if self.closed_form:
+            return self.fit_closed_form(dataset, train_indices, test_indices, train_loader, test_loader)
+        else: 
+            return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.patience, self.scheduler, self.optimizer)
 
     def fit_full(self, dataset, verbose=True):
         train_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, pin_memory=False)
         return train_model(self, train_loader, None, self.epochs, self.criterion, self.patience, self.scheduler, self.optimizer)
+    
+    def fit_closed_form(self, dataset, train_indices, test_indices, train_loader, test_loader):
+        """
+        Fit model using closed form solution in original matrix form.
+        Maps expanded indices back to valid region pairs for efficient computation.
+        
+        Args:
+            dataset: RegionPairDataset instance containing original X, Y matrices
+            train_indices: Indices in expanded form for training data
+            test_indices: Indices in expanded form for test data
+            train_loader: DataLoader for training data
+            test_loader: DataLoader for test data
+        """
+        # Get original full matrices
+        X_full = dataset.X.to(self.device)
+        Y_full = dataset.Y.to(self.device)
+        
+        # Map expanded indices to valid region pairs and get unique region indices
+        train_pairs = [dataset.expanded_idx_to_valid_pair[idx] for idx in train_indices]
+        test_pairs = [dataset.expanded_idx_to_valid_pair[idx] for idx in test_indices]
+        
+        train_indices_set = sorted(list(set(idx for pair in train_pairs for idx in pair)))
+        test_indices_set = sorted(list(set(idx for pair in test_pairs for idx in pair)))
+
+        # Partition matrices based on region sets
+        X = X_full[train_indices_set]
+        Y = Y_full[train_indices_set][:,train_indices_set]
+        X_test = X_full[test_indices_set]
+        Y_test = Y_full[test_indices_set][:,test_indices_set]
+
+        # Compute inverse of regularized Gram matrix
+        A = torch.mm(X.T, X) + self.lambda_reg * torch.eye(X.shape[1], device=self.device)
+        A_inv = torch.linalg.inv(A)
+        
+        # Estimate O from closed-form solution
+        O = torch.mm(A_inv, torch.mm(X.T, torch.mm(Y, torch.mm(X, A_inv))))
+        
+        # Compute bilinear prediction
+        Y_lin = torch.mm(torch.mm(X, O), X.T)
+        Y_lin_test = torch.mm(torch.mm(X_test, O), X_test.T)
+        
+        # Learn scalar bias to minimize mean residual
+        b = torch.mean(Y - Y_lin)
+        
+        # Map parameters to bilinear layer
+        O_reshaped = O.reshape(1, X.shape[1], X.shape[1])
+        self.bilinear.weight.data = O_reshaped
+        if self.bilinear.bias is not None:
+            self.bilinear.bias.data = b.reshape(1)
+        
+        # Get predictions using dataloaders
+        train_predictions = []
+        train_targets = []
+        for batch_X, batch_y, _, _ in train_loader:
+            batch_X = batch_X.to(self.device)
+            batch_y = batch_y.to(self.device)
+            batch_preds = self.forward(batch_X)
+            train_predictions.append(batch_preds)
+            train_targets.append(batch_y)
+            
+        test_predictions = []
+        test_targets = []
+        for batch_X, batch_y, _, _ in test_loader:
+            batch_X = batch_X.to(self.device)
+            batch_y = batch_y.to(self.device) 
+            batch_preds = self.forward(batch_X)
+            test_predictions.append(batch_preds)
+            test_targets.append(batch_y)
+            
+        Y_train_pred = torch.cat(train_predictions)
+        Y_train = torch.cat(train_targets)
+        Y_test_pred = torch.cat(test_predictions)
+        Y_test = torch.cat(test_targets)
+        
+        # Compute losses
+        train_loss = self.criterion(Y_train_pred, Y_train).item()
+        val_loss = self.criterion(Y_test_pred, Y_test).item()
+        
+        return {'train_loss': [train_loss], 'val_loss': [val_loss]}
