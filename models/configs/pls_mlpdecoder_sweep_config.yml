@@ -11,7 +11,7 @@ parameters:
   binarize: 
     value: !!int 0
   n_components:
-    values: [8, 10, 12, 15, 25, 30]
+    values: [5, 8, 10, 12, 15, 25, 30, 50]
   max_iter:
     values: [1000]
   scale:
@@ -21,17 +21,17 @@ parameters:
   hidden_dims:
     values:
     - [256, 128]
-    - [128, 64]
+    - [512, 256, 128]
   learning_rate:
     values: [0.00009]
   batch_size:
     values: [512]
   dropout_rate:
-    values: [0.0, 0.2]
+    values: [0, 0.2, 0.4]
   weight_decay:
     values: [0.0, 0.001, 0.0001]
   epochs:
-    values: [75, 100]
+    values: [100]
 
 best_parameters:
   input_dim: 

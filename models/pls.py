@@ -1,8 +1,8 @@
 from env.imports import *
 from models.train_val import train_model
+from models.base_models import BaseModel
 from data.data_load import load_transcriptome, load_connectome
 from data.data_utils import expand_X_symmetric, expand_Y_symmetric
-
 
 class PLSEncoder(nn.Module):
     def __init__(self, train_indices, test_indices, region_pair_dataset, n_components=10, max_iter=1000, scale=True, optimize_encoder=False, device=None):
@@ -60,7 +60,8 @@ class PLSEncoder(nn.Module):
             # x_scores_j = torch.matmul(x_j, self.x_projector)
         
         return x_scores_i, x_scores_j
-class PLS_BilinearDecoderModel(nn.Module):
+
+class PLS_BilinearDecoderModel(BaseModel):
     def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset,
                  binarize=False, n_components=10, max_iter=1000, scale=True, optimize_encoder=False,
                  learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100, closed_form=True):
@@ -89,11 +90,10 @@ class PLS_BilinearDecoderModel(nn.Module):
 
         # Initialize decoder
         self.bilinear = nn.Bilinear(n_components, n_components, 1, bias=True)
-        
         print(f"Total number of parameters: {sum(p.numel() for p in self.parameters())}")
 
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)            
-        self.patience = 20
+        self.patience = 30
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
@@ -128,7 +128,6 @@ class PLS_BilinearDecoderModel(nn.Module):
         test_dataset = Subset(dataset, expanded_test_indices)
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
-        
         if self.closed_form:
             return self.fit_closed_form(dataset, expanded_train_indices, expanded_test_indices, train_loader, test_loader)
         else:
@@ -142,7 +141,6 @@ class PLS_BilinearDecoderModel(nn.Module):
         # Map expanded indices to valid region pairs and get unique region indices
         train_pairs = [dataset.expanded_idx_to_valid_pair[idx] for idx in train_indices]
         test_pairs = [dataset.expanded_idx_to_valid_pair[idx] for idx in test_indices]
-        
         train_indices_set = sorted(list(set(idx for pair in train_pairs for idx in pair)))
         test_indices_set = sorted(list(set(idx for pair in test_pairs for idx in pair)))
 
@@ -207,7 +205,7 @@ class PLS_BilinearDecoderModel(nn.Module):
         return {'train_loss': [train_loss], 'val_loss': [val_loss]}
 
 
-class PLS_MLPDecoderModel(nn.Module):
+class PLS_MLPDecoderModel(BaseModel):
     def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset,
                  binarize=False, n_components=10, max_iter=1000, scale=True, optimize_encoder=False, hidden_dims=[128, 64],
                  dropout_rate=0.2, learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100):
@@ -249,7 +247,7 @@ class PLS_MLPDecoderModel(nn.Module):
         print(f"Total number of parameters: {sum(p.numel() for p in self.parameters())}")
 
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)            
-        self.patience = 20
+        self.patience = 30
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
@@ -267,27 +265,26 @@ class PLS_MLPDecoderModel(nn.Module):
         output = self.output_layer(deep_output)
         return output.squeeze()
     
-    def predict(self, loader):
-        self.eval()
-        predictions = []
-        targets = []
-        with torch.no_grad():
-            for batch_X, batch_y, _, batch_idx in loader:
-                batch_X = batch_X.to(self.device)
-                batch_preds = self(batch_X, batch_idx).cpu().numpy()
-                predictions.append(batch_preds)
-                targets.append(batch_y.numpy())
-        predictions = np.concatenate(predictions)
-        targets = np.concatenate(targets)
-        return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
+    # def predict(self, loader):
+    #     self.eval()
+    #     predictions = []
+    #     targets = []
+    #     with torch.no_grad():
+    #         for batch_X, batch_y, _, batch_idx in loader:
+    #             batch_X = batch_X.to(self.device)
+    #             batch_preds = self(batch_X, batch_idx).cpu().numpy()
+    #             predictions.append(batch_preds)
+    #             targets.append(batch_y.numpy())
+    #     predictions = np.concatenate(predictions)
+    #     targets = np.concatenate(targets)
+    #     return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
     
-    def fit(self, dataset, expanded_train_indices, expanded_test_indices, verbose=True):
-        train_dataset = Subset(dataset, expanded_train_indices)
-        test_dataset = Subset(dataset, expanded_test_indices)
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
-        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
-
+    # def fit(self, dataset, expanded_train_indices, expanded_test_indices, verbose=True):
+    #     train_dataset = Subset(dataset, expanded_train_indices)
+    #     test_dataset = Subset(dataset, expanded_test_indices)
+    #     train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+    #     test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+    #     return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
 
 
 
@@ -382,5 +379,4 @@ class PLSTwoStepModel(nn.Module):
             "train_pearson": [train_pearson],
             "val_pearson": [test_pearson]
         }
-        
         return train_history

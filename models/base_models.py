@@ -1,22 +1,35 @@
 from env.imports import *
+from models.train_val import train_model
 
-class BaseModel:
-    """Base class for all models."""
+class BaseModel(nn.Module):
+    """Base class for PyTorch models with default fit and predict logic."""
     def __init__(self):
-        self.model = None
-        self.param_grid = {}
+        super().__init__()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.to(self.device)
 
-    def get_model(self):
-        """Return the model instance."""
-        return self.model
-
-    def get_param_grid(self):
-        """Return the parameter grid for GridSearchCV."""
-        return self.param_grid
+    @staticmethod
+    def predict(self, loader, binarize=False):
+        self.eval()
+        predictions = []
+        targets = []
+        with torch.no_grad():
+            for batch_X, batch_y, *_ in loader:
+                batch_X = batch_X.to(self.device)
+                batch_preds = self(batch_X).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        return ((predictions > 0.5).astype(int) if binarize else predictions), targets
     
-    def get_param_dist(self):
-        """Return the parameter grid for GridSearchCV."""
-        return self.param_dist
+    @staticmethod
+    def fit(self, dataset, train_indices, test_indices, criterion, optimizer, scheduler=None, epochs=100, batch_size=512, verbose=True):
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, pin_memory=True)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
 
 class LinearModel(BaseModel):
     def __init__(self):

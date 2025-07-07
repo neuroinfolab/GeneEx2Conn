@@ -10,17 +10,17 @@ parameters:
   binarize:
     value: !!int 0
   learning_rate:
-    values: [0.0001, 0.0005]
+    values: [0.0005]
   batch_size:
-    values: [256, 512]
+    values: [512]
   regularization:
     values: ['l2'] # l2 in line with literature
   lambda_reg:
-    values: [0, 0.0001, 0.001, 0.01, 0.1]
+    values: [0.001, 0.01, 0.1, 1.0] # 0.0001, 0.001, 0.01]
   epochs:
-    values: [75, 100, 125]
+    values: [100]
 
-# BEST PARAMETERS PCA AS INPUT
+# BEST PARAMETERS FOR PCA AS INPUT
 best_parameters:
   input_dim:
     value: !!int 0 
@@ -33,6 +33,6 @@ best_parameters:
   regularization:
     values: ['l2']
   lambda_reg:
-    values: [0.01]
+    values: [0.1]
   epochs:
     values: [100]
