@@ -373,7 +373,7 @@ def augment_batch(batch_idx, dataset, device, verbose=False):
     return batch_y
 
 class RegionPairDataset(Dataset):
-    def __init__(self, X, Y, coords, valid2true_mapping):
+    def __init__(self, X, Y, coords, valid2true_mapping, dataset, parcellation):
         self.X = torch.tensor(X, dtype=torch.float32)
         self.Y = torch.tensor(Y, dtype=torch.float32)
         self.coords = torch.tensor(coords, dtype=torch.float32)
@@ -394,8 +394,13 @@ class RegionPairDataset(Dataset):
         self.expanded_idx_to_valid_pair = {v: k for k, v in self.valid_pair_to_expanded_idx.items()}
         self.expanded_idx_to_true_pair = {v: k for k, v in self.true_pair_to_expanded_idx.items()}
     
-        # UKBB connectomes
-        data_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data/Penn_UKBB_data/npy/S456'
+        # Load individualized connectomes
+        if dataset == 'UKBB':
+            data_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data/Penn_UKBB_data/npy/S456'
+        elif dataset == 'HCP':
+            data_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data//HCP1200_fMRI/npy/'
+        elif dataset == 'BHA2':
+            data_dir = f'/scratch/asr655/neuroinformatics/GeneEx2Conn_data/BHA2/{parcellation}/npy'
         self.connectomes = np.load(f'{data_dir}/connectomes_upper.npy', allow_pickle=True)
         self.masks = np.load(f'{data_dir}/masks.npy', allow_pickle=True)
         self.subject_ids = np.load(f'{data_dir}/subject_ids.npy', allow_pickle=True)

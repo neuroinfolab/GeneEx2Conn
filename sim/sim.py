@@ -72,7 +72,7 @@ absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
 
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, resolution=1.0, random_seed=42,
-                 omit_subcortical=False, parcellation='S100', impute_strategy='mirror_interpolate', sort_genes='expression', 
+                 omit_subcortical=False, dataset='UKBB', parcellation='S456', impute_strategy='mirror_interpolate', sort_genes='expression', 
                  gene_list='0.2', hemisphere='both', use_shared_regions=False, test_shared_regions=False, 
                  connectome_target='FC', binarize=False, skip_cv=False, null_model=False):        
         """
@@ -84,7 +84,7 @@ class Simulation:
         self.gpu_acceleration = gpu_acceleration
         self.resolution = resolution
         self.random_seed = random_seed
-        self.omit_subcortical, self.parcellation, self.impute_strategy, self.sort_genes, self.gene_list, self.hemisphere = omit_subcortical, parcellation, impute_strategy, sort_genes, gene_list, hemisphere
+        self.omit_subcortical, self.dataset, self.parcellation, self.impute_strategy, self.sort_genes, self.gene_list, self.hemisphere = omit_subcortical, dataset, parcellation, impute_strategy, sort_genes, gene_list, hemisphere
         self.use_shared_regions = use_shared_regions
         self.test_shared_regions = test_shared_regions
         self.connectome_target = connectome_target.upper()
@@ -99,12 +99,12 @@ class Simulation:
         """
         self.X = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes, null_model=self.null_model, random_seed=self.random_seed)        
         self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA=True, hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
-        self.Y_sc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None, hemisphere=self.hemisphere)
-        self.Y_sc_binary = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
-        self.Y_sc_spectralL = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L', hemisphere=self.hemisphere)
-        self.Y_sc_spectralA = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='SC', spectral='A', hemisphere=self.hemisphere)
-        self.Y_fc = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', hemisphere=self.hemisphere)
-        self.Y_fc_binary = load_connectome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, measure='FC', binarize=True, hemisphere=self.hemisphere)
+        self.Y_sc = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None, hemisphere=self.hemisphere)
+        self.Y_sc_binary = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
+        self.Y_sc_spectralL = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L', hemisphere=self.hemisphere)
+        self.Y_sc_spectralA = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', spectral='A', hemisphere=self.hemisphere)
+        self.Y_fc = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='FC', hemisphere=self.hemisphere)
+        self.Y_fc_binary = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='FC', binarize=True, hemisphere=self.hemisphere)
         self.coords = load_coords(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
         self.labels, self.network_labels = load_network_labels(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
 
@@ -151,7 +151,7 @@ class Simulation:
         if self.cv_type == 'random':
             self.cv_obj = RandomCVSplit(self.X, self.Y, num_splits=4, shuffled=True, use_random_state=True, random_seed=self.random_seed)
         elif self.cv_type == 'schaefer':
-            self.cv_obj = SchaeferCVSplit()
+            self.cv_obj = SchaeferCVSplit(self.X, self.Y, self.network_labels)
         elif self.cv_type == 'community':
             self.cv_obj = CommunityCVSplit(self.X, self.Y_fc, resolution=self.resolution, random_seed=self.random_seed) 
         elif self.cv_type == 'spatial':
@@ -209,7 +209,9 @@ class Simulation:
             self.X_all,
             self.Y,
             self.coords,
-            self.valid2true_index_mapping
+            self.valid2true_index_mapping, 
+            self.dataset,
+            self.parcellation
         )
     
     def run_innercv_wandb_torch(self, input_dim, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3), sweep_id=None):
@@ -285,22 +287,22 @@ class Simulation:
         if search_method[0] == 'wandb' or track_wandb:
             wandb.login()
         
-        # Initialize sweep
-        sweep_id = None
-        if (search_method[0] == 'wandb' or track_wandb):
-            input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
-            sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-            sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
-            sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
-            print('Initialized sweep with ID:', sweep_id)
-
         network_dict = self.cv_obj.networks
         
         for fold_idx, (train_indices, test_indices) in enumerate(self.cv_obj.split(self.X, self.Y)):
             if fold_idx in use_folds:
+                # Initialize sweep for each fold
+                sweep_id = None
+                if (search_method[0] == 'wandb' or track_wandb):
+                    input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
+                    sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
+                    sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
+                    sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
+                    print('Initialized sweep with ID:', sweep_id)
+                
                 train_region_pairs = expand_X_symmetric(train_indices.reshape(-1, 1)).astype(int)
                 test_region_pairs = expand_X_symmetric(test_indices.reshape(-1, 1)).astype(int)
-
+                
                 train_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
                 test_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])
                 
@@ -351,6 +353,12 @@ class Simulation:
                 # Evaluate on the test fold
                 train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
                 test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
+
+                if self.test_shared_regions:
+                    train_test_region_pairs = expand_X_symmetric(np.array(list(set(train_indices) | set(test_indices))).reshape(-1, 1)).astype(int)
+                    train_test_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_test_region_pairs])
+                    test_dataset = Subset(self.region_pair_dataset, train_test_indices_expanded)
+
                 train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
                 test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
                 evaluator = ModelEvaluatorTorch(region_pair_dataset=self.region_pair_dataset,

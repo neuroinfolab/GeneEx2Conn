@@ -83,25 +83,32 @@ def load_best_parameters(yaml_file_path, input_dim, binarize):
         best_config['binarize'] = binarize
     
     return best_config
-
-
 # CROSS-VALIDATION
-def drop_test_network(cv_type, network_dict, value, test_fold_idx):
+def drop_test_network(cv_type, network_dict, test_indices, test_fold_idx):
         """
-        Drop an entry from the dictionary based on the given value and return a new dictionary.
-        Helper function for removing schaefer network from dict
+        Drop test network from the dictionary and return a new dictionary.
+        Helper function for removing networks from cross-validation splits.
+        
+        Args:
+            cv_type (str): Type of CV split ('schaefer' or 'spatial')
+            network_dict (dict): Dictionary mapping network names to region indices
+            test_indices (array): Indices of regions in test set
+            test_fold_idx (int): Index of current test fold
+            
+        Returns:
+            dict: New dictionary with test network removed
         """
         # Create a copy of the original dictionary
         new_dict = network_dict.copy()
     
-        if cv_type == 'schaefer': # REVISIT THIS LOGIC
-            # Identify the keys to remove
-            keys_to_remove = [key for key, val in new_dict.items() if val == value]
-            
-            # Remove the identified keys from the new dictionary
-            for key in keys_to_remove:
-                del new_dict[key]
-        else: 
+        if cv_type == 'schaefer':
+            # For Schaefer networks, find and remove network containing test indices
+            for network_name, region_indices in new_dict.items():
+                if all(idx in region_indices for idx in test_indices):
+                    del new_dict[network_name]
+                    break
+        else:
+            # For spatial networks, remove by fold index
             new_dict.pop(str(test_fold_idx))
 
         return new_dict
@@ -382,7 +389,7 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
                 inner_fold_metrics['final_train_pearson'].append(train_pearson)
                 inner_fold_metrics['final_val_pearson'].append(val_pearson)
 
-            del model
+            # del model
             torch.cuda.empty_cache()
             gc.collect()
 

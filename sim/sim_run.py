@@ -15,7 +15,8 @@ def single_sim_run(
     use_shared_regions=False,
     test_shared_regions=False,
     omit_subcortical=False,
-    parcellation='S100',
+    dataset='UKBB',
+    parcellation='S456',
     hemisphere='both',
     connectome_target='FC',
     binarize=False,
@@ -61,8 +62,11 @@ def single_sim_run(
     omit_subcortical : bool, optional
         Whether to omit subcortical regions. Default: False
     
+    dataset : str, optional
+        Dataset to use. Options: 'UKBB', 'HCP', 'BHA2'. Default: 'UKBB'
+    
     parcellation : str, optional
-        Parcellation scheme to use. Default: 'S100'
+        Parcellation scheme to use. Default: 'S456'
     
     hemisphere : str, optional
         Which hemisphere to use. Options: 'left', 'right', 'both'. Default: 'both'
@@ -125,6 +129,7 @@ def single_sim_run(
                     use_shared_regions=use_shared_regions,
                     test_shared_regions=test_shared_regions,
                     omit_subcortical=omit_subcortical,
+                    dataset=dataset,
                     parcellation=parcellation,
                     hemisphere=hemisphere,
                     connectome_target=connectome_target,

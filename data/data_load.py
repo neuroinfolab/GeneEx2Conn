@@ -58,7 +58,7 @@ def get_iPA_masks(parcellation):
 
     return hemi_mask_list, subcort_mask_list, n_cortical
 
-def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='refgenome', return_valid_genes=False, null_model='none', random_seed=42):
+def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='refgenome', return_valid_genes=False, null_model='none', random_seed=42):
     """
     Load transcriptome data with optional PCA reduction.
     
@@ -82,7 +82,7 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         if parcellation == 'S100':
             region_labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in pd.read_csv('./data/enigma/schaef114_regions.txt', header=None).values.flatten().tolist()]
             genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r1_schaefer_{parcellation[1:]}.csv") # from https://github.com/saratheriver/enigma-extra/tree/master/ahba
-        elif parcellation == 'S400':
+        elif parcellation == 'S456':
             AHBA_UKBB_path = absolute_data_path + '/Penn_UKBB_data/AHBA_population_MH/'
             if impute_strategy == 'mirror':
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean_mirror.csv'))
@@ -105,7 +105,12 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
             genes_list_abagen = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_400.txt", header=None)[0].tolist()
             genes_list = list(set(genes_list).intersection(set(genes_list_abagen))) # drop last 3 genes to make token divisible
         elif gene_list == '0.2' or gene_list == '1':
-            genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_{parcellation[1:]}.txt", header=None)[0].tolist()
+            if parcellation == 'S156':
+                genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_100.txt", header=None)[0].tolist()
+            elif parcellation == 'S456':
+                genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_400.txt", header=None)[0].tolist()
+            else:
+                genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_{parcellation[1:]}.txt", header=None)[0].tolist()
         elif gene_list in ['brain', 'neuron', 'oligodendrocyte', 'synaptome', 'layers']:
             genes_list = abagen.fetch_gene_group(gene_list)
         elif gene_list == 'richiardi2015':
@@ -220,7 +225,6 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
                 genes_data = genes_data[cortical_spin_idx]
             else:
                 genes_data = np.vstack([genes_data[cortical_spin_idx], genes_data[subcortical_spin_idx+400]])
-            
         elif null_model == 'random':
             print('permuting gene expression')
             rng = np.random.default_rng(random_seed)
@@ -228,13 +232,13 @@ def load_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
         
         return genes_data
 
-def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', measure='FC', spectral=None, hemisphere='both', include_labels=False, diag=0, binarize=False):
+def load_connectome(parcellation='S456', omit_subcortical=False, dataset='UKBB', measure='FC', spectral=None, hemisphere='both', include_labels=False, diag=0, binarize=False):
     """
     Load and process connectome data with optional spectral decomposition.
     
     Args:
-        parcellation (str): Brain parcellation ('S100', 'S456'). Default: 'S100'
-        dataset (str): Dataset to load. Default: 'AHBA'
+        parcellation (str): Brain parcellation ('S100', 'S156', 'S456'). Default: 'S456'
+        dataset (str): Dataset to load ('UKBB', 'HCP', 'BHA2'). Default: 'UKBB'
         omit_subcortical (bool): Exclude subcortical regions. Default: True
         measure (str): Connectivity type ('FC', 'SC'). Default: 'FC'
         spectral (str): Decomposition type ('L', 'A', None). Default: None
@@ -242,8 +246,17 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
     Returns:
         np.ndarray: Processed connectome data
     """
-    if dataset == 'AHBA':
-        # Load relevant data and corresponding region labels from parcellation
+    if dataset == 'UKBB':
+        if parcellation not in ['S156', 'S456']:
+            raise ValueError("UKBB only supports S156/S456 parcellation")
+        region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv(f'./data/UKBB/atlas-4{parcellation}Parcels_dseg_reformatted.csv').iterrows()]
+        if measure == 'SC':
+            print("Warning: SC measure not available for UKBB dataset, returning HCP S456 SC")
+            matrix = np.log1p(loadmat(f'./data/HCP1200/4{parcellation}_DTI_count.mat')['connectivity'])
+            matrix = matrix / matrix.max()
+        else:
+            matrix = np.array(pd.read_csv(f'./data/UKBB/UKBB_{parcellation}_FC_mu.csv'))
+    elif dataset == 'HCP':
         if parcellation == 'S100':
             region_labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in pd.read_csv('./data/enigma/schaef114_regions.txt', header=None).values.flatten().tolist()]
             if measure == 'FC':
@@ -253,63 +266,67 @@ def load_connectome(parcellation='S100', omit_subcortical=True, dataset='AHBA', 
                 matrix, _ = load_sc_as_one(parcellation='schaefer_100')
                 matrix[matrix < 0] = 0 # a handful of values are slightly negative so set to 0
                 matrix = matrix / matrix.max()
-        elif parcellation == 'S400' or parcellation == 'S456':
-            region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv').iterrows()]
+        elif parcellation in ['S156', 'S456']:
+            region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv(f'./data/UKBB/atlas-4{parcellation}Parcels_dseg_reformatted.csv').iterrows()]
             if measure == 'FC':
-                matrix = np.array(pd.read_csv('./data/UKBB/UKBB_S456_FC_mu.csv'))
+                matrix = np.loadtxt(f'/scratch/asr655/neuroinformatics/GeneEx2Conn_data/HCP1200_fMRI/HCP1200_{parcellation}_FC_mu.csv', delimiter=',')
             elif measure == 'SC':
-                matrix = np.log1p(loadmat('./data/HCP1200/4S456_DTI_count.mat')['connectivity'])
+                matrix = np.log1p(loadmat(f'./data/HCP1200/4{parcellation}_DTI_count.mat')['connectivity'])
                 matrix = matrix / matrix.max()
-        elif 'iPA' in parcellation:
-            BHA2_path = absolute_data_path + '/BHA2/'
-            matrix = np.array(pd.read_csv(os.path.join(BHA2_path, parcellation, 'fc/fc_mean.csv'), header=None))
-            return matrix
-        
-        # Add diagonal as 1 if specified (diagonal is ignored in edge-wise reconstruction)
-        if diag == 1:
-            #matrix = matrix + np.eye(matrix.shape[0])
-            np.fill_diagonal(matrix, 1)
-        elif diag == 0:
-            np.fill_diagonal(matrix, 0)
-
-        if binarize:
-            threshold = 0.01 if measure == 'SC' else 0.3 # 0.3 is an empirical hyperparameter for FC 
-            matrix = (matrix >= threshold).astype(int)
-            print(f'Number of 1s: {np.sum(matrix)}, Number of 0s: {np.sum(matrix==0)}, Class balance (1s): {np.mean(matrix):.3f}')
-
-        # Remove subcortical if specified
-        if omit_subcortical:
-            n = (matrix.shape[0] // 100) * 100
-            matrix = matrix[:n, :n]
-            region_labels = region_labels[:n]
-
-        # Subset based on hemisphere
-        lh_indices, rh_indices = [i for i, label in enumerate(region_labels) if 'LH' in label], [i for i, label in enumerate(region_labels) if 'RH' in label]
-        lh_labels, rh_labels = [region_labels[i] for i in lh_indices], [region_labels[i] for i in rh_indices]
-        if hemisphere == 'left':
-            matrix = matrix[lh_indices, :][:, lh_indices]
-            region_labels = lh_labels
-        elif hemisphere == 'right':
-            matrix = matrix[rh_indices, :][:, rh_indices]
-            region_labels = rh_labels
-        
-        # Apply appropriate spectral decomposition
-        if spectral == 'L':
-            L = laplacian(matrix, normed=True)
-            _, eigenvectors = eig(L)
-            k = int(L.shape[1]) - 1
-            return eigenvectors[:, 1:k+1]  # Skip first eigenvector (zero eigenvalue) 
-        elif spectral == 'A':
-            _, eigenvectors = eig(matrix)
-            k = int(matrix.shape[1])
-            return eigenvectors[:, :k]
-        
-        if include_labels:
-            return matrix, region_labels, lh_indices, rh_indices
-        
+        else:
+            raise ValueError("HCP only supports S100/S156/S400/S456 parcellation")
+    elif dataset == 'BHA2':
+        if 'iPA' not in parcellation:
+            raise ValueError("BHA2 only supports iPA parcellations")
+        BHA2_path = absolute_data_path + '/BHA2/'
+        matrix = np.array(pd.read_csv(os.path.join(BHA2_path, parcellation, 'fc/fc_mean.csv'), header=None))
         return matrix
+        
+    # Add diagonal as 1 if specified (diagonal is ignored in edge-wise reconstruction)
+    if diag == 1:
+        #matrix = matrix + np.eye(matrix.shape[0])
+        np.fill_diagonal(matrix, 1)
+    elif diag == 0:
+        np.fill_diagonal(matrix, 0)
 
-def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
+    if binarize:
+        threshold = 0.01 if measure == 'SC' else 0.3 # 0.3 is an empirical hyperparameter for FC 
+        matrix = (matrix >= threshold).astype(int)
+        print(f'Number of 1s: {np.sum(matrix)}, Number of 0s: {np.sum(matrix==0)}, Class balance (1s): {np.mean(matrix):.3f}')
+
+    # Remove subcortical if specified
+    if omit_subcortical:
+        n = (matrix.shape[0] // 100) * 100
+        matrix = matrix[:n, :n]
+        region_labels = region_labels[:n]
+
+    # Subset based on hemisphere
+    lh_indices, rh_indices = [i for i, label in enumerate(region_labels) if 'LH' in label], [i for i, label in enumerate(region_labels) if 'RH' in label]
+    lh_labels, rh_labels = [region_labels[i] for i in lh_indices], [region_labels[i] for i in rh_indices]
+    if hemisphere == 'left':
+        matrix = matrix[lh_indices, :][:, lh_indices]
+        region_labels = lh_labels
+    elif hemisphere == 'right':
+        matrix = matrix[rh_indices, :][:, rh_indices]
+        region_labels = rh_labels
+    
+    # Apply appropriate spectral decomposition
+    if spectral == 'L':
+        L = laplacian(matrix, normed=True)
+        _, eigenvectors = eig(L)
+        k = int(L.shape[1]) - 1
+        return eigenvectors[:, 1:k+1]  # Skip first eigenvector (zero eigenvalue) 
+    elif spectral == 'A':
+        _, eigenvectors = eig(matrix)
+        k = int(matrix.shape[1])
+        return eigenvectors[:, :k]
+    
+    if include_labels:
+        return matrix, region_labels, lh_indices, rh_indices
+    
+    return matrix
+
+def load_coords(parcellation='S456', omit_subcortical=True, hemisphere='both'):
     """
     Get MNI coordinates for brain regions in specified parcellation.
 
@@ -322,7 +339,7 @@ def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
         region_labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in pd.read_csv('./data/enigma/schaef114_regions.txt', header=None).values.flatten().tolist()]
         hcp_schaef = pd.read_csv(absolute_data_path + '/atlas_info/schaef114.csv')
         coordinates = hcp_schaef[['mni_x', 'mni_y', 'mni_z']].values
-    elif parcellation == 'S400':
+    elif parcellation == 'S456':
         region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv').iterrows()]
         UKBB_S456_atlas_info = pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv')
         mni_coords = [[x, y, z] for x, y, z in zip(UKBB_S456_atlas_info['mni_x'], 
@@ -348,7 +365,7 @@ def load_coords(parcellation='S100', omit_subcortical=True, hemisphere='both'):
     
     return coordinates
 
-def load_network_labels(parcellation='S100', omit_subcortical=False, dataset='HCP', hemisphere='both'):
+def load_network_labels(parcellation='S456', omit_subcortical=False, dataset='UKBB', hemisphere='both'):
     """
     Load network labels for a given parcellation and dataset.
 
@@ -366,15 +383,15 @@ def load_network_labels(parcellation='S100', omit_subcortical=False, dataset='HC
 
         if omit_subcortical:
             schaef156_atlas_info = schaef156_atlas_info.iloc[:100]
-        elif dataset == 'HCP':
+        elif dataset == 'HCP' and parcellation == 'S100':
             schaef156_atlas_info = schaef156_atlas_info.iloc[:114]
-        elif dataset == 'UKBB':
+        elif dataset == 'UKBB' and parcellation == 'S156':
             schaef156_atlas_info = schaef156_atlas_info.iloc[:156]
         
         labels = schaef156_atlas_info['label'].tolist()
         network_labels = schaef156_atlas_info['network_label'].values
 
-    elif parcellation == 'S400':
+    elif parcellation == 'S456':
         schaef456_atlas_info = pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv')
         schaef456_atlas_info.loc[schaef456_atlas_info['atlas_name'] == 'Cerebellum', 'network_label'] = 'Cerebellum'
         schaef456_atlas_info.loc[(schaef456_atlas_info['network_label'].isna()) & 
