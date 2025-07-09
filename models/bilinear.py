@@ -132,19 +132,19 @@ class BilinearCM(BaseModel):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         return self.bilinear(x_i, x_j).squeeze()
 
-    # def predict(self, loader):
-    #     self.eval()
-    #     predictions = []
-    #     targets = []
-    #     with torch.no_grad():
-    #         for batch_X, batch_y, _, _ in loader:
-    #             batch_X = batch_X.to(self.device)
-    #             batch_preds = self(batch_X).cpu().numpy()
-    #             predictions.append(batch_preds)
-    #             targets.append(batch_y.numpy())
-    #     predictions = np.concatenate(predictions)
-    #     targets = np.concatenate(targets)
-    #     return predictions, targets
+    def predict(self, loader):
+        self.eval()
+        predictions = []
+        targets = []
+        with torch.no_grad():
+            for batch_X, batch_y, _, _ in loader:
+                batch_X = batch_X.to(self.device)
+                batch_preds = self(batch_X).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        return predictions, targets
     
     def fit(self, dataset, train_indices, test_indices, verbose=True):
         train_dataset = Subset(dataset, train_indices)

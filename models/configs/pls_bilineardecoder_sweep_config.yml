@@ -33,7 +33,7 @@ best_parameters:
   binarize: 
     value: !!int 0
   n_components:
-    values: [10] #
+    values: [10]
   max_iter:
     values: [1000]
   scale:
