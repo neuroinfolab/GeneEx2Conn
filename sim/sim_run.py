@@ -1,7 +1,6 @@
 import sys
 import os
 import argparse
-import multiprocessing as mp
 from env.imports import *
 from sim.sim import Simulation
 
@@ -12,7 +11,7 @@ sys.path.append(absolute_root_path)
 
 def single_sim_run(
     feature_type='transcriptome',
-    use_shared_regions=False,
+    train_shared_regions=False,
     test_shared_regions=False,
     omit_subcortical=False,
     dataset='UKBB',
@@ -53,8 +52,8 @@ def single_sim_run(
         Each dict maps feature name to parameters (or None if no parameters).
         E.g. [{'transcriptome': None}, {'euclidean': None}]
     
-    use_shared_regions : bool, optional
-        Whether to use shared regions between hemispheres. Default: False
+    train_shared_regions : bool, optional
+        Whether to train on shared regions between train and test sets. Default: False
     
     test_shared_regions : bool, optional
         Whether to test on shared regions. Default: False
@@ -126,7 +125,7 @@ def single_sim_run(
     
     sim = Simulation(
                     feature_type=feature_type,
-                    use_shared_regions=use_shared_regions,
+                    train_shared_regions=train_shared_regions,
                     test_shared_regions=test_shared_regions,
                     omit_subcortical=omit_subcortical,
                     dataset=dataset,

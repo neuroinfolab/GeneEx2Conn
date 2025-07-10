@@ -26,17 +26,17 @@ parameters:
     - [256, 128]
     - [512, 256, 128]
   transformer_dropout:
-    values: [0.1, 0.4]
+    values: [0.1, 0.2, 0.4]
   dropout_rate:
-    values: [0.1, 0.4]
+    values: [0.1, 0.2, 0.4]
   learning_rate:
     values: [0.00009]
   weight_decay:
-    values: [0.0001, .001]
+    values: [0.0001, .001, 0.01]
   batch_size:
     values: [1024]
   aug_prob:
-    values: [0, 0.2, 0.4, 0.6, 0.8, 1.0]
+    values: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
   epochs:
     values: [50, 70, 90]
   num_workers:
@@ -50,7 +50,7 @@ best_parameters:
   binarize:
     value: !!int 0
   token_encoder_dim:
-    values: [10]
+    values: [60]
   d_model:
     values: [128]
   encoder_output_dim:

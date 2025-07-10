@@ -156,7 +156,8 @@ class ModelEvaluator:
         # Functional subnetwork metrics
         if self.network_labels is not None and not self.binarize:
             try:
-                network_metrics = compute_subnetwork_metrics(y_true_flat, y_pred_flat, indices, self.network_labels)
+                network_metrics = compute_subnetwork_metrics(y_true_flat, y_pred_flat, indices, self.network_labels, 
+                                                          self.shared_indices if self.test_shared_regions and mode == 'test' else None)
                 metrics.update(network_metrics)
             except Exception as e:
                 print(f"Warning: Could not compute subnetwork metrics: {e}")
@@ -172,7 +173,9 @@ class ModelEvaluator:
             square = not self.train_shared_regions if self.train_shared_regions is not None else False
         else:  # test
             loader = self.test_loader
-            indices = self.test_indices  
+            indices = self.test_indices
+            if self.test_shared_regions:
+                self.shared_indices = self.train_indices
             distances = self.test_distances
             square = not self.test_shared_regions if self.test_shared_regions is not None else False
             
@@ -218,7 +221,8 @@ class ModelEvaluator:
             if self.config.plot_mode == 'basic':
                 # Basic plots: connectome predictions and distance scatter
                 plot_connectome_predictions_full(self.Y, y_true, y_pred, indices, 
-                                                self.network_labels, self.binarize, self.config)
+                                                self.network_labels, self.binarize, self.config,
+                                                shared_indices=self.shared_indices if mode == 'test' and self.test_shared_regions else None)
                 if square:
                     plot_connectome_predictions_subset(y_true, y_pred, self.config)
                 

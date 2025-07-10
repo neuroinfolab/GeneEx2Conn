@@ -105,6 +105,7 @@ def drop_test_network(cv_type, network_dict, test_indices, test_fold_idx):
             # For Schaefer networks, find and remove network containing test indices
             for network_name, region_indices in new_dict.items():
                 if all(idx in region_indices for idx in test_indices):
+                    print(f'Testing network: {network_name}')
                     del new_dict[network_name]
                     break
         else:

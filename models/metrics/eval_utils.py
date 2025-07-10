@@ -249,14 +249,22 @@ def compute_hemispheric_metrics(y_true, y_pred, indices, coords):
         metrics['inter_hemi_r'] = pearsonr(inter_true, inter_pred)[0]
         
     return metrics
-
-def compute_subnetwork_metrics(y_true, y_pred, indices, network_labels): 
+    
+def compute_subnetwork_metrics(y_true, y_pred, indices, network_labels, shared_indices=None):
     """
     Compute network-based correlation metrics for both intra and inter-network connections.
     
-    Returns metrics dictionary with correlations for:
-    - Intra-network connections within each network
-    - Inter-network connections between Visual system and all other networks
+    Args:
+        y_true: True connectivity values
+        y_pred: Predicted connectivity values 
+        indices: List of region indices
+        network_labels: Network label for each region
+        shared_indices: Optional list of shared region indices to include connections with
+        
+    Returns:
+        Dictionary with correlations for:
+        - Intra-network connections within each network
+        - Inter-network connections between networks
     """
     networks = ['Cont', 'Default', 'SalVentAttn', 'Limbic', 
                'DorsAttn', 'SomMot', 'Vis', 'Subcortical', 'Cerebellum']
@@ -265,25 +273,41 @@ def compute_subnetwork_metrics(y_true, y_pred, indices, network_labels):
     intra_network_data = {net: {'true': [], 'pred': []} for net in networks}
     inter_network_data = {net: {'true': [], 'pred': []} for net in networks}
 
-    for idx, (i, j) in enumerate(combinations(indices, 2)):
-        net_i, net_j = network_labels[i], network_labels[j]
-        
+    # Helper function to process a pair of regions and their values
+    def process_region_pair(net_i, net_j, true_val, pred_val):
         # Skip if either network label is not in our list
         if net_i not in networks or net_j not in networks:
-            continue
+            return
             
-        true_val = y_true[2*idx]
-        pred_val = y_pred[2*idx]
-        
+        # Add to appropriate network data
         if net_i == net_j: # Intra-network connections
             intra_network_data[net_i]['true'].append(true_val)
             intra_network_data[net_i]['pred'].append(pred_val)
         else: # Inter-network connections
-            for net in [net_i, net_j]: # Add to both networks' inter-network data
+            for net in [net_i, net_j]:
                 inter_network_data[net]['true'].append(true_val)
                 inter_network_data[net]['pred'].append(pred_val)
 
+    # Process connections between indices
+    n_pairs = len(list(combinations(indices, 2)))
+    for idx, (i, j) in enumerate(combinations(indices, 2)):
+        net_i, net_j = network_labels[i], network_labels[j]
+        process_region_pair(net_i, net_j, y_true[idx], y_pred[idx])
+
+    # Process connections with shared indices if provided
+    if shared_indices is not None:
+        offset = n_pairs
+        for i_idx, i in enumerate(indices):
+            for j_idx, j in enumerate(shared_indices):
+                idx = offset + i_idx * len(shared_indices) + j_idx
+                if idx < len(y_true):  # Ensure index is within bounds
+                    net_i, net_j = network_labels[i], network_labels[j]
+                    process_region_pair(net_i, net_j, y_true[idx], y_pred[idx])
+
+    # Calculate metrics
     metrics = {}
+    
+    # Calculate intra-network correlations
     for network in networks:
         if len(intra_network_data[network]['true']) > 1:
             metrics[f'intra_network_{network}_r'] = pearsonr(
@@ -292,6 +316,7 @@ def compute_subnetwork_metrics(y_true, y_pred, indices, network_labels):
         else:
             metrics[f'intra_network_{network}_r'] = np.nan
     
+    # Calculate inter-network correlations  
     for network in networks:
         if len(inter_network_data[network]['true']) > 1:
             metrics[f'inter_network_{network}_r'] = pearsonr(
@@ -301,7 +326,6 @@ def compute_subnetwork_metrics(y_true, y_pred, indices, network_labels):
             metrics[f'inter_network_{network}_r'] = np.nan
             
     return metrics
-
 
 # Plotting functions
 def plot_connectome_predictions_subset(Y_true, Y_pred, config):
@@ -332,7 +356,7 @@ def plot_connectome_predictions_subset(Y_true, Y_pred, config):
     plt.show()
     return plt.gcf()
 
-def plot_connectome_predictions_full(Y, Y_true, Y_pred, indices, network_labels=None, binarize=False, config=None):
+def plot_connectome_predictions_full(Y, Y_true, Y_pred, indices, network_labels=None, binarize=False, config=None, shared_indices=None):
     """Generate full connectome visualization with prediction differences"""
     n = int(Y.shape[0])  # Get dimensions of square connectome
     if binarize: 
@@ -344,9 +368,20 @@ def plot_connectome_predictions_full(Y, Y_true, Y_pred, indices, network_labels=
     diff = abs(Y_true - Y_pred)
     
     # For each pair of regions in indices
+    n_pairs = len(list(combinations(indices, 2)))
     for idx, (i, j) in enumerate(combinations(indices, 2)): # Each pair appears twice in diff - once in each direction
         split_mask[i,j] = diff[2*idx]   # First direction: i->j is at 2*idx
         split_mask[j,i] = diff[2*idx + 1]   # Second direction: j->i is at 2*idx + 1
+    
+    # Process connections with shared indices if provided
+    if shared_indices is not None:
+        offset = n_pairs
+        for i_idx, i in enumerate(indices):
+            for j_idx, j in enumerate(shared_indices):
+                idx = offset + i_idx * len(shared_indices) + j_idx
+                if idx < len(diff):  # Ensure index is within bounds
+                    split_mask[i,j] = diff[idx]
+                    split_mask[j,i] = diff[idx]
             
     plt.figure(figsize=(16, 6))
     

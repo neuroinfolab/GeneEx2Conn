@@ -73,7 +73,7 @@ absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, resolution=1.0, random_seed=42,
                  omit_subcortical=False, dataset='UKBB', parcellation='S456', impute_strategy='mirror_interpolate', sort_genes='expression', 
-                 gene_list='0.2', hemisphere='both', use_shared_regions=False, test_shared_regions=False, 
+                 gene_list='0.2', hemisphere='both', train_shared_regions=False, test_shared_regions=False, 
                  connectome_target='FC', binarize=False, skip_cv=False, null_model=False):        
         """
         Initialization of simulation parameters
@@ -85,7 +85,7 @@ class Simulation:
         self.resolution = resolution
         self.random_seed = random_seed
         self.omit_subcortical, self.dataset, self.parcellation, self.impute_strategy, self.sort_genes, self.gene_list, self.hemisphere = omit_subcortical, dataset, parcellation, impute_strategy, sort_genes, gene_list, hemisphere
-        self.use_shared_regions = use_shared_regions
+        self.train_shared_regions = train_shared_regions
         self.test_shared_regions = test_shared_regions
         self.connectome_target = connectome_target.upper()
         self.binarize = binarize
@@ -275,7 +275,7 @@ class Simulation:
             
         return best_model, best_val_loss, best_config, sweep_id
 
-    def run_sim_torch(self, search_method=('random', 'mse', 5), track_wandb=False, use_folds=[0, 1, 2, 3]):
+    def run_sim_torch(self, search_method=('random', 'mse', 5), track_wandb=False, use_folds=[0, 1, 2, 3, 4, 5, 6, 7]):
         """
         Main simulation method
         """
@@ -290,7 +290,7 @@ class Simulation:
         network_dict = self.cv_obj.networks
         
         for fold_idx, (train_indices, test_indices) in enumerate(self.cv_obj.split(self.X, self.Y)):
-            if fold_idx in use_folds:
+            if fold_idx in use_folds: # use_folds set to 0-7 to accomodate Schaefer CV
                 # Initialize sweep for each fold
                 sweep_id = None
                 if (search_method[0] == 'wandb' or track_wandb):
@@ -304,7 +304,7 @@ class Simulation:
                 test_region_pairs = expand_X_symmetric(test_indices.reshape(-1, 1)).astype(int)
                 
                 train_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])
-                test_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])
+                test_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])    
                 
                 innercv_network_dict = drop_test_network(self.cv_type, network_dict, test_indices, fold_idx+1)
                 input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
@@ -320,16 +320,16 @@ class Simulation:
                                                 group=f"sweep_{sweep_id}" if sweep_id else None,
                                                 config=best_config,
                                                 tags=["final_eval", 
-                                                    f'cv_type_{self.cv_type}', 
-                                                    f'outerfold_{fold_idx}',
-                                                    f'model_{self.model_type}',
+                                                    f"cv_type_{self.cv_type}", 
+                                                    f"outerfold_{fold_idx}",
+                                                    f"model_{self.model_type}",
                                                     f"split_{self.cv_type}{self.random_seed}", 
-                                                    f'feature_type_{feature_str}',
-                                                    f'target_{self.connectome_target}',
-                                                    f'parcellation_{self.parcellation}',
-                                                    f'hemisphere_{self.hemisphere}',
-                                                    f'omit_subcortical_{self.omit_subcortical}',
-                                                    f'gene_list_{self.gene_list}',
+                                                    f"feature_type_{feature_str}",
+                                                    f"target_{self.connectome_target}",
+                                                    f"parcellation_{self.parcellation}",
+                                                    f"hemisphere_{self.hemisphere}",
+                                                    f"omit_subcortical_{self.omit_subcortical}",
+                                                    f"gene_list_{self.gene_list}",
                                                     f"binarize_{self.binarize}",
                                                     f"impute_strategy_{self.impute_strategy}",
                                                     f"sort_genes_{self.sort_genes}",
@@ -353,12 +353,26 @@ class Simulation:
                 # Evaluate on the test fold
                 train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
                 test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
+                
+                if self.train_shared_regions or self.test_shared_regions:
+                    # get shared indices between train and test
+                    # Get interconnections between train and test sets using numpy meshgrid
+                    train_idx_grid, test_idx_grid = np.meshgrid(train_indices, test_indices)
+                    train_test_pairs = np.column_stack((train_idx_grid.ravel(), test_idx_grid.ravel()))
+                    
+                    # Add reverse direction pairs
+                    train_test_pairs = np.vstack((train_test_pairs, train_test_pairs[:, ::-1]))
+                    train_test_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_test_pairs])
 
-                if self.test_shared_regions:
-                    train_test_region_pairs = expand_X_symmetric(np.array(list(set(train_indices) | set(test_indices))).reshape(-1, 1)).astype(int)
-                    train_test_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_test_region_pairs])
-                    test_dataset = Subset(self.region_pair_dataset, train_test_indices_expanded)
-
+                    if self.train_shared_regions: # update train dataset 
+                        train_indices_expanded = np.concatenate((train_indices_expanded, train_test_indices_expanded)).astype(train_indices_expanded.dtype)
+                        train_indices = sorted(list(set(train_indices).union(set(test_indices))))
+                        train_dataset = Subset(self.region_pair_dataset, train_indices_expanded) # viz not yet implemented for this path
+                    elif self.test_shared_regions: # update test dataset
+                        test_indices_expanded = np.concatenate((test_indices_expanded, train_test_indices_expanded)).astype(test_indices_expanded.dtype)
+                        # test_indices = sorted(list(set(test_indices).union(set(train_indices))))
+                        test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
+                
                 train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)
                 test_loader = DataLoader(test_dataset, batch_size=512, shuffle=False, pin_memory=True)
                 evaluator = ModelEvaluatorTorch(region_pair_dataset=self.region_pair_dataset,
@@ -371,7 +385,7 @@ class Simulation:
                                                 test_indices=test_indices,
                                                 test_indices_expanded=test_indices_expanded,
                                                 network_labels=self.network_labels,
-                                                train_shared_regions=self.use_shared_regions,
+                                                train_shared_regions=self.train_shared_regions,
                                                 test_shared_regions=self.test_shared_regions)
 
                 train_metrics = evaluator.get_train_metrics()
