@@ -26,19 +26,19 @@ parameters:
     - [256, 128]
     - [512, 256, 128]
   transformer_dropout:
-    values: [0.1, 0.2, 0.4]
+    values: [0.1, 0.2]
   dropout_rate:
-    values: [0.1, 0.2, 0.4]
+    values: [0.1, 0.2]
   learning_rate:
-    values: [0.00009]
+    values: [0.00009, 0.0001]
   weight_decay:
-    values: [0.0001, .001, 0.01]
+    values: [0.0001, .001]
   batch_size:
     values: [1024]
   aug_prob:
-    values: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    values: [0.1, 0.2, 0.3, 0.4, 0.5]
   epochs:
-    values: [50, 70, 90]
+    values: [70, 90, 110]
   num_workers:
     values: [2]
   prefetch_factor:
@@ -65,9 +65,9 @@ best_parameters:
     values:
       - [512, 256, 128]
   transformer_dropout:
-    values: [0.4]
+    values: [0.2]
   dropout_rate:
-    values: [0.4]
+    values: [0.2]
   learning_rate:
     values: [0.00009]
   weight_decay:
@@ -75,9 +75,9 @@ best_parameters:
   batch_size:
     values: [1024]
   aug_prob:
-    values: [0.0]
+    values: [0.3]
   epochs:
-    values: [70]
+    values: [90]
   num_workers:
     values: [2]
   prefetch_factor:

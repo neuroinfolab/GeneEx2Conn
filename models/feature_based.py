@@ -131,8 +131,8 @@ class ExponentialDecayModel(nn.Module):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.criterion = nn.MSELoss()
         # Initialize learnable parameters - in theory these can be CV-able
-        self.SA_inf = nn.Parameter(torch.tensor(SA_inf))
-        self.SA_lambda = nn.Parameter(torch.tensor(SA_lambda))
+        self.SA_inf = nn.Parameter(torch.tensor(float(SA_inf)))
+        self.SA_lambda = nn.Parameter(torch.tensor(float(SA_lambda)))
         
     def forward(self, x):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1) 
@@ -155,8 +155,8 @@ class ExponentialDecayModel(nn.Module):
         popt, _ = curve_fit(exp_decay, dist, train_y.cpu().numpy(),
                            p0=[0, 10], bounds=([-1, 0], [1, 100]))
         print('Optimized parameters:', f'SA_inf={popt[0]:.3f}', f'SA_lambda={popt[1]:.3f}')
-        self.SA_inf.data = torch.tensor(popt[0])
-        self.SA_lambda.data = torch.tensor(popt[1])
+        self.SA_inf.data = torch.tensor(float(popt[0]))
+        self.SA_lambda.data = torch.tensor(float(popt[1]))
         
         train_pred = self(train_X)
         test_pred = self(test_X)

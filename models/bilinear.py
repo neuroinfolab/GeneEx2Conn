@@ -1,7 +1,7 @@
 from env.imports import *
 from data.data_utils import create_data_loader
 from models.train_val import train_model
-from models.base_models import BaseModel
+# from models.base_models import BaseModel
 
 class BilinearLoss(nn.Module):
     """MSE loss with optional L1/L2 regularization for bilinear models."""
@@ -23,7 +23,7 @@ class BilinearLoss(nn.Module):
             return mse_loss + self.lambda_reg * reg_loss
         return mse_loss
 
-class BilinearLowRank(BaseModel):
+class BilinearLowRank(nn.Module):
     def __init__(self, input_dim, binarize=False, reduced_dim=10, activation='none', learning_rate=0.01, epochs=100, 
                  batch_size=128, regularization='l1', lambda_reg=1.0, shared_weights=True):
         super().__init__()
@@ -33,7 +33,7 @@ class BilinearLowRank(BaseModel):
         self.regularization = regularization
         self.lambda_reg = lambda_reg
         self.shared_weights = shared_weights
-        #self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.linear = nn.Linear(input_dim//2, reduced_dim, bias=False)
         if not shared_weights:
@@ -75,28 +75,28 @@ class BilinearLowRank(BaseModel):
         out2 = self.activation(self.linear(x_j) if self.shared_weights else self.linear2(x_j))
         return torch.sum(out1 * out2, dim=1) # dot product for paired samples
     
-    # def predict(self, loader):
-    #     self.eval()
-    #     predictions = []
-    #     targets = []
-    #     with torch.no_grad():
-    #         for batch_X, batch_y, _, _ in loader:
-    #             batch_X = batch_X.to(self.device)
-    #             batch_preds = self(batch_X).cpu().numpy()
-    #             predictions.append(batch_preds)
-    #             targets.append(batch_y.numpy())
-    #     predictions = np.concatenate(predictions)
-    #     targets = np.concatenate(targets)
-    #     return predictions, targets
+    def predict(self, loader):
+        self.eval()
+        predictions = []
+        targets = []
+        with torch.no_grad():
+            for batch_X, batch_y, _, _ in loader:
+                batch_X = batch_X.to(self.device)
+                batch_preds = self(batch_X).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        return predictions, targets
     
-    # def fit(self, dataset, train_indices, test_indices, verbose=True):
-    #     train_dataset = Subset(dataset, train_indices)
-    #     test_dataset = Subset(dataset, test_indices)
-    #     train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
-    #     test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
-    #     return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+    def fit(self, dataset, train_indices, test_indices, verbose=True):
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
 
-class BilinearCM(BaseModel):
+class BilinearCM(nn.Module):
     def __init__(self, input_dim, binarize=False,learning_rate=0.01, epochs=100, 
                  batch_size=128, regularization='l2', lambda_reg=1.0, bias=True, closed_form=True):
         super().__init__()
@@ -106,7 +106,7 @@ class BilinearCM(BaseModel):
         self.regularization = regularization
         self.lambda_reg = lambda_reg
         self.closed_form = closed_form
-        #self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.bilinear = nn.Bilinear(input_dim//2, input_dim//2, 1, bias=bias)
 

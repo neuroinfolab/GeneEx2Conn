@@ -3,6 +3,7 @@ import os
 import argparse
 from env.imports import *
 from sim.sim import Simulation
+import multiprocessing as mp
 
 relative_root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
@@ -166,6 +167,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run simulation with config file and optional overrides')
     parser.add_argument('config', help='Path to config file')
     parser.add_argument('--model_type', help='Override model type from config')
+    parser.add_argument('--skip_cv', type=bool, help='Override skip_cv from config')
     parser.add_argument('--n_cvs', type=int, help='Override number of CVs from config')
     parser.add_argument('--feature_type', nargs='+', help='Override feature type from config. Options: transcriptome, euclidean')
     parser.add_argument('--random_seed', type=int, help='Override random seed from config')
@@ -179,6 +181,8 @@ if __name__ == "__main__":
     # Override config values if command line arguments are provided
     if args.model_type:
         config['model_type'] = args.model_type
+    if args.skip_cv is not None:
+        config['skip_cv'] = args.skip_cv
     if args.n_cvs is not None: # Update the search_method tuple with new n_cvs value
         search_method = config.get('search_method', ('wandb', 'mse', 5))
         config['search_method'] = (search_method[0], search_method[1], args.n_cvs)
@@ -193,6 +197,7 @@ if __name__ == "__main__":
 
     print(f"Running simulation with config: {args.config}")
     print(f"Model type: {config['model_type']}")
+    print(f"Skip CV: {config['skip_cv']}")
     print(f"Search method: {config['search_method']}")
     print(f"Feature type: {config['feature_type']}")
     print(f"Random seed: {config['random_seed']}")

@@ -19,11 +19,11 @@ parameters:
   regularization:
     values: ['l2']
   lambda_reg:
-    values: [0, 0.00001, 0.001]
+    values: [0.00001, 0.001]
   shared_weights:
     values: [True]
   reduced_dim:
-    values: [5, 8, 10, 12, 15, 20]
+    values: [5, 8, 10, 12, 15, 20, 25]
   epochs:
     values: [100, 125, 150]
 

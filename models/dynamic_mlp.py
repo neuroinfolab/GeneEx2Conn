@@ -1,9 +1,10 @@
 from env.imports import *
 from data.data_utils import create_data_loader
 from models.train_val import train_model
+from models.base_models import BaseModel
 
 class DynamicMLP(nn.Module):
-    def __init__(self, input_dim, binarize, hidden_dims=[256, 128], dropout_rate=0.0, learning_rate=1e-3, weight_decay=0.0, batch_size=64, epochs=100):
+    def __init__(self, input_dim, binarize, hidden_dims=[512, 256, 128], dropout_rate=0.2, learning_rate=1e-3, weight_decay=0.0001, batch_size=512, epochs=100):
         super().__init__()
         self.input_dim = input_dim
         self.binarize = binarize
@@ -55,26 +56,26 @@ class DynamicMLP(nn.Module):
     def forward(self, x):
         return self.model(x).squeeze()
 
-    # def predict(self, loader):
-    #     self.eval()
-    #     predictions = []
-    #     targets = []
-    #     with torch.no_grad():
-    #         for batch_X, batch_y, _, _ in loader:
-    #             batch_X = batch_X.to(self.device)
-    #             batch_preds = self(batch_X).cpu().numpy()
-    #             predictions.append(batch_preds)
-    #             targets.append(batch_y.numpy())
-    #     predictions = np.concatenate(predictions)
-    #     targets = np.concatenate(targets)
-    #     return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
+    def predict(self, loader):
+        self.eval()
+        predictions = []
+        targets = []
+        with torch.no_grad():
+            for batch_X, batch_y, _, _ in loader:
+                batch_X = batch_X.to(self.device)
+                batch_preds = self(batch_X).cpu().numpy()
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
     
-    # def fit(self, dataset, train_indices, test_indices, verbose=True):
-    #     train_dataset = Subset(dataset, train_indices)
-    #     test_dataset = Subset(dataset, test_indices)
+    def fit(self, dataset, train_indices, test_indices, verbose=True):
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
 
-    #     # base data loaders faster than multiple workers
-    #     train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
-    #     test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
+        # base data loaders faster than multiple workers
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
         
-    #     return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)

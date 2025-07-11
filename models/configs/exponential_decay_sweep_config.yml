@@ -10,7 +10,7 @@ parameters:
   binarize:
     value: !!int 0
   SA_inf:
-    values: [-1.0, -0.5, -0.1, 0.0]
+    values: [-1.0, -0.5, -0.2, -0.1, 0.0]
   SA_lambda:
     values: [1.0, 5.0, 10.0, 20.0, 50.0]
 

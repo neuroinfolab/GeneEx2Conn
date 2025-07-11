@@ -200,7 +200,7 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             print("valid genes", valid_genes)
             return genes_data, valid_genes
         
-        if null_model == 'spin' and parcellation == 'S400':
+        if null_model == 'spin' and parcellation == 'S456':
             print('Spinning gene expression')
             spins_df_10k = pd.read_csv('./data/enigma/10000_null_spins.csv')
             spins_df_10k = spins_df_10k.sort_values('mean_error_rank', ascending=True)

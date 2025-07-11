@@ -11,7 +11,7 @@ parameters:
   binarize: 
     value: !!int 0
   n_components:
-    values: [5, 8, 10, 12, 15, 25, 30, 50]
+    values: [5, 10, 12, 25, 30, 50]
   max_iter:
     values: [1000]
   scale:
@@ -33,7 +33,7 @@ best_parameters:
   binarize: 
     value: !!int 0
   n_components:
-    values: [10]
+    values: [25]
   max_iter:
     values: [1000]
   scale:
@@ -41,7 +41,7 @@ best_parameters:
   optimize_encoder:
     values: [False]
   learning_rate:
-    values: [0.0035]
+    values: [0.003]
   batch_size:
     values: [512]
   weight_decay:

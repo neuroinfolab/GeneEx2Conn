@@ -3,7 +3,7 @@
 # Inputs and targets
 feature_type:
   - transcriptome: null
-use_shared_regions: false
+train_shared_regions: false
 test_shared_regions: false
 omit_subcortical: false
 dataset: 'UKBB'
@@ -19,7 +19,7 @@ gene_list: '0.2'
 null_model: 'none'
 
 # Cross-validation
-cv_type: spatial
+cv_type: random
 resolution: 1.0
 random_seed: 42
 search_method: ['wandb', 'mse', 5]

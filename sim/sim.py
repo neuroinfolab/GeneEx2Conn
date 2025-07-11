@@ -366,11 +366,10 @@ class Simulation:
 
                     if self.train_shared_regions: # update train dataset 
                         train_indices_expanded = np.concatenate((train_indices_expanded, train_test_indices_expanded)).astype(train_indices_expanded.dtype)
-                        train_indices = sorted(list(set(train_indices).union(set(test_indices))))
+                        # train_indices = sorted(list(set(train_indices).union(set(test_indices))))
                         train_dataset = Subset(self.region_pair_dataset, train_indices_expanded) # viz not yet implemented for this path
                     elif self.test_shared_regions: # update test dataset
                         test_indices_expanded = np.concatenate((test_indices_expanded, train_test_indices_expanded)).astype(test_indices_expanded.dtype)
-                        # test_indices = sorted(list(set(test_indices).union(set(train_indices))))
                         test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
                 
                 train_loader = DataLoader(train_dataset, batch_size=512, shuffle=False, pin_memory=True)

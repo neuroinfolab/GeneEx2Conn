@@ -188,7 +188,7 @@ class SharedSelfAttentionModel(nn.Module):
         
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss()
-        self.patience = 40
+        self.patience = 45
         self.scheduler = ReduceLROnPlateau(
             self.optimizer,
             mode='min',
@@ -412,7 +412,7 @@ class SharedSelfAttentionCLSModel(nn.Module):
 
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.criterion = nn.MSELoss()
-        self.patience = 40
+        self.patience = 45
         self.scheduler = ReduceLROnPlateau( 
             self.optimizer, 
             mode='min', 
