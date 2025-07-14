@@ -3,10 +3,10 @@
 #SBATCH --account=pr_125_tandon_advanced
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
-#SBATCH --time=04:00:00
+#SBATCH --time=03:00:00
 #SBATCH --mem=96GB
 #SBATCH --gres=gpu:1
-#SBATCH --constraint=rtx8000
+#SBATCH --constraint=h100|a100
 #SBATCH --job-name=gx2c_sim
 #SBATCH --output=/scratch/asr655/neuroinformatics/GeneEx2Conn/sim/logs/sim_%j.out
 #SBATCH --error=/scratch/asr655/neuroinformatics/GeneEx2Conn/sim/logs/sim_%j.err
@@ -20,8 +20,11 @@ singularity exec --nv \
   --overlay /scratch/asr655/main_env/overlay-50G-10M.ext3:ro \
   /scratch/work/public/singularity/cuda12.3.2-cudnn9.0.0-ubuntu-22.04.4.sif \
   /bin/bash -c "source /ext3/env.sh;
-  python -m sim.sim_run experiment_config.yml --model_type dynamic_mlp \
-  --feature_type transcriptome --random_seed 1 \
-  --null_model none --use_folds 0 1 2 3"
+  python -m sim.sim_run experiment_sbatch_schaefer_null_config.yml \
+  --model_type dynamic_mlp \
+  --feature_type transcriptome \
+  --random_seed 42 \
+  --n_cvs 3 \
+  --use_folds 4 5 6 7"
 
 echo "Job Over"

@@ -4,7 +4,7 @@
 feature_type:
   - transcriptome: null
 train_shared_regions: false
-test_shared_regions: false
+test_shared_regions: true
 omit_subcortical: false
 dataset: 'UKBB'
 parcellation: 'S456'
