@@ -367,11 +367,18 @@ def plot_connectome_predictions_full(Y, Y_true, Y_pred, indices, network_labels=
     # Calculate prediction differences for region pairs
     diff = abs(Y_true - Y_pred)
     
+    # Create matrix for predicted values
+    pred_matrix = np.zeros_like(split_mask)
+    
     # For each pair of regions in indices
     n_pairs = len(list(combinations(indices, 2)))
     for idx, (i, j) in enumerate(combinations(indices, 2)): # Each pair appears twice in diff - once in each direction
         split_mask[i,j] = diff[2*idx]   # First direction: i->j is at 2*idx
         split_mask[j,i] = diff[2*idx + 1]   # Second direction: j->i is at 2*idx + 1
+        
+        # Also store the actual predictions
+        pred_matrix[i,j] = Y_pred[2*idx]
+        pred_matrix[j,i] = Y_pred[2*idx + 1]
     
     # Process connections with shared indices if provided
     if shared_indices is not None:
@@ -382,7 +389,30 @@ def plot_connectome_predictions_full(Y, Y_true, Y_pred, indices, network_labels=
                 if idx < len(diff):  # Ensure index is within bounds
                     split_mask[i,j] = diff[idx]
                     split_mask[j,i] = diff[idx]
+                    
+                    # Also store the actual predictions
+                    pred_matrix[i,j] = Y_pred[idx]
+                    pred_matrix[j,i] = Y_pred[idx]
             
+    # Split mask
+    print(f"Split mask type: {type(split_mask)}")
+    print(f"Split mask shape: {split_mask.shape}")
+    print("Split mask:")
+    print(split_mask)
+    
+    print(f"Pred matrix type: {type(pred_matrix)}")
+    print(f"Pred matrix shape: {pred_matrix.shape}")
+    print("Pred matrix:")
+    print(pred_matrix)
+    
+    save_pred_matrix = True
+    if save_pred_matrix:
+        fold = 0
+        while os.path.exists(f"pred_matrix_fold{fold}.npy"):
+            fold += 1
+        np.save(f"pred_matrix_fold{fold}.npy", pred_matrix)
+
+
     plt.figure(figsize=(16, 6))
     
     # Plot full connectome with network labels
