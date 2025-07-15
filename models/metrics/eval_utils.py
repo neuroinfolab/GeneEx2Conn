@@ -394,19 +394,17 @@ def plot_connectome_predictions_full(Y, Y_true, Y_pred, indices, network_labels=
                     pred_matrix[i,j] = Y_pred[idx]
                     pred_matrix[j,i] = Y_pred[idx]
             
-    # Split mask
-    print(f"Split mask type: {type(split_mask)}")
-    print(f"Split mask shape: {split_mask.shape}")
-    print("Split mask:")
-    print(split_mask)
-    
-    print(f"Pred matrix type: {type(pred_matrix)}")
-    print(f"Pred matrix shape: {pred_matrix.shape}")
-    print("Pred matrix:")
-    print(pred_matrix)
-    
-    save_pred_matrix = True
+    save_pred_matrix = False
     if save_pred_matrix:
+        print(f"Split mask type: {type(split_mask)}")
+        print(f"Split mask shape: {split_mask.shape}")
+        print("Split mask:")
+        print(split_mask)
+        
+        print(f"Pred matrix type: {type(pred_matrix)}")
+        print(f"Pred matrix shape: {pred_matrix.shape}")
+        print("Pred matrix:")
+        print(pred_matrix)
         fold = 0
         save_dir = f"notebooks/NeurIPS/schaefer_preds/{region_pair_dataset.dataset}"
         os.makedirs(save_dir, exist_ok=True)
