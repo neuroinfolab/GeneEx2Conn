@@ -222,6 +222,7 @@ class ModelEvaluator:
                 # Basic plots: connectome predictions and distance scatter
                 plot_connectome_predictions_full(self.Y, y_true, y_pred, indices, 
                                                 self.network_labels, self.binarize, self.config,
+                                                self.region_pair_dataset,
                                                 shared_indices=self.shared_indices if mode == 'test' and self.test_shared_regions else None)
                 if square:
                     plot_connectome_predictions_subset(y_true, y_pred, self.config)

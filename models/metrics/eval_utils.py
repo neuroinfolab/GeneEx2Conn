@@ -356,7 +356,7 @@ def plot_connectome_predictions_subset(Y_true, Y_pred, config):
     plt.show()
     return plt.gcf()
 
-def plot_connectome_predictions_full(Y, Y_true, Y_pred, indices, network_labels=None, binarize=False, config=None, shared_indices=None):
+def plot_connectome_predictions_full(Y, Y_true, Y_pred, indices, network_labels=None, binarize=False, config=None, region_pair_dataset=None, shared_indices=None):
     """Generate full connectome visualization with prediction differences"""
     n = int(Y.shape[0])  # Get dimensions of square connectome
     if binarize: 
@@ -408,9 +408,11 @@ def plot_connectome_predictions_full(Y, Y_true, Y_pred, indices, network_labels=
     save_pred_matrix = True
     if save_pred_matrix:
         fold = 0
-        while os.path.exists(f"pred_matrix_fold{fold}.npy"):
+        save_dir = f"notebooks/NeurIPS/schaefer_preds/{region_pair_dataset.dataset}"
+        os.makedirs(save_dir, exist_ok=True)
+        while os.path.exists(f"{save_dir}/pred_matrix_fold{fold}.npy"):
             fold += 1
-        np.save(f"pred_matrix_fold{fold}.npy", pred_matrix)
+        np.save(f"{save_dir}/pred_matrix_fold{fold}.npy", pred_matrix)
 
 
     plt.figure(figsize=(16, 6))

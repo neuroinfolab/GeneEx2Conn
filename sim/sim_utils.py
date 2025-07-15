@@ -307,6 +307,7 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
         group=f"sweep_{sweep_id}",
         tags=[
             "inner cross validation",
+            f"dataset_{dataset.dataset}",
             f'cv_type_{cv_type}',
             f"fold{outer_fold_idx}",
             f"model_{model_type}",

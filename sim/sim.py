@@ -320,6 +320,7 @@ class Simulation:
                                                 group=f"sweep_{sweep_id}" if sweep_id else None,
                                                 config=best_config,
                                                 tags=["final_eval", 
+                                                    f"dataset_{self.dataset}",
                                                     f"cv_type_{self.cv_type}", 
                                                     f"outerfold_{fold_idx}",
                                                     f"model_{self.model_type}",

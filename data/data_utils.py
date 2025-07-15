@@ -395,11 +395,12 @@ class RegionPairDataset(Dataset):
         self.expanded_idx_to_true_pair = {v: k for k, v in self.true_pair_to_expanded_idx.items()}
     
         # Load individualized connectomes
-        if dataset == 'UKBB':
+        self.dataset = dataset
+        if self.dataset == 'UKBB':
             data_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data/Penn_UKBB_data/npy/S456'
-        elif dataset == 'HCP':
+        elif self.dataset == 'HCP':
             data_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data//HCP1200_fMRI/npy/'
-        elif dataset == 'BHA2':
+        elif self.dataset == 'BHA2':
             data_dir = f'/scratch/asr655/neuroinformatics/GeneEx2Conn_data/BHA2/{parcellation}/npy'
         self.connectomes = np.load(f'{data_dir}/connectomes_upper.npy', allow_pickle=True)
         self.masks = np.load(f'{data_dir}/masks.npy', allow_pickle=True)
