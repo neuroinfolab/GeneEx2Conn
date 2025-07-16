@@ -32,8 +32,8 @@ import matplotlib.colors as mcolors
 import plotly.express as px
 import plotly.graph_objects as go
 from matplotlib.patches import Patch
-# import umap
-# import umap.umap_ as umap
+import umap
+import umap.umap_ as umap
 from mpl_toolkits.mplot3d import Axes3D
 
 # stats 
@@ -100,11 +100,11 @@ from torchmetrics import PearsonCorrCoef
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 # gene expression
-# import scib
-# import scanpy as sc
-# import inmoose
-# from anndata import AnnData
-# from inmoose.pycombat import pycombat_norm, pycombat_seq
+import scib
+import scanpy as sc
+import inmoose
+from anndata import AnnData
+from inmoose.pycombat import pycombat_norm, pycombat_seq
 
 # network analysis
 import networkx as nx
