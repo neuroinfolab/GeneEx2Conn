@@ -6,7 +6,7 @@ from env.imports import *
 from sim.sim import Simulation
 
 relative_root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
+absolute_root_path = '/home/sg8603/Gene2Conn'
 sys.path.append(absolute_root_path)
 
 
@@ -31,7 +31,8 @@ def single_sim_run(
     model_type='dynamic_mlp',
     use_gpu=True, 
     null_model='none',
-    use_folds=[0, 1, 2, 3]
+    use_folds=[0, 1, 2, 3],
+    token_encoder_type=None
 ):
     """
     Runs a single simulation for a given feature type and model configuration.
@@ -138,7 +139,8 @@ def single_sim_run(
                     model_type=model_type,
                     gpu_acceleration=use_gpu,
                     skip_cv=skip_cv,
-                    null_model=null_model
+                    null_model=null_model,
+                    token_encoder_type=token_encoder_type
                 )
     
     if search_method[0] == 'wandb':
@@ -167,6 +169,7 @@ if __name__ == "__main__":
     parser.add_argument('--random_seed', type=int, help='Override random seed from config')
     parser.add_argument('--null_model', help='Override null model type from config')
     parser.add_argument('--use_folds', nargs='+', type=int, help='Override use folds from config')
+    parser.add_argument('--token_encoder_type', help='Override token encoder type for transformer models. Options: linear, mlp, conv1d')
     
     args = parser.parse_args()
 
@@ -186,6 +189,8 @@ if __name__ == "__main__":
         config['null_model'] = args.null_model
     if args.use_folds:
         config['use_folds'] = args.use_folds
+    if args.token_encoder_type:
+        config['token_encoder_type'] = args.token_encoder_type
 
     print(f"Running simulation with config: {args.config}")
     print(f"Model type: {config['model_type']}")
@@ -194,6 +199,7 @@ if __name__ == "__main__":
     print(f"Random seed: {config['random_seed']}")
     print(f"Null model: {config['null_model']}")
     print(f"Use folds: {config['use_folds']}")
+    print(f"Token encoder type: {config.get('token_encoder_type', 'default (from model)')}")
     print(torch.cuda.is_available())
     print(os.environ.get("CUDA_VISIBLE_DEVICES"))
     for i in range(torch.cuda.device_count()):

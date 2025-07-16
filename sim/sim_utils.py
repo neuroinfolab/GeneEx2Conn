@@ -52,7 +52,7 @@ def print_system_usage():
 
 
 # CONFIG LOADING
-def load_sweep_config(file_path, input_dim, binarize):
+def load_sweep_config(file_path, input_dim, binarize, token_encoder_type=None):
     """
     Load a sweep config file and update the input_dim parameter.
     """
@@ -63,10 +63,13 @@ def load_sweep_config(file_path, input_dim, binarize):
     
     if binarize is not None:
         config['parameters']['binarize']['value'] = binarize
+    
+    if token_encoder_type is not None:
+        config['parameters']['token_encoder_type'] = {'value': token_encoder_type}
 
     return config
 
-def load_best_parameters(yaml_file_path, input_dim, binarize):
+def load_best_parameters(yaml_file_path, input_dim, binarize, token_encoder_type=None):
     with open(yaml_file_path, 'r') as file:
         config = yaml.safe_load(file)
     
@@ -81,6 +84,9 @@ def load_best_parameters(yaml_file_path, input_dim, binarize):
     
     if binarize is not None:
         best_config['binarize'] = binarize
+    
+    if token_encoder_type is not None:
+        best_config['token_encoder_type'] = token_encoder_type
     
     return best_config
 
@@ -271,7 +277,7 @@ def extract_model_params(model):
 
 
 # WANDB
-def train_sweep_torch(config, model_type, train_indices, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, impute_strategy, sort_genes, null_model):
+def train_sweep_torch(config, model_type, train_indices, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, impute_strategy, sort_genes, null_model, token_encoder_type=None):
     """
     Training function for W&B sweeps for deep learning models.
     
@@ -317,6 +323,11 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
         reinit=True
     )
     sweep_config = wandb.config
+    
+    # Add token_encoder_type to sweep_config if provided
+    if token_encoder_type is not None:
+        sweep_config = dict(sweep_config)
+        sweep_config['token_encoder_type'] = token_encoder_type
     
     inner_fold_metrics = {'final_train_loss': [], 'final_val_loss': [], 
                           'final_train_pearson': [], 'final_val_pearson': []}

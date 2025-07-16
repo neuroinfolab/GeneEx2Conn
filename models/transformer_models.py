@@ -1,7 +1,7 @@
 from env.imports import *
 from data.data_utils import create_data_loader
 from models.train_val import train_model
-import torch
+from models.token_encoder import TokenEncoderFactory
 import torch.nn.functional as F
 from flash_attn import flash_attn_func, flash_attn_qkvpacked_func
 from torch.cuda.amp import autocast
@@ -116,9 +116,9 @@ class FastSelfAttentionBlock(nn.Module):
             return x
 
 class FastSelfAttentionEncoder(nn.Module):
-    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_alibi=False):
+    def __init__(self, token_encoder, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_alibi=False):
         super().__init__()
-        self.input_projection = nn.Linear(token_encoder_dim, d_model)
+        self.token_encoder = token_encoder
         self.layers = nn.ModuleList([
             FastSelfAttentionBlock(d_model, nhead, dropout, use_alibi=use_alibi)
             for _ in range(num_layers)
@@ -127,9 +127,9 @@ class FastSelfAttentionEncoder(nn.Module):
 
     def forward(self, x):
         batch_size, total_features = x.shape
-        L = total_features // self.input_projection.in_features
+        L = total_features // self.token_encoder.token_dim
         x = x.view(batch_size, L, -1)
-        x = self.input_projection(x)
+        x = self.token_encoder(x)
 
         for layer in self.layers:
             x = layer(x)
@@ -139,7 +139,7 @@ class FastSelfAttentionEncoder(nn.Module):
         return x
 
 class SharedSelfAttentionModel(nn.Module):
-    def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128],
+    def __init__(self, input_dim, binarize=False, token_encoder_dim=20, token_encoder_type='conv1d', d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128],
                  use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
                  batch_size=256, aug_prob=0.0, epochs=100, num_workers=2, prefetch_factor=2):
         super().__init__()
@@ -159,8 +159,14 @@ class SharedSelfAttentionModel(nn.Module):
         self.prefetch_factor = prefetch_factor
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        token_encoder = TokenEncoderFactory.create(
+            token_encoder_type,
+            token_dim=self.token_encoder_dim,
+            d_model=self.d_model
+        )
+
         self.encoder = FastSelfAttentionEncoder(
-            token_encoder_dim=self.token_encoder_dim,
+            token_encoder=token_encoder,
             d_model=self.d_model,
             output_dim=self.encoder_output_dim,
             nhead=self.nhead,
@@ -267,15 +273,14 @@ class SharedSelfAttentionModel(nn.Module):
 
 # === SelfAttentionCLSEncoder using FastSelfAttentionBlock, FlashAttention, and CLS token === # 
 class SelfAttentionCLSEncoder(nn.Module):    
-    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, cls_init='spatial_learned', use_alibi=False):
+    def __init__(self, token_encoder, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, cls_init='spatial_learned', use_alibi=False):
         super().__init__()
-        self.token_encoder_dim = token_encoder_dim
+        self.token_encoder = token_encoder
         self.d_model = d_model
         self.cls_init = cls_init
         self.use_alibi = use_alibi
         
-        # Token projection
-        self.input_projection = nn.Linear(token_encoder_dim, d_model)
+        # Token projection is now handled by token_encoder
         self.coord_to_cls = nn.Linear(3, d_model)
         
         @staticmethod
@@ -325,10 +330,10 @@ class SelfAttentionCLSEncoder(nn.Module):
     
     def forward(self, gene_exp, coords):
         batch_size, total_features = gene_exp.shape
-        L = total_features // self.token_encoder_dim
+        L = total_features // self.token_encoder.token_dim
 
-        gene_exp = gene_exp.view(batch_size, L, self.token_encoder_dim)
-        x_proj = self.input_projection(gene_exp)  # (B, L, d_model)
+        gene_exp = gene_exp.view(batch_size, L, self.token_encoder.token_dim)
+        x_proj = self.token_encoder(gene_exp)  # (B, L, d_model)
 
         if self.cls_init == 'random_learned': # Optionally replace true coordinates with randomized - like a summary token
             coords = self.replace_coords_with_remapped(coords)  # (B, 3)
@@ -346,7 +351,7 @@ class SelfAttentionCLSEncoder(nn.Module):
 
 
 class SharedSelfAttentionCLSModel(nn.Module):
-    def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
+    def __init__(self, input_dim, binarize=False, token_encoder_dim=20, token_encoder_type='linear', d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
                  cls_init='spatial_learned', use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
                  batch_size=128, epochs=100, aug_prob=0.0, num_workers=2, prefetch_factor=2):
         super().__init__()
@@ -376,9 +381,15 @@ class SharedSelfAttentionCLSModel(nn.Module):
         self.prefetch_factor=prefetch_factor
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        token_encoder = TokenEncoderFactory.create(
+            token_encoder_type,
+            token_dim=self.token_encoder_dim,
+            d_model=self.d_model
+        )
+
         # Create self-attention encoder
         self.encoder = SelfAttentionCLSEncoder(
-                                            token_encoder_dim=self.token_encoder_dim,
+                                            token_encoder=token_encoder,
                                             d_model=self.d_model,
                                             output_dim=self.encoder_output_dim, 
                                             nhead=self.nhead, 
@@ -557,9 +568,9 @@ class CrossAttentionBlock(nn.Module):
             return x
 
 class CrossAttentionEncoder(nn.Module):
-    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=2, dropout=0.1):
+    def __init__(self, token_encoder, d_model, output_dim, nhead=4, num_layers=2, dropout=0.1):
         super().__init__()
-        self.input_projection = nn.Linear(token_encoder_dim, d_model)
+        self.token_encoder = token_encoder
         self.layers = nn.ModuleList([
             CrossAttentionBlock(d_model, nhead, dropout)
             for _ in range(num_layers)
@@ -568,14 +579,14 @@ class CrossAttentionEncoder(nn.Module):
 
     def forward(self, x_i, x_j):
         batch_size = x_i.shape[0]
-        L_i = x_i.shape[1] // self.input_projection.in_features
-        L_j = x_j.shape[1] // self.input_projection.in_features
+        L_i = x_i.shape[1] // self.token_encoder.token_dim
+        L_j = x_j.shape[1] // self.token_encoder.token_dim
 
         x_i = x_i.view(batch_size, L_i, -1)
         x_j = x_j.view(batch_size, L_j, -1)
 
-        q = self.input_projection(x_i)
-        kv = self.input_projection(x_j)
+        q = self.token_encoder(x_i)
+        kv = self.token_encoder(x_j)
 
         for layer in self.layers:
             q = layer(q, kv)
@@ -586,7 +597,7 @@ class CrossAttentionEncoder(nn.Module):
 
 # Update CrossAttentionModel to pass num_layers to encoder
 class CrossAttentionModel(nn.Module):
-    def __init__(self, input_dim, binarize=False, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128],
+    def __init__(self, input_dim, binarize=False, token_encoder_dim=20, token_encoder_type='linear', d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128],
                  transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
                  batch_size=128, epochs=100):
 
@@ -601,8 +612,14 @@ class CrossAttentionModel(nn.Module):
         self.epochs = epochs
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        token_encoder = TokenEncoderFactory.create(
+            token_encoder_type,
+            token_dim=self.token_encoder_dim,
+            d_model=self.d_model
+        )
+
         self.encoder = CrossAttentionEncoder(
-            token_encoder_dim=self.token_encoder_dim,
+            token_encoder=token_encoder,
             d_model=self.d_model,
             output_dim=self.encoder_output_dim,
             nhead=nhead,

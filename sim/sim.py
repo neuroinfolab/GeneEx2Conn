@@ -67,14 +67,14 @@ from sim.sim_utils import (
     load_best_parameters
 )
 
-absolute_root_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn'
+absolute_root_path = '/home/sg8603/Gene2Conn'
 
 
 class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, resolution=1.0, random_seed=42,
                  omit_subcortical=False, parcellation='S100', impute_strategy='mirror_interpolate', sort_genes='expression', 
                  gene_list='0.2', hemisphere='both', use_shared_regions=False, test_shared_regions=False, 
-                 connectome_target='FC', binarize=False, skip_cv=False, null_model=False):        
+                 connectome_target='FC', binarize=False, skip_cv=False, null_model=False, token_encoder_type=None):        
         """
         Initialization of simulation parameters
         """
@@ -91,6 +91,7 @@ class Simulation:
         self.binarize = binarize
         self.skip_cv = skip_cv
         self.null_model = null_model
+        self.token_encoder_type = token_encoder_type
         self.results = []
     
     def load_data(self):
@@ -222,7 +223,7 @@ class Simulation:
 
         if self.skip_cv:
             sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-            best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
+            best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize, token_encoder_type=self.token_encoder_type)
             best_val_loss = 0.0 # no CV --> no best val loss
         else:
             def train_sweep_wrapper(config=None):
@@ -247,7 +248,8 @@ class Simulation:
                     binarize=self.binarize,
                     impute_strategy=self.impute_strategy,
                     sort_genes=self.sort_genes,
-                    null_model=self.null_model
+                    null_model=self.null_model,
+                    token_encoder_type=self.token_encoder_type
                 )
             
             # Run sweep
@@ -263,6 +265,10 @@ class Simulation:
             best_config = best_run.config
         
         print('BEST CONFIG', best_config)
+
+        # Override with token_encoder_type if provided
+        if self.token_encoder_type is not None:
+            best_config['token_encoder_type'] = self.token_encoder_type
 
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]
@@ -290,7 +296,7 @@ class Simulation:
         if (search_method[0] == 'wandb' or track_wandb):
             input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
             sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-            sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
+            sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize, token_encoder_type=self.token_encoder_type)
             sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
             print('Initialized sweep with ID:', sweep_id)
 
