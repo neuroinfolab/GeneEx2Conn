@@ -6,7 +6,7 @@ import ipywidgets as widgets
 import imageio
 from data.data_load import load_transcriptome, load_network_labels, load_connectome
 
-def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subcortical=False, 
+def plot_connectome(parcellation='S100', dataset='UKBB', measure='FC', omit_subcortical=False, 
                   hemisphere='both', add_network_labels=False, add_hemisphere_labels=False,
                   title=None, fontsize=24, figsize=(12, 10), show_ticks=True):
     """
@@ -125,7 +125,7 @@ def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subc
                 ticks = [25, 75, 107]
                 labels = ['LH', 'RH', 'SCTX']
                 lines = [0, 50, 100, 114]
-        elif parcellation == 'S400':
+        elif parcellation == 'S456':
             if omit_subcortical:
                 ticks = [100, 300]
                 labels = ['LH', 'RH']
@@ -149,7 +149,7 @@ def plot_connectome(parcellation='S100', dataset='AHBA', measure='FC', omit_subc
     # Set default title based on measure if not provided
     if title is None:
         title = 'Structural Connectivity' if measure == 'SC' else 'Functional Connectivity'
-    plt.title(title, fontsize=fontsize)
+    plt.title(title, fontsize=fontsize+4)
     
     # Add colorbar
     plt.tight_layout()
@@ -212,7 +212,7 @@ def plot_transcriptome(parcellation='S100', gene_list='0.2', dataset='AHBA', run
                 left_ay.set_yticks([25, 75, 107], labels=['LH', 'RH', 'SCTX'])
                 left_ay_lines = ax.secondary_yaxis('left')
                 left_ay_lines.set_yticks([0, 50, 100, 114], labels=[])
-        elif parcellation == 'S400':
+        elif parcellation == 'S456':
             if omit_subcortical:
                 left_ay.set_yticks([100, 300], labels=['LH', 'RH'])
                 left_ay_lines = ax.secondary_yaxis('left')
