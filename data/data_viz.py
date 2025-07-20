@@ -554,13 +554,13 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
         ]
         legend_labels = ['Train Regions', 'Test Regions']
         
-        if Y is not None:
-            if show_train_edges:
-                legend_elements.append(Line2D([0], [0], color='#1f77b4', alpha=0.6, linewidth=2))
-                legend_labels.append('Train Connections')
-            if show_test_edges:
-                legend_elements.append(Line2D([0], [0], color='orange', alpha=0.6, linewidth=2))
-                legend_labels.append('Test Connections')
+        # if Y is not None:
+        #     if show_train_edges:
+        #         legend_elements.append(Line2D([0], [0], color='#1f77b4', alpha=0.6, linewidth=2))
+        #         legend_labels.append('Train Connections')
+        #     if show_test_edges:
+        #         legend_elements.append(Line2D([0], [0], color='orange', alpha=0.6, linewidth=2))
+        #         legend_labels.append('Test Connections')
         
         # Adjust legend font size and position
         ax.legend(legend_elements, legend_labels, 
@@ -590,7 +590,7 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
         # Create the glass directory if it doesn't exist
         os.makedirs('glass', exist_ok=True)
         # Save as GIF
-        imageio.mimsave(f"glass/{gif_path}", figures, fps=1)
+        imageio.mimsave(f"glass/{gif_path}", figures, fps=0.75, loop=0)
         print(f"GIF saved to glass/{gif_path}")
 
 
@@ -845,7 +845,7 @@ def plot_train_test_reordered_connectome(Y, train_indices, test_indices, measure
 
     # Title and colorbar
     ax.set_title(f'{title_prefix} — Reordered Connectome', fontsize=fontsize)
-    plt.colorbar(cax, ax=ax, shrink=0.8, pad=0.02).ax.tick_params(labelsize=fontsize - 4)
+    # plt.colorbar(cax, ax=ax, shrink=0.8, pad=0.02).ax.tick_params(labelsize=fontsize - 4)
 
     # Remove ticks
     ax.set_xticks([])
