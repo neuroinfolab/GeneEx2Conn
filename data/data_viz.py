@@ -7,8 +7,9 @@ import imageio
 from data.data_load import load_transcriptome, load_network_labels, load_connectome
 
 def plot_connectome(parcellation='S100', dataset='UKBB', measure='FC', omit_subcortical=False, 
-                  hemisphere='both', add_network_labels=False, add_hemisphere_labels=False,
-                  title=None, fontsize=24, figsize=(12, 10), show_ticks=True):
+                  hemisphere='both', add_subnetwork_boxes=False, add_subnetwork_labels=False,
+                  subnetwork_labels_to_show=None, add_hemisphere_labels=False, title=None, 
+                  fontsize=24, figsize=(12, 10), show_ticks=True):
     """
     Function to plot the connectome with either network or hemisphere labels.
     
@@ -19,14 +20,16 @@ def plot_connectome(parcellation='S100', dataset='UKBB', measure='FC', omit_subc
     measure (str): Connectivity type ('FC', 'SC'). Default: 'FC'
     omit_subcortical (bool): Exclude subcortical regions. Default: False
     hemisphere (str): Brain hemisphere ('both', 'left', 'right'). Default: 'both'
-    add_network_labels (bool): Whether to add network labels. Default: False
+    add_subnetwork_boxes (bool): Whether to add boxes around subnetworks. Default: False
+    add_subnetwork_labels (bool): Whether to add subnetwork labels on axes. Default: False
+    subnetwork_labels_to_show (list): List of subnetwork labels to display. If None, shows all. Default: None
     add_hemisphere_labels (bool): Whether to add hemisphere labels. Default: False
     title (str): Title for the plot. Default: None
     fontsize (int): Font size for labels. Default: 20
     figsize (tuple): Figure size. Default: (12, 10)
     show_ticks (bool): Whether to show axis ticks. Default: True
     """
-    if add_network_labels and add_hemisphere_labels:
+    if add_hemisphere_labels and (add_subnetwork_boxes or add_subnetwork_labels):
         raise ValueError("Cannot display both network and hemisphere labels. Please choose one.")
     
     # Load the connectome data
@@ -56,7 +59,7 @@ def plot_connectome(parcellation='S100', dataset='UKBB', measure='FC', omit_subc
     for spine in ax.spines.values():
         spine.set_linewidth(2.5)
     
-    if add_network_labels:
+    if add_subnetwork_boxes or add_subnetwork_labels:
         # Get network labels
         _, network_labels = load_network_labels(
             parcellation=parcellation,
@@ -64,49 +67,54 @@ def plot_connectome(parcellation='S100', dataset='UKBB', measure='FC', omit_subc
             hemisphere=hemisphere
         )
         
-        # Draw boxes around network blocks
-        prev_label = network_labels[0]
-        start_idx = 0
+        if add_subnetwork_boxes:
+            # Draw boxes around network blocks
+            prev_label = network_labels[0]
+            start_idx = 0
+            
+            for i in range(1, len(network_labels)):
+                if network_labels[i] != prev_label:
+                    # Draw rectangle around the block
+                    rect = plt.Rectangle((start_idx-0.5, start_idx-0.5), 
+                                      i-start_idx, i-start_idx,
+                                      fill=False, color='black', linewidth=2)
+                    ax.add_patch(rect)
+                    start_idx = i
+                    prev_label = network_labels[i]
+            
+            # Add the last block
+            rect = plt.Rectangle((start_idx-0.5, start_idx-0.5),
+                               len(network_labels)-start_idx, 
+                               len(network_labels)-start_idx,
+                               fill=False, color='black', linewidth=2)
+            ax.add_patch(rect)
         
-        for i in range(1, len(network_labels)):
-            if network_labels[i] != prev_label:
-                # Draw rectangle around the block
-                rect = plt.Rectangle((start_idx-0.5, start_idx-0.5), 
-                                  i-start_idx, i-start_idx,
-                                  fill=False, color='black', linewidth=2)
-                ax.add_patch(rect)
-                start_idx = i
-                prev_label = network_labels[i]
-        
-        # Add the last block
-        rect = plt.Rectangle((start_idx-0.5, start_idx-0.5),
-                           len(network_labels)-start_idx, 
-                           len(network_labels)-start_idx,
-                           fill=False, color='black', linewidth=2)
-        ax.add_patch(rect)
-        
-        # Create tick positions and labels
-        tick_positions = []
-        tick_labels = []
-        start_idx = 0
-        prev_label = network_labels[0]
-        
-        for i in range(1, len(network_labels)):
-            if network_labels[i] != prev_label:
-                tick_positions.append((start_idx + i - 1) / 2)
+        if add_subnetwork_labels and show_ticks:
+            # Create tick positions and labels
+            tick_positions = []
+            tick_labels = []
+            start_idx = 0
+            prev_label = network_labels[0]
+            
+            for i in range(1, len(network_labels)):
+                if network_labels[i] != prev_label:
+                    # Only add label if it's in the list to show (or if showing all)
+                    if subnetwork_labels_to_show is None or prev_label in subnetwork_labels_to_show:
+                        tick_positions.append((start_idx + i - 1) / 2)
+                        tick_labels.append(prev_label)
+                    start_idx = i
+                    prev_label = network_labels[i]
+            
+            # Add the last group
+            if subnetwork_labels_to_show is None or prev_label in subnetwork_labels_to_show:
+                tick_positions.append((start_idx + len(network_labels) - 1) / 2)
                 tick_labels.append(prev_label)
-                start_idx = i
-                prev_label = network_labels[i]
-        
-        # Add the last group
-        tick_positions.append((start_idx + len(network_labels) - 1) / 2)
-        tick_labels.append(prev_label)
-        
-        if show_ticks:
+            
             # Add network labels
-            plt.xticks(tick_positions, tick_labels, rotation=45, ha='right', fontsize=fontsize-4)
-            plt.yticks(tick_positions, tick_labels, fontsize=fontsize-4)
-        else:
+            plt.xticks(tick_positions, tick_labels, rotation=45, ha='right', fontsize=fontsize-6)
+            plt.yticks(tick_positions, tick_labels, fontsize=fontsize-6)
+        
+        if not show_ticks:
             ax.set_xticks([])
             ax.set_yticks([])
         

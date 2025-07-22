@@ -490,29 +490,40 @@ def plot_connectome_predictions_full(Y, Y_true, Y_pred, indices, network_labels=
     plt.tight_layout()
     plt.show()
     return plt.gcf()
-
+    
 def plot_distance_scatter(y_true, y_pred, distances, mode, config):
     """Generate distance-colored scatter plot"""
     plt.figure(figsize=config.plot_params['figsize'])
     
-    # Compute correlation
+    # Get distance-based metrics
+    dist_metrics = compute_distance_metrics(y_true, y_pred, distances)
+    
+    # Compute overall correlation
     r = pearsonr(y_true, y_pred)[0]
     
     scatter = plt.scatter(y_true, y_pred, c=distances, cmap='viridis',
                          alpha=config.plot_params['alpha'], 
                          s=config.plot_params['point_size'])
     
-    # Add line of best fit and reference lines
+    # Add reference lines
     z = np.polyfit(y_true, y_pred, 1)
-    plt.plot(y_true, np.poly1d(z)(y_true), "r:", alpha=0.5, label=f'Line of best fit (r={r:.3f})')
+    plt.plot(y_true, np.poly1d(z)(y_true), "r:", alpha=0.5)
     plt.axhline(y=0, color='black', linestyle='--', alpha=0.3)
     plt.axvline(x=0, color='black', linestyle='--', alpha=0.3)
+    
+    # Add correlation text box
+    text = f'Overall r = {r:.3f}\n'
+    text += f'Short-range r = {dist_metrics["short_r"]:.3f}\n'
+    text += f'Mid-range r = {dist_metrics["mid_r"]:.3f}\n'
+    text += f'Long-range r = {dist_metrics["long_r"]:.3f}'
+    plt.text(0.05, 0.95, text, transform=plt.gca().transAxes, 
+             bbox=dict(facecolor='white', alpha=0.8),
+             verticalalignment='top')
     
     # Formatting
     plt.xlabel('True Values', fontsize=config.plot_params['font_size'])
     plt.ylabel('Predicted Values', fontsize=config.plot_params['font_size'])
     plt.title(f'{config.mode_title} Distance-Based Predictions')
-    plt.legend()
     
     # Set equal aspect ratio and limits
     plt.gca().set_aspect('equal')
