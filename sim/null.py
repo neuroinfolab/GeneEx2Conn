@@ -1012,11 +1012,11 @@ def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='CM', n_perms=1
 
     # Get spin indices
     cortical_spins_list = spins_df['cortical_spins'].tolist()[:n_perms]
-    cortical_spins_list = [eval(x) for x in cortical_spins_list]
+    #cortical_spins_list = [eval(x) for x in cortical_spins_list]
     cortical_spin_indices = np.array(cortical_spins_list)
     
     subcortical_spins_list = spins_df['subcortical_spins'].tolist()[:n_perms]
-    subcortical_spins_list = [eval(x) for x in subcortical_spins_list]
+    #subcortical_spins_list = [eval(x) for x in subcortical_spins_list]
     subcortical_spin_indices = np.array(subcortical_spins_list)
 
     # Fit model to true data
@@ -1070,14 +1070,14 @@ def run_spin_test(X, Y_true, valid_indices, spins_df, model_type='CM', n_perms=1
     p_value = max(1/(n_perms + 1), np.mean(null_corrs >= empirical_corr))
 
     # Plot null distribution
-    plt.figure(figsize=(10, 6))
-    plt.hist(null_corrs, bins=50, alpha=0.6, color='gray', label='Null distribution')
+    plt.figure(figsize=(7, 4))
+    plt.hist(null_corrs, bins=25, alpha=0.6, color='gray', label='Null distribution')
     plt.axvline(empirical_corr, color='red', linestyle='--', 
-                label=f'Empirical (r={empirical_corr:.3f}, p={p_value:.3f})')
+                label=f'Empirical (r={empirical_corr:.4f}, p={p_value:.4f})')
     plt.xlabel('Pearson correlation')
     plt.ylabel('Count')
     plt.title(f'{model_type} Spin Test Null Distribution')
-    plt.legend()
+    #plt.legend()
     plt.show()
     
     return empirical_corr, p_value, null_corrs

@@ -52,7 +52,7 @@ best_parameters:
   binarize:
     value: !!int 0
   token_encoder_dim:
-    values: [60]
+    values: [20]
   d_model:
     values: [128]
   encoder_output_dim:
@@ -60,7 +60,7 @@ best_parameters:
   use_alibi:
     values: [True]
   nhead:
-    values: [4] 
+    values: [4]
   num_layers:
     values: [4]
   deep_hidden_dims:

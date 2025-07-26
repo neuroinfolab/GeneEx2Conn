@@ -83,6 +83,7 @@ def load_best_parameters(yaml_file_path, input_dim, binarize):
         best_config['binarize'] = binarize
     
     return best_config
+
 # CROSS-VALIDATION
 def drop_test_network(cv_type, network_dict, test_indices, test_fold_idx):
         """
@@ -101,7 +102,7 @@ def drop_test_network(cv_type, network_dict, test_indices, test_fold_idx):
         # Create a copy of the original dictionary
         new_dict = network_dict.copy()
     
-        if cv_type == 'schaefer':
+        if cv_type == 'schaefer' or cv_type == 'lobe':
             # For Schaefer networks, find and remove network containing test indices
             for network_name, region_indices in new_dict.items():
                 if all(idx in region_indices for idx in test_indices):
@@ -343,6 +344,13 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
         torch._dynamo.reset()  # Clear compiled graph cache
         gc.collect()
         torch.cuda.empty_cache()
+
+        # Randomly select one fold to evaluate from the total number of folds
+        '''
+        n_folds = cv_obj.get_n_splits()
+        fold_idx = np.random.randint(0, n_folds)
+        print(f'Randomly selected inner fold {fold_idx} out of {n_folds} folds')
+        '''
 
         if fold_idx == 0:  # Only run CV on the first inner fold to test more parameters
             train_region_pairs = expand_X_symmetric(np.array(train_indices).reshape(-1, 1)).astype(int)

@@ -1,13 +1,14 @@
 from env.imports import *
 
-from data.data_load import load_transcriptome, load_connectome, load_coords, load_network_labels
+from data.data_load import load_transcriptome, load_connectome, load_coords, load_network_labels, load_lobe_labels
 
 from data.cv_split import (
     RandomCVSplit, 
     SchaeferCVSplit, 
     CommunityCVSplit, 
     SubnetworkCVSplit,
-    SpatialCVSplit
+    SpatialCVSplit, 
+    LobeCVSplit
 )
 
 from data.data_utils import (
@@ -110,7 +111,7 @@ class Simulation:
 
         # Remove rows that are all NaN - necessary for gene expression data with unsampled regions
         valid_indices = ~np.isnan(self.X).all(axis=1)
-
+        self.valid_indices = valid_indices
         # Create index map so we know original (i.e. true) indices of valid data after subsetting
         valid_indices_values = np.where(valid_indices)[0]
         valid2true_index_mapping = dict(enumerate(valid_indices_values))
@@ -156,7 +157,10 @@ class Simulation:
             self.cv_obj = CommunityCVSplit(self.X, self.Y_fc, resolution=self.resolution, random_seed=self.random_seed) 
         elif self.cv_type == 'spatial':
             self.cv_obj = SpatialCVSplit(self.X, self.Y, self.coords, num_splits=4, random_seed=self.random_seed)
-    
+        elif self.cv_type == 'lobe':
+            self.lobe_labels = load_lobe_labels(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical)[self.valid_indices]
+            self.cv_obj = LobeCVSplit(self.X, self.Y, self.lobe_labels)
+
     def expand_data_torch(self):
         """
         Expand data based on feature+processing type, and target

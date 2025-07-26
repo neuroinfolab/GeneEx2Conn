@@ -426,3 +426,31 @@ def load_network_labels(parcellation='S456', omit_subcortical=False, dataset='UK
         network_labels = network_labels[rh_indices]
 
     return labels, network_labels
+
+
+def load_lobe_labels(parcellation='S456', omit_subcortical=False):
+    """
+    Load lobe labels for a given parcellation and dataset.
+
+    Args:
+        parcellation (str): Parcellation scheme ('S100' or 'S400'). Default: 'S100'
+        omit_subcortical (bool): Exclude subcortical regions. Default: False
+        dataset (str): Dataset to load ('HCP', 'UKBB'). Default: 'HCP'
+        hemisphere (str): Brain hemisphere ('both', 'left', 'right'). Default: 'both'
+
+    Lobes determined based on MNI coordinates of https://pmc.ncbi.nlm.nih.gov/articles/PMC5928390/#s6
+    """
+    try:
+        schaef456_atlas_info = pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv')
+       
+        if omit_subcortical:
+            schaef456_atlas_info = schaef456_atlas_info.iloc[:400]
+        else:
+            schaef456_atlas_info = schaef456_atlas_info.iloc[:456]
+        
+        labels = schaef456_atlas_info['label'].tolist()
+        lobe_labels = schaef456_atlas_info['lobe'].values
+    except KeyError:
+        raise ValueError("No lobe labels found in atlas file")
+
+    return lobe_labels

@@ -53,14 +53,13 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
                     os.makedirs(save_path, exist_ok=True)
                     torch.save(model.state_dict(), os.path.join(save_path, 'best_smt_model_iPA_spin_full.pt'))
                     print(f"Saved best model to {os.path.join(save_path, 'best_smt_model_iPA_spin_full.pt')}")
-                '''
                 
                 if hasattr(model, 'use_alibi') and not hasattr(model, 'cls_init'):
                     save_path = os.path.join('models', 'saved_models')
                     os.makedirs(save_path, exist_ok=True)
                     torch.save(model.state_dict(), os.path.join(save_path, 'UKBB_base_seed9fold3.pt'))
                     print(f"Saved best model to {os.path.join(save_path, 'UKBB_base_seed9fold3.pt')}")
-
+                '''
                 if patience_counter >= patience:
                     print(f"\nEarly stopping triggered at epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}, Pearson Correlation: {pearson_corr:.4f}")
                 else:

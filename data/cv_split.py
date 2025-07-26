@@ -191,6 +191,7 @@ class SpatialCVSplit(BaseCrossValidator):
                             edge_threshold, valid_genes, gene_name,
                             "Spatial Split")
 
+
 class SchaeferCVSplit(BaseCrossValidator):
     """
     Custom cross-validation class that splits data based on Schaefer networks.
@@ -285,6 +286,96 @@ class SchaeferCVSplit(BaseCrossValidator):
                             self.coords, self.Y, self.X, 
                             edge_threshold, valid_genes, gene_name,
                             "Schaefer Split")
+
+class LobeCVSplit(BaseCrossValidator):
+    """
+    Custom cross-validation class that splits data based on brain lobes.
+    
+    Parameters:
+    X (array): Input features
+    Y (array): Target values
+    lobe_labels (array): Lobe labels for each region (Frontal, Temporal, Parietal, Occipital, Subcortex)
+    """
+    
+    def __init__(self, X, Y, lobe_labels):
+        self.X = X
+        self.Y = Y
+        self.lobe_labels = lobe_labels
+        
+        # Create networks first, then generate splits from them
+        self.networks = self.create_lobe_networks()
+        self.splits = self.create_splits_from_networks()
+        self.folds = self.create_folds()
+
+    def create_lobe_networks(self):
+        """Create networks based on brain lobe labels."""
+        networks = {}
+        
+        # Group regions by lobe
+        for index, lobe_name in enumerate(self.lobe_labels):
+            if lobe_name not in networks:
+                networks[lobe_name] = []
+            networks[lobe_name].append(index)
+            
+        # Print network info
+        network_sizes = {net: len(regions) for net, regions in networks.items()}
+        n_regions = len(self.X)
+        coverage = sum(network_sizes.values()) / n_regions * 100
+        
+        print(f"Lobe coverage: {coverage:.1f}% of regions")
+        print(f"Lobe sizes: {network_sizes}")
+        
+        return networks
+
+    def create_splits_from_networks(self):
+        """Create train/test splits based on the lobes."""
+        splits = []
+        for lobe_name, test_indices in self.networks.items():
+            # Test set is the current lobe
+            test_indices = np.array(test_indices)
+            
+            # Train set is all other lobes combined
+            train_indices = np.array([
+                idx for net, regions in self.networks.items()
+                if net != lobe_name
+                for idx in regions
+            ])
+            
+            splits.append((train_indices, test_indices))
+            
+        return splits
+
+    def create_folds(self):
+        """Create CV folds from the splits."""
+        folds = []
+        for train_indices, test_indices in self.splits:
+            folds.append((self.X[train_indices], self.X[test_indices],
+                         self.Y[train_indices], self.Y[test_indices]))
+        return folds
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        """Return the number of cross-validation splits."""
+        return len(self.splits)
+
+    def split(self, X=None, y=None, groups=None):
+        """Generate indices to split data into training and test sets."""
+        for train_indices, test_indices in self.splits:
+            yield train_indices, test_indices
+
+    def display_splits(self):
+        """Display the train/test indices for each fold"""
+        for fold_idx, (train_indices, test_indices) in enumerate(self.splits, 1):
+            print(f"Fold {fold_idx}:")
+            print("TRAIN:", train_indices)
+            print("TEST:", test_indices)
+            print()
+
+    def visualize_splits_3d(self, edge_threshold=0.5, valid_genes=None, gene_name=None):
+        """Display each fold's train/test split in 3D space."""
+        visualize_splits_3d(self.split(), 
+                            self.coords, self.Y, self.X, 
+                            edge_threshold, valid_genes, gene_name,
+                            "Lobe Split")
             
 
 class CommunityCVSplit(BaseCrossValidator):
