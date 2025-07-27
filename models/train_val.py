@@ -43,19 +43,20 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
                 predictions, targets = model.predict(val_loader)
                 pearson_corr = pearsonr(predictions, targets)[0]
                 
-                '''
                 # Save model if it has cls_init attribute
+                '''
                 if hasattr(model, 'cls_init'):
                     save_path = os.path.join('models', 'saved_models')
                     os.makedirs(save_path, exist_ok=True)
-                    torch.save(model.state_dict(), os.path.join(save_path, 'best_cls_model_iPA_spin_full.pt'))
-                    print(f"Saved best model to {os.path.join(save_path, 'best_cls_model_iPA_spin_full.pt')}")
+                    torch.save(model.state_dict(), os.path.join(save_path, 'best_smt_cls_model_HCP_full.pt'))
+                    print(f"Saved best model to {os.path.join(save_path, 'best_smt_cls_model_HCP_full.pt')}")
                 elif hasattr(model, 'use_alibi') and not hasattr(model, 'cls_init'):
                     save_path = os.path.join('models', 'saved_models')
                     os.makedirs(save_path, exist_ok=True)
-                    torch.save(model.state_dict(), os.path.join(save_path, 'best_smt_model_iPA_spin_full.pt'))
-                    print(f"Saved best model to {os.path.join(save_path, 'best_smt_model_iPA_spin_full.pt')}")
-                
+                    torch.save(model.state_dict(), os.path.join(save_path, 'best_smt_model_HCP_full.pt'))
+                    print(f"Saved best model to {os.path.join(save_path, 'best_smt_model_HCP_full.pt')}")
+                '''
+                '''
                 if hasattr(model, 'use_alibi') and not hasattr(model, 'cls_init'):
                     save_path = os.path.join('models', 'saved_models')
                     os.makedirs(save_path, exist_ok=True)
@@ -85,7 +86,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
         if dataset is not None: # Target-side augmentation with given linear decaying Pr only for transformer models
             if np.random.random() < model.aug_prob*(1-epoch/model.epochs):
                 batch_y = augment_batch_y(batch_idx, dataset, device)
-                batch_X = augment_batch_X(batch_X, device)
+                batch_X = augment_batch_X(batch_X)
         
         batch_X = batch_X.to(device)
         batch_y = batch_y.to(device)

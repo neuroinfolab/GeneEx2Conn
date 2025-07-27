@@ -525,7 +525,8 @@ def plot_true_vs_null_model_barchart(
     metric="test_pearson_r",
     model_groups=None,
     xlim=(0.1, 0.9),
-    overlay_style="alpha"  # or "hatch"
+    overlay_style="alpha",  # or "hatch"
+    display_metric=False
 ):
     if model_groups is None:
         model_groups = {
@@ -602,10 +603,20 @@ def plot_true_vs_null_model_barchart(
             zorder=2
         )
 
-        if i == 0:
+        if display_metric:
+            ax.text(
+                row["TrueMean"] + 0.02,  # slight offset from bar end
+                y,
+                f"{row['TrueMean']:.3f}",
+                va="center",
+                ha="left",
+                fontsize=label_fontsize,
+                color="black"
+            )
+        elif i == 0:  # Only show metric for top model if display_metric is False
             ax.text(
                 row["TrueMean"],
-                y - 0.4,  # shift upward (adjust spacing if needed)
+                y - 0.4,  # shift upward
                 f"{row['TrueMean']:.2f}",
                 va="bottom",
                 ha="center",

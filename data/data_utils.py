@@ -360,7 +360,7 @@ gene_stds = torch.tensor(
     AHBA_samples_df[gene_cols].std().values,
     dtype=torch.float32)
 
-def augment_batch_X(batch_X, device, noise_scale=0.04):
+def augment_batch_X(batch_X, noise_scale=0.04):
     '''
     Adds random noise to gene expression values scaled by per-gene stds.
     '''
