@@ -1,0 +1,88 @@
+name: shared_transformer_conv_cls
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+parameters: 
+  input_dim:
+    value: !!int 0
+  binarize:
+    value: !!int 0
+  token_encoder_dim:
+    values: [10, 20, 30, 60]
+  d_model:
+    values: [64, 128]
+  encoder_output_dim:
+    values: [10]
+  use_alibi:
+    values: [True] #, False]
+  nhead:
+    values: [2, 4]
+  num_layers:
+    values: [2, 4]
+  deep_hidden_dims:
+    values:
+     - [256, 128]
+     - [512, 256, 128]
+  cls_init:
+    values: ['spatial_learned']
+  transformer_dropout:
+    values: [0.1, 0.2]
+  dropout_rate:
+    values: [0.1, 0.2]
+  learning_rate:
+    values: [0.00009, 0.0001] # this has an interplay with token_encoder_dim 
+  weight_decay:
+    values: [0.0001, .001]
+  batch_size:
+    values: [1024]
+  aug_prob:
+    values: [0.1, 0.2, 0.3, 0.45] #, 0.5]
+  epochs:
+    values: [70, 90, 110]
+  num_workers:
+    values: [2]
+  prefetch_factor:
+    values: [4]
+
+best_parameters:
+  input_dim:
+    value: !!int 0
+  binarize:
+    value: !!int 0
+  token_encoder_dim:
+    values: [60]
+  d_model:
+    values: [128]
+  encoder_output_dim:
+    values: [10]
+  use_alibi:
+    values: [True]
+  nhead:
+    values: [4]
+  num_layers:
+    values: [4]
+  deep_hidden_dims:
+    values:
+      - [512, 256, 128]
+  cls_init:
+    values: ['spatial_learned']
+  transformer_dropout:
+    values: [0.2]
+  dropout_rate:
+    values: [0.2]
+  learning_rate:
+    values: [0.00001]
+  weight_decay:
+    values: [0.0001]
+  batch_size:
+    values: [1024]
+  aug_prob:
+    values: [0.3]
+  epochs:
+    values: [90]
+  num_workers:
+    values: [2]
+  prefetch_factor:
+    values: [4]

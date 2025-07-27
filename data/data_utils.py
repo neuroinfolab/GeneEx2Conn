@@ -343,8 +343,37 @@ def create_data_loader(X, y, batch_size, device, shuffle=True, weight=False):
     # For validation or non-binary cases, use regular DataLoader
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0)
 
+from data.data_load import load_transcriptome
+# Load AHBA sample data
+AHBA_samples_df = pd.read_csv('/scratch/asr655/neuroinformatics/GeneEx2Conn_data/human_samples_files/AHBA_srs_samples.csv')
+# Get valid genes from transcriptome
+_, valid_genes = load_transcriptome(
+    parcellation='S456',
+    gene_list='0.2',
+    dataset='AHBA',
+    return_valid_genes=True,
+    sort_genes='refgenome'
+)
+# Extract gene columns and compute stds
+gene_cols = [col for col in AHBA_samples_df.columns if col in valid_genes]
+gene_stds = torch.tensor(
+    AHBA_samples_df[gene_cols].std().values,
+    dtype=torch.float32)
 
-def augment_batch(batch_idx, dataset, device, verbose=False):
+def augment_batch_X(batch_X, device, noise_scale=0.04):
+    '''
+    Adds random noise to gene expression values scaled by per-gene stds.
+    '''
+    num_genes = len(gene_stds)
+    X1, X2 = torch.chunk(batch_X, chunks=2, dim=1)
+
+    noise1 = torch.randn_like(X1) * gene_stds * noise_scale
+    noise2 = torch.randn_like(X2) * gene_stds * noise_scale
+    noisy_batch = torch.cat((X1 + noise1, X2 + noise2), dim=1)
+    
+    return noisy_batch
+
+def augment_batch_y(batch_idx, dataset, device, verbose=False):
     '''
     Helper function to swap out targets of a population batch with individualized targets from population data
     '''

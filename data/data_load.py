@@ -197,7 +197,7 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             region_labels = rh_labels
 
         if return_valid_genes:
-            print("valid genes", valid_genes)
+            #print("valid genes", valid_genes)
             return genes_data, valid_genes
         
         if null_model == 'spin' and parcellation == 'S456':

@@ -3,8 +3,8 @@
 #SBATCH --account=pr_125_tandon_advanced
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
-#SBATCH --time=4:00:00
-#SBATCH --mem=128GB
+#SBATCH --time=6:00:00
+#SBATCH --mem=256GB
 #SBATCH --gres=gpu:1
 #SBATCH --constraint=h100|a100
 #SBATCH --job-name=gx2c_smt
@@ -40,6 +40,6 @@ singularity exec --nv \
   --feature_type transcriptome \
   --random_seed $seed \
   --skip_cv true"
-  # --n_cvs 4"
+  # --n_cvs 5" \
 
 echo "Job Complete"

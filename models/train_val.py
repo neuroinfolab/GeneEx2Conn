@@ -1,7 +1,9 @@
 from env.imports import *
 import torch.backends.cudnn as cudnn
 from torch.cuda.amp import autocast, GradScaler
-from data.data_utils import augment_batch
+from data.data_utils import augment_batch_y, augment_batch_X
+
+torch.set_float32_matmul_precision('high')
 
 
 def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, verbose=True, dataset=None):        
@@ -81,7 +83,9 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
 
     for batch_X, batch_y, batch_coords, batch_idx in train_loader:
         if dataset is not None: # Target-side augmentation with given linear decaying Pr only for transformer models
-            if np.random.random() < model.aug_prob*(1-epoch/model.epochs) : batch_y = augment_batch(batch_idx, dataset, device)
+            if np.random.random() < model.aug_prob*(1-epoch/model.epochs):
+                batch_y = augment_batch_y(batch_idx, dataset, device)
+                batch_X = augment_batch_X(batch_X, device)
         
         batch_X = batch_X.to(device)
         batch_y = batch_y.to(device)
