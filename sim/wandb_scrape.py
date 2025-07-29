@@ -141,7 +141,8 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
                 f"cv_type_{cv_type}",
                 f"null_model_{null_model}",
                 f"feature_type_{feature_type}"
-            ]
+            ],
+            "$nin": ["dataset_HCP"]
         },
         "created_at": {"$gte": time_filter.isoformat()},
         "state": "finished"

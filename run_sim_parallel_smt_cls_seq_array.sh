@@ -39,7 +39,7 @@ singularity exec --nv \
   --model_type shared_transformer_cls \
   --feature_type transcriptome \
   --random_seed $seed \
-  --skip_cv false
-  --n_cvs 5"
+  --skip_cv true \
+  --use_folds 0 1 2 3"
 
 echo "Job Complete"

@@ -86,7 +86,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
         if dataset is not None: # Target-side augmentation with given linear decaying Pr only for transformer models
             if np.random.random() < model.aug_prob*(1-epoch/model.epochs):
                 batch_y = augment_batch_y(batch_idx, dataset, device)
-                batch_X = augment_batch_X(batch_X)
+                #batch_X = augment_batch_X(batch_X)
         
         batch_X = batch_X.to(device)
         batch_y = batch_y.to(device)
