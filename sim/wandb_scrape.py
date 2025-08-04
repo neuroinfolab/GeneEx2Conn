@@ -98,7 +98,7 @@ def weighted_mean_and_se(values, weights):
     
     return weighted_mean, weighted_se
 
-def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='transcriptome', days=7, use_weighted=False, exclude='HCP', return_history=False):
+def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='transcriptome', within_last=60, before_last=0, use_weighted=False, exclude='HCP', return_history=False):
     """
     Fetches wandb runs matching specific tags and summarizes their final train/test metrics.
     Handles different CV types with their expected number of runs:
@@ -111,11 +111,11 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
         cv_type (str): CV type, one of: 'random', 'spatial', 'schaefer', 'lobe'
         null_model (str): Null model label, e.g., 'none'
         feature_type (str): Feature type, e.g., 'transcriptome_PCA'
-        days (int): Number of past days to search within
+        within_last (int): Search for runs within this many days ago (default: 60)
+        before_last (int): Exclude runs from this many days ago (default: 0)
         use_weighted (bool): Whether to compute weighted statistics for schaefer/lobe CV
         exclude (str): Dataset to exclude from search (default: 'HCP')
         return_history (bool): If True, return (summary_df, history_df) tuple
-    
     
     Returns:
         summary_df (pd.DataFrame): DataFrame with mean, std, stderr of all train/test metrics
@@ -123,7 +123,9 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
                                   includes weighted_mean and weighted_stderr rows
         history_df (pd.DataFrame): Individual run data (only returned if return_history=True)
     """
-    time_filter = datetime.now() - timedelta(days=days)
+    # Set time filters
+    end_time = datetime.now() - timedelta(days=before_last)
+    start_time = datetime.now() - timedelta(days=within_last)
     
     # Set expected number of runs based on cv_type
     if cv_type == "schaefer":
@@ -144,7 +146,10 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
             ],
             "$nin": ["dataset_HCP"]
         },
-        "created_at": {"$gte": time_filter.isoformat()},
+        "created_at": {
+            "$gte": start_time.isoformat(),
+            "$lte": end_time.isoformat()
+        },
         "state": "finished"
     }
     
@@ -247,6 +252,52 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
         return summary_df, history_df
     else:
         return summary_df
+
+def process_model_feature_combinations(cv_type, null_model, models, model_feature_types, summary_dict, use_weighted=False, exclude='HCP', within_last=None, before_last=None):
+    """Helper function to process model/feature type combinations and populate summary dictionary"""
+    # Set expected number of runs based on cv_type
+    if cv_type == "schaefer":
+        expected_runs = 9
+    elif cv_type == "lobe":
+        expected_runs = 6
+    else:  # random or spatial
+        expected_runs = 40
+        
+    weighted_str = " (weighted)" if use_weighted and cv_type in ['schaefer', 'lobe'] else ""
+    print(f"Checking which model/feature type combinations return {expected_runs} runs for null_model={null_model}{weighted_str}:\n")
+    
+    for model in models:
+        feature_types = model_feature_types[model]
+        for feature_type in feature_types:
+            try:
+                df = fetch_and_summarize_wandb_runs(
+                    model, cv_type, null_model, feature_type, 
+                    use_weighted=use_weighted, exclude=exclude,
+                    within_last=within_last, before_last=before_last
+                )
+                
+                # Handle bilinear_CM and dynamic_mlp_coords splits explicitly
+                if model == "bilinear_CM" and feature_type == "transcriptome_PCA":
+                    summary_dict["bilinear_CM_PCA"] = df
+                    print(f"✓ bilinear_CM_PCA: Successfully found {expected_runs} runs")
+                elif model == "bilinear_CM" and feature_type == "transcriptome":
+                    summary_dict["bilinear_CM"] = df
+                    print(f"✓ bilinear_CM: Successfully found {expected_runs} runs")
+                elif model == "dynamic_mlp" and feature_type == "transcriptome+euclidean":
+                    summary_dict["dynamic_mlp_coords"] = df
+                    print(f"✓ dynamic_mlp_coords: Successfully found {expected_runs} runs")
+                elif model == "dynamic_mlp" and feature_type == "transcriptome":
+                    summary_dict["dynamic_mlp"] = df
+                    print(f"✓ dynamic_mlp: Successfully found {expected_runs} runs")
+                else:
+                    summary_dict[model] = df
+                    print(f"✓ {model} with {feature_type}: Successfully found {expected_runs} runs")
+
+            except ValueError as e:
+                print(f"✗ {model} with {feature_type}: {str(e)}")
+            except Exception as e:
+                print(f"! {model} with {feature_type}: Unexpected error: {str(e)}")
+
 
 
 def plot_model_barchart(summary_dict, metric="test_pearson_r", model_groups=None, xlim=(0.1, 0.9)):
@@ -608,10 +659,10 @@ def plot_true_vs_null_model_barchart(
             ax.text(
                 row["TrueMean"] + 0.02,  # slight offset from bar end
                 y,
-                f"{row['TrueMean']:.3f}",
+                f"{row['TrueMean']:.3f} ± {row['TrueStdErr']:.3f}",
                 va="center",
                 ha="left",
-                fontsize=label_fontsize,
+                fontsize=label_fontsize * 0.8,  # Smaller font since showing both values
                 color="black"
             )
         elif i == 0:  # Only show metric for top model if display_metric is False
@@ -834,49 +885,3 @@ def plot_true_vs_null_model_barchart_weighted(
     plt.show()
 
     return group_color_map
-
-
-def process_model_feature_combinations(cv_type, null_model, days, models, model_feature_types, summary_dict, use_weighted=False, exclude='HCP'):
-    """Helper function to process model/feature type combinations and populate summary dictionary"""
-    # Set expected number of runs based on cv_type
-    if cv_type == "schaefer":
-        expected_runs = 9
-    elif cv_type == "lobe":
-        expected_runs = 6
-    else:  # random or spatial
-        expected_runs = 40
-        
-    weighted_str = " (weighted)" if use_weighted and cv_type in ['schaefer', 'lobe'] else ""
-    print(f"Checking which model/feature type combinations return {expected_runs} runs for null_model={null_model}{weighted_str}:\n")
-    
-    for model in models:
-        feature_types = model_feature_types[model]
-        for feature_type in feature_types:
-            try:
-                df = fetch_and_summarize_wandb_runs(
-                    model, cv_type, null_model, feature_type, days, 
-                    use_weighted=use_weighted, exclude=exclude
-                )
-                
-                # Handle bilinear_CM and dynamic_mlp_coords splits explicitly
-                if model == "bilinear_CM" and feature_type == "transcriptome_PCA":
-                    summary_dict["bilinear_CM_PCA"] = df
-                    print(f"✓ bilinear_CM_PCA: Successfully found {expected_runs} runs")
-                elif model == "bilinear_CM" and feature_type == "transcriptome":
-                    summary_dict["bilinear_CM"] = df
-                    print(f"✓ bilinear_CM: Successfully found {expected_runs} runs")
-                elif model == "dynamic_mlp" and feature_type == "transcriptome+euclidean":
-                    summary_dict["dynamic_mlp_coords"] = df
-                    print(f"✓ dynamic_mlp_coords: Successfully found {expected_runs} runs")
-                elif model == "dynamic_mlp" and feature_type == "transcriptome":
-                    summary_dict["dynamic_mlp"] = df
-                    print(f"✓ dynamic_mlp: Successfully found {expected_runs} runs")
-                else:
-                    summary_dict[model] = df
-                    print(f"✓ {model} with {feature_type}: Successfully found {expected_runs} runs")
-
-            except ValueError as e:
-                print(f"✗ {model} with {feature_type}: {str(e)}")
-            except Exception as e:
-                print(f"! {model} with {feature_type}: Unexpected error: {str(e)}")
-
