@@ -173,7 +173,8 @@ if __name__ == "__main__":
     parser.add_argument('--random_seed', type=int, help='Override random seed from config')
     parser.add_argument('--null_model', help='Override null model type from config')
     parser.add_argument('--use_folds', nargs='+', type=int, help='Override use folds from config')
-    
+    parser.add_argument('--sort_genes', help='Override sort genes from config')
+
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -194,6 +195,8 @@ if __name__ == "__main__":
         config['null_model'] = args.null_model
     if args.use_folds:
         config['use_folds'] = args.use_folds
+    if args.sort_genes:
+        config['sort_genes'] = args.sort_genes
 
     print(f"Running simulation with config: {args.config}")
     print(f"Model type: {config['model_type']}")
@@ -203,6 +206,7 @@ if __name__ == "__main__":
     print(f"Random seed: {config['random_seed']}")
     print(f"Null model: {config['null_model']}")
     print(f"Use folds: {config['use_folds']}")
+    print(f"Sort genes: {config['sort_genes']}")
     print(torch.cuda.is_available())
     print(os.environ.get("CUDA_VISIBLE_DEVICES"))
     for i in range(torch.cuda.device_count()):
