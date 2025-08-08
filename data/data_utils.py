@@ -428,7 +428,7 @@ class RegionPairDataset(Dataset):
         if self.dataset == 'UKBB':
             data_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data/Penn_UKBB_data/npy/S456'
         elif self.dataset == 'HCP':
-            data_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data//HCP1200_fMRI/npy/'
+            data_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data/HCP1200/HCP1200_fMRI/npy/'
         elif self.dataset == 'BHA2':
             data_dir = f'/scratch/asr655/neuroinformatics/GeneEx2Conn_data/BHA2/{parcellation}/npy'
         self.connectomes = np.load(f'{data_dir}/connectomes_upper.npy', allow_pickle=True)

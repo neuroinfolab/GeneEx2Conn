@@ -1,6 +1,6 @@
 from env.imports import *
 
-from data.data_load import load_transcriptome, load_connectome, load_coords, load_network_labels, load_lobe_labels
+from data.data_load import load_transcriptome, load_cell_types, load_connectome, load_coords, load_network_labels, load_lobe_labels
 
 from data.cv_split import (
     RandomCVSplit, 
@@ -101,6 +101,7 @@ class Simulation:
         """
         self.X = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes, null_model=self.null_model, random_seed=self.random_seed)        
         self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA=True, hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
+        self.X_cell_types = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical)
         self.Y_sc = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None, hemisphere=self.hemisphere)
         self.Y_sc_binary = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
         self.Y_sc_spectralL = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L', hemisphere=self.hemisphere)
@@ -121,6 +122,7 @@ class Simulation:
         # Subset all data using valid indices
         self.X = self.X[valid_indices]
         self.X_pca = self.X_pca[valid_indices]
+        #self.X_cell_types = self.X_cell_types[valid_indices]
         self.Y_sc = self.Y_sc[valid_indices][:, valid_indices]
         self.Y_sc_binary = self.Y_sc_binary[valid_indices][:, valid_indices]
         self.Y_sc_spectralL = self.Y_sc_spectralL[valid_indices]
@@ -133,6 +135,7 @@ class Simulation:
         
         print(f"X shape: {self.X.shape}")
         print(f"X_pca shape: {self.X_pca.shape}")
+        print(f"X_cell_types shape: {self.X_cell_types.shape}")
         print(f"Y_sc shape: {self.Y_sc.shape}")
         print(f"Y_sc_spectralL shape: {self.Y_sc_spectralL.shape}")
         print(f"Y_sc_spectralA shape: {self.Y_sc_spectralA.shape}")
@@ -178,7 +181,8 @@ class Simulation:
         # Possible features types
         feature_dict = {'transcriptome': self.X,
                         'transcriptome_PCA': self.X_pca,
-                        'structural': self.Y_sc,
+                        'cell_types': self.X_cell_types,
+                        'structural':   self.Y_sc,
                         'structural_spectral_L': self.Y_sc_spectralL,
                         'structural_spectral_A': self.Y_sc_spectralA,
                         'functional': self.Y_fc,

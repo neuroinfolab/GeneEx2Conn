@@ -232,6 +232,30 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
         
         return genes_data
 
+def load_cell_types(parcellation='S456', omit_subcortical=False):
+    """
+    Load cell type data for Schaefer 400 parcellation
+    
+    Args:
+        parcellation (str): Must be 'S456'
+        omit_subcortical (bool): Must be True
+        
+    Returns:
+        tuple: (np.ndarray: Cell type data, list: Region labels)
+    """
+    if parcellation != 'S456' or not omit_subcortical:
+        raise ValueError("Cell type data only available for S456 parcellation with omit_subcortical=True")
+    
+    cell_types_df = pd.read_csv('./data/enigma/schaef400_cell_types.csv', index_col=0)
+    print("Cell types data shape:", cell_types_df.shape)
+    print("Cell type columns:", cell_types_df.columns.tolist())
+    print("First few rows:")
+    
+    print(cell_types_df.head())
+
+    #return cell_types_df, cell_types_df.index.tolist()
+    return np.array(cell_types_df)
+
 def load_connectome(parcellation='S456', omit_subcortical=False, dataset='UKBB', measure='FC', spectral=None, hemisphere='both', include_labels=False, diag=0, binarize=False):
     """
     Load and process connectome data with optional spectral decomposition.
@@ -269,7 +293,7 @@ def load_connectome(parcellation='S456', omit_subcortical=False, dataset='UKBB',
         elif parcellation in ['S156', 'S456']:
             region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv(f'./data/UKBB/atlas-4{parcellation}Parcels_dseg_reformatted.csv').iterrows()]
             if measure == 'FC':
-                matrix = np.loadtxt(f'/scratch/asr655/neuroinformatics/GeneEx2Conn_data/HCP1200_fMRI/HCP1200_{parcellation}_FC_mu.csv', delimiter=',')
+                matrix = np.loadtxt(f'/scratch/asr655/neuroinformatics/GeneEx2Conn_data/HCP1200/HCP1200_fMRI/HCP1200_{parcellation}_FC_mu.csv', delimiter=',')
             elif measure == 'SC':
                 matrix = np.log1p(loadmat(f'./data/HCP1200/4{parcellation}_DTI_count.mat')['connectivity'])
                 matrix = matrix / matrix.max()
