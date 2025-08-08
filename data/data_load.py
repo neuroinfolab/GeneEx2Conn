@@ -232,28 +232,22 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
         
         return genes_data
 
-def load_cell_types(parcellation='S456', omit_subcortical=False):
+def load_cell_types(parcellation='S456', omit_subcortical=False, ref_dataset='Jorstad'):
     """
     Load cell type data for Schaefer 400 parcellation
     
     Args:
         parcellation (str): Must be 'S456'
         omit_subcortical (bool): Must be True
-        
+        ref_dataset (str): 'Jorstad' or 'Lake_DFC' or 'Lake_VIS'
     Returns:
         tuple: (np.ndarray: Cell type data, list: Region labels)
     """
     if parcellation != 'S456' or not omit_subcortical:
         raise ValueError("Cell type data only available for S456 parcellation with omit_subcortical=True")
     
-    cell_types_df = pd.read_csv('./data/enigma/schaef400_cell_types.csv', index_col=0)
-    print("Cell types data shape:", cell_types_df.shape)
-    print("Cell type columns:", cell_types_df.columns.tolist())
-    print("First few rows:")
+    cell_types_df = pd.read_csv(f'./data/enigma/schaef400_{ref_dataset}_cell_types.csv', index_col=0)
     
-    print(cell_types_df.head())
-
-    #return cell_types_df, cell_types_df.index.tolist()
     return np.array(cell_types_df)
 
 def load_connectome(parcellation='S456', omit_subcortical=False, dataset='UKBB', measure='FC', spectral=None, hemisphere='both', include_labels=False, diag=0, binarize=False):
