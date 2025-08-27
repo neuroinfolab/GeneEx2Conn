@@ -144,17 +144,16 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
                 f"null_model_{null_model}",
                 f"feature_type_{feature_type}"
             ],
-            "$nin": ["dataset_HCP"]
         },
         "created_at": {
-            "$gte": start_time.isoformat(),
+            "$gte": start_time.isoformat(), 
             "$lte": end_time.isoformat()
         },
         "state": "finished"
     }
     
     # Add exclusion filter if specified
-    if exclude:
+    if exclude != "":
         filters["tags"]["$nin"] = [f"dataset_{exclude}"]
     
     print(f"🔍 Fetching runs for: model={model}, cv_type={cv_type}, null_model={null_model}, feature_type={feature_type}")

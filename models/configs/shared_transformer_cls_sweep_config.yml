@@ -7,8 +7,6 @@ metric:
 parameters: 
   input_dim:
     value: !!int 0
-  binarize:
-    value: !!int 0
   token_encoder_dim:
     values: [10, 20, 30] # 60
   d_model:
@@ -51,10 +49,8 @@ parameters:
 best_parameters:
   input_dim:
     value: !!int 0
-  binarize:
-    value: !!int 0
   token_encoder_dim:
-    values: [20] # 20
+    values: [20]
   d_model:
     values: [128]
   encoder_output_dim:
@@ -62,7 +58,7 @@ best_parameters:
   use_alibi:
     values: [True]
   use_attention_pooling:
-    values: [False]
+    values: [True]
   nhead:
     values: [4]
   num_layers:
@@ -77,9 +73,9 @@ best_parameters:
   dropout_rate:
     values: [0.2]
   learning_rate:
-    values: [0.0001]
+    values: [0.0002]
   weight_decay:
-    values: [0.0001]
+    values: [0.000001]
   batch_size:
     values: [1024]
   aug_prob:

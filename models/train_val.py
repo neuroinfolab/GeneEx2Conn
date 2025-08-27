@@ -43,26 +43,16 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
                 predictions, targets = model.predict(val_loader)
                 pearson_corr = pearsonr(predictions, targets)[0]
                 
-                # Save model if it has cls_init attribute
-                '''
-                if hasattr(model, 'cls_init'):
+                if hasattr(model, 'use_alibi'):
                     save_path = os.path.join('models', 'saved_models')
                     os.makedirs(save_path, exist_ok=True)
-                    torch.save(model.state_dict(), os.path.join(save_path, 'best_smt_cls_model_HCP_full.pt'))
-                    print(f"Saved best model to {os.path.join(save_path, 'best_smt_cls_model_HCP_full.pt')}")
-                elif hasattr(model, 'use_alibi') and not hasattr(model, 'cls_init'):
-                    save_path = os.path.join('models', 'saved_models')
-                    os.makedirs(save_path, exist_ok=True)
-                    torch.save(model.state_dict(), os.path.join(save_path, 'best_smt_model_HCP_full.pt'))
-                    print(f"Saved best model to {os.path.join(save_path, 'best_smt_model_HCP_full.pt')}")
-                '''
-                '''
-                if hasattr(model, 'use_alibi') and not hasattr(model, 'cls_init'):
-                    save_path = os.path.join('models', 'saved_models')
-                    os.makedirs(save_path, exist_ok=True)
-                    torch.save(model.state_dict(), os.path.join(save_path, 'UKBB_base_seed9fold3.pt'))
-                    print(f"Saved best model to {os.path.join(save_path, 'UKBB_base_seed9fold3.pt')}")
-                '''
+                    if hasattr(model, 'cls_init'):
+                        model_path = os.path.join(save_path, 'UKBB_SMT_CLS_seed42fold0.pt')
+                    else:
+                        model_path = os.path.join(save_path, 'UKBB_SMT_seed42fold0.pt')
+                    torch.save(model.state_dict(), model_path)
+                    print(f"Saved best model to {model_path}")
+                
                 if patience_counter >= patience:
                     print(f"\nEarly stopping triggered at epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}, Pearson Correlation: {pearson_corr:.4f}")
                 else:

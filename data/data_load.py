@@ -232,23 +232,31 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
         
         return genes_data
 
-def load_cell_types(parcellation='S456', omit_subcortical=False, ref_dataset='Jorstad'):
+def load_cell_types(parcellation='S456', omit_subcortical=True, ref_dataset='Jorstad'):
     """
     Load cell type data for Schaefer 400 parcellation
     
     Args:
         parcellation (str): Must be 'S456'
-        omit_subcortical (bool): Must be True
+        omit_subcortical (bool): If False, array will be padded with zeros for subcortical regions
         ref_dataset (str): 'Jorstad' or 'Lake_DFC' or 'Lake_VIS'
     Returns:
-        tuple: (np.ndarray: Cell type data, list: Region labels)
+        np.ndarray: Cell type data, padded to 456 regions if omit_subcortical=False
     """
-    if parcellation != 'S456' or not omit_subcortical:
-        raise ValueError("Cell type data only available for S456 parcellation with omit_subcortical=True")
+    if parcellation != 'S456':
+        raise ValueError("Cell type data only available for S400/S456 parcellation")
     
     cell_types_df = pd.read_csv(f'./data/enigma/schaef400_{ref_dataset}_cell_types.csv', index_col=0)
+    cell_types = np.array(cell_types_df)
     
-    return np.array(cell_types_df)
+    if not omit_subcortical:
+        print("Warning: Cell type data only available for cortical regions. Padding array with zeros for subcortical regions (400->456)")
+        n_subcort = 56  # Number of subcortical regions
+        padded = np.zeros((456, cell_types.shape[1]))
+        padded[:400] = cell_types
+        return padded
+        
+    return cell_types
 
 def load_connectome(parcellation='S456', omit_subcortical=False, dataset='UKBB', measure='FC', spectral=None, hemisphere='both', include_labels=False, diag=0, binarize=False):
     """

@@ -76,7 +76,7 @@ class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, resolution=1.0, random_seed=42,
                  omit_subcortical=False, dataset='UKBB', parcellation='S456', impute_strategy='mirror_interpolate', sort_genes='expression', 
                  gene_list='0.2', hemisphere='both', train_shared_regions=False, test_shared_regions=False, 
-                 connectome_target='FC', binarize=False, skip_cv=False, null_model=False):        
+                 connectome_target='FC', binarize=None, skip_cv=False, null_model=False):        
         """
         Initialization of simulation parameters
         """
