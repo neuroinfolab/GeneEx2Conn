@@ -40,7 +40,7 @@ MODEL_CLASSES = {
     'shared_linear_encoder': SharedLinearEncoderModel,
     'shared_transformer': SharedSelfAttentionModel,
     'shared_transformer_cls': SharedSelfAttentionCLSModel,
-    'shared_transformer_conv_cls': SharedSelfAttentionConvCLSModel,
+    'shared_transformer_conv': SharedSelfAttentionConvModel,
     'cross_attention': CrossAttentionModel
 }
 
@@ -102,8 +102,8 @@ class Simulation:
         self.X = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes, null_model=self.null_model, random_seed=self.random_seed)        
         self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA=True, hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
         self.X_cell_types_Jorstad = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='Jorstad')
-        self.X_cell_types_Lake_DFC = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='Lake_DFC')
-        self.X_cell_types_Lake_VIS = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='Lake_VIS')
+        self.X_cell_types_Lake_DFC = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeDFC')
+        self.X_cell_types_Lake_VIS = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeVIS')
         self.Y_sc = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None, hemisphere=self.hemisphere)
         self.Y_sc_binary = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
         self.Y_sc_spectralL = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L', hemisphere=self.hemisphere)
@@ -140,8 +140,8 @@ class Simulation:
         print(f"X shape: {self.X.shape}")
         print(f"X_pca shape: {self.X_pca.shape}")
         print(f"X_cell_types_Jorstad shape: {self.X_cell_types_Jorstad.shape}") 
-        print(f"X_cell_types_Lake_DFC shape: {self.X_cell_types_Lake_DFC.shape}")
-        print(f"X_cell_types_Lake_VIS shape: {self.X_cell_types_Lake_VIS.shape}")
+        print(f"X_cell_types_LakeDFC shape: {self.X_cell_types_Lake_DFC.shape}")
+        print(f"X_cell_types_LakeVIS shape: {self.X_cell_types_Lake_VIS.shape}")
         print(f"Y_sc shape: {self.Y_sc.shape}")
         print(f"Y_sc_spectralL shape: {self.Y_sc_spectralL.shape}")
         print(f"Y_sc_spectralA shape: {self.Y_sc_spectralA.shape}")
@@ -187,9 +187,10 @@ class Simulation:
         # Possible features types
         feature_dict = {'transcriptome': self.X,
                         'transcriptome_PCA': self.X_pca,
-                        'cell_types_Jorstad': self.X_cell_types_Jorstad,
-                        'cell_types_Lake_DFC': self.X_cell_types_Lake_DFC,
-                        'cell_types_Lake_VIS': self.X_cell_types_Lake_VIS,
+                        # cell type info 
+                        'Jorstad': self.X_cell_types_Jorstad,
+                        'LakeDFC': self.X_cell_types_Lake_DFC,
+                        'LakeVIS': self.X_cell_types_Lake_VIS,
                         'structural':   self.Y_sc,
                         'structural_spectral_L': self.Y_sc_spectralL,
                         'structural_spectral_A': self.Y_sc_spectralA,

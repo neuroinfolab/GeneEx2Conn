@@ -1,48 +1,84 @@
 name: shared_transformer
-method: random
+method: grid
 metric:
   name: mean_val_loss
   goal: minimize
 
 parameters: 
+  # input_dim:
+  #   value: !!int 0
+  # token_encoder_dim:
+  #   values: [10, 20, 30] # 60
+  # d_model:
+  #   values: [64, 128]
+  # encoder_output_dim:
+  #   values: [10]
+  # use_alibi:
+  #   values: [True, False]
+  # use_attention_pooling:
+  #   values: [True, False]
+  # nhead:
+  #   values: [2, 4]
+  # num_layers:
+  #   values: [2, 4]
+  # deep_hidden_dims:
+  #   values:
+  #   - [256, 128]
+  #   - [512, 256, 128]
+  # transformer_dropout:
+  #   values: [0.1, 0.2]
+  # dropout_rate:
+  #   values: [0.1, 0.2]
+  # learning_rate:
+  #   values: [0.00009, 0.0001]
+  # weight_decay:
+  #   values: [0.0001, .001]
+  # batch_size:
+  #   values: [1024]
+  # aug_prob:
+  #   values: [0.1, 0.2, 0.3, 0.45]
+  # epochs:
+  #   values: [70, 90, 110]
+  # num_workers:
+  #   values: [2]
+  # prefetch_factor:
+  #   values: [4]
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [10, 20, 30] # 60
+    value: 60
   d_model:
-    values: [64, 128]
+    value: 128
   encoder_output_dim:
-    values: [10]
+    value: 10
   use_alibi:
-    values: [True, False]
+    value: True
   use_attention_pooling:
-    values: [True, False]
+    value: True
   nhead:
-    values: [2, 4]
+    value: 4
   num_layers:
-    values: [2, 4]
+    value: 4
   deep_hidden_dims:
-    values:
-    - [256, 128]
-    - [512, 256, 128]
+    value: [512, 256, 128]
   transformer_dropout:
-    values: [0.1, 0.2]
+    value: 0.2
   dropout_rate:
-    values: [0.1, 0.2]
+    value: 0.2
   learning_rate:
-    values: [0.00009, 0.0001]
+    values: [.00005, .0001, .0002, .0003]
   weight_decay:
-    values: [0.0001, .001]
+    value: 0.00001
   batch_size:
-    values: [1024]
+    value: 1024
   aug_prob:
-    values: [0.1, 0.2, 0.3, 0.45]
+    value: 0.3
   epochs:
-    values: [70, 90, 110]
+    value: 100
   num_workers:
-    values: [2]
+    value: 2
   prefetch_factor:
-    values: [4]
+    value: 4
 
 best_parameters:
   input_dim:
@@ -69,9 +105,9 @@ best_parameters:
   dropout_rate:
     values: [0.2]
   learning_rate:
-    values: [0.0003]
+    values: [0.0001]
   weight_decay:
-    values: [0.000001]
+    values: [0.0001]
   batch_size:
     values: [1024]
   aug_prob:

@@ -5,8 +5,8 @@ feature_type:
   - transcriptome: null
 train_shared_regions: false
 test_shared_regions: false
-omit_subcortical: false
-dataset: 'UKBB'
+omit_subcortical: true
+dataset: 'HCP'
 parcellation: 'S456'
 hemisphere: 'both'
 connectome_target: 'FC'

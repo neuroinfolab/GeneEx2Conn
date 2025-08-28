@@ -239,7 +239,7 @@ def load_cell_types(parcellation='S456', omit_subcortical=True, ref_dataset='Jor
     Args:
         parcellation (str): Must be 'S456'
         omit_subcortical (bool): If False, array will be padded with zeros for subcortical regions
-        ref_dataset (str): 'Jorstad' or 'Lake_DFC' or 'Lake_VIS'
+        ref_dataset (str): 'Jorstad' or 'LakeDFC' or 'LakeVIS'
     Returns:
         np.ndarray: Cell type data, padded to 456 regions if omit_subcortical=False
     """

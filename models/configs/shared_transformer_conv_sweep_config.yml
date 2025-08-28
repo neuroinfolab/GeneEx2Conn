@@ -1,0 +1,79 @@
+name: shared_transformer_conv
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+parameters:
+  input_dim:
+    value: !!int 0
+  binarize:
+    value: !!int 0
+  num_tokens:               # NEW: replaces token_encoder_dim
+    values: [64, 96, 128]   # Controls number of positionally relevant tokens
+  d_model:
+    values: [64, 128]
+  use_alibi:
+    values: [True, False]
+  nhead:
+    values: [2, 4]
+  num_layers:
+    values: [2, 4]
+  deep_hidden_dims:
+    values:
+      - [256, 128]
+      - [512, 256, 128]
+  transformer_dropout:
+    values: [0.1, 0.2]
+  dropout_rate:
+    values: [0.1, 0.2]
+  learning_rate:
+    values: [0.00009, 0.0001]
+  weight_decay:
+    values: [0.0001, 0.001]
+  batch_size:
+    values: [1024]
+  aug_prob:
+    values: [0.1, 0.2, 0.3, 0.45]
+  epochs:
+    values: [70, 90, 110]
+  num_workers:
+    values: [2]
+  prefetch_factor:
+    values: [4]
+
+best_parameters:
+  input_dim:
+    value: !!int 0
+  binarize:
+    value: !!int 0
+  num_tokens:               # NEW: replaces token_encoder_dim
+    value: 128
+  d_model:
+    value: 128
+  use_alibi:
+    value: True
+  nhead:
+    value: 4
+  num_layers:
+    value: 4
+  deep_hidden_dims:
+    value: [512, 256, 128]
+  transformer_dropout:
+    value: 0.2
+  dropout_rate:
+    value: 0.2
+  learning_rate:
+    value: 0.00001
+  weight_decay:
+    value: 0.0001
+  batch_size:
+    value: 1024
+  aug_prob:
+    value: 0.3
+  epochs:
+    value: 90
+  num_workers:
+    value: 2
+  prefetch_factor:
+    value: 4
