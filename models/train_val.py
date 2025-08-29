@@ -2,9 +2,7 @@ from env.imports import *
 import torch.backends.cudnn as cudnn
 from torch.cuda.amp import autocast, GradScaler
 from data.data_utils import augment_batch_y, augment_batch_X
-
 torch.set_float32_matmul_precision('high')
-
 
 def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, verbose=True, dataset=None):        
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -15,7 +13,7 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
     scaler = GradScaler()  # Enable FP16 training for faster training - set to None for regular training
     
     train_history = {"train_loss": [], "val_loss": []}
-    best_val_loss = float("inf") 
+    best_val_loss = float("inf")
     best_model_state = None  # Store the best model state
     patience_counter = 0  # Counts epochs without improvement
     
@@ -43,7 +41,7 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
                 predictions, targets = model.predict(val_loader)
                 pearson_corr = pearsonr(predictions, targets)[0]
                 
-                if hasattr(model, 'use_alibi'):
+                '''if hasattr(model, 'use_alibi'):
                     save_path = os.path.join('models', 'saved_models')
                     os.makedirs(save_path, exist_ok=True)
                     if hasattr(model, 'cls_init'):
@@ -52,6 +50,7 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
                         model_path = os.path.join(save_path, 'UKBB_SMT_seed42fold0.pt')
                     torch.save(model.state_dict(), model_path)
                     print(f"Saved best model to {model_path}")
+                '''
                 
                 if patience_counter >= patience:
                     print(f"\nEarly stopping triggered at epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}, Pearson Correlation: {pearson_corr:.4f}")
@@ -75,19 +74,19 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
     for batch_X, batch_y, batch_coords, batch_idx in train_loader:
         if dataset is not None: # Target-side augmentation with given linear decaying Pr only for transformer models
             if np.random.random() < model.aug_prob*(1-epoch/model.epochs):
+                # batch_X = augment_batch_X(batch_X) - if want parametrized feature augmentation
                 batch_y = augment_batch_y(batch_idx, dataset, device)
-                batch_X = augment_batch_X(batch_X)
         
         batch_X = batch_X.to(device)
         batch_y = batch_y.to(device)
         batch_coords = batch_coords.to(device)
         
         optimizer.zero_grad()
-        if scaler is not None: # Mixed precision training path            
+        if scaler is not None: # Mixed precision training path (Default)
             with autocast(dtype=torch.bfloat16):
                 if hasattr(model, 'include_coords'): # For models with CLS
                     predictions = model(batch_X, batch_coords).squeeze()
-                elif hasattr(model, 'optimize_encoder'):
+                elif hasattr(model, 'optimize_encoder'): # For PLS models
                     predictions = model(batch_X, batch_idx).squeeze()
                 else:
                     predictions = model(batch_X).squeeze()
@@ -96,9 +95,9 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
             scaler.step(optimizer)
             scaler.update()
         else: # Regular training path
-            if hasattr(model, 'include_coords'): # For models with CLS
+            if hasattr(model, 'include_coords'): 
                 predictions = model(batch_X, batch_coords).squeeze()
-            elif hasattr(model, 'optimize_encoder'): # For PLS models
+            elif hasattr(model, 'optimize_encoder'): 
                 predictions = model(batch_X, batch_idx).squeeze()
             else:
                 predictions = model(batch_X).squeeze()
@@ -131,16 +130,16 @@ def evaluate(model, val_loader, criterion, device, scheduler=None):
             val_loss = criterion(predictions, batch_y)            
             total_val_loss += val_loss.item()
             
-            if hasattr(model, 'binarize') and model.binarize: # integrate these eventually 
-                pred_labels = (torch.sigmoid(predictions) > 0.5).float()
-            else:
-                pred_labels = predictions.round()
+            # if hasattr(model, 'binarize') and model.binarize: # integrate these eventually 
+            #     pred_labels = (torch.sigmoid(predictions) > 0.5).float()
+            # else:
+            #     pred_labels = predictions.round() 
             
-            total_correct += (pred_labels == batch_y).sum().item()
-            total_samples += batch_y.size(0)
+            # total_correct += (pred_labels == batch_y).sum().item()
+            # total_samples += batch_y.size(0)
+    #accuracy = total_correct / total_samples
     
     mean_val_loss = total_val_loss / len(val_loader)
-    accuracy = total_correct / total_samples
 
     if scheduler is not None:
         prev_lr = scheduler.optimizer.param_groups[0]['lr']

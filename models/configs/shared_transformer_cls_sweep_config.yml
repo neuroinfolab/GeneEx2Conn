@@ -5,82 +5,44 @@ metric:
   goal: minimize
 
 parameters: 
-  # input_dim:
-  #   value: !!int 0
-  # token_encoder_dim:
-  #   values: [10, 20, 30] # 60
-  # d_model:
-  #   values: [64, 128]
-  # encoder_output_dim:
-  #   values: [10]
-  # use_alibi:
-  #   values: [True, False]
-  # use_attention_pooling:
-  #   values: [False]
-  # nhead:
-  #   values: [2, 4]
-  # num_layers:
-  #   values: [2, 4]
-  # deep_hidden_dims:
-  #   values:
-  #    - [256, 128]
-  #    - [512, 256, 128]
-  # cls_init:
-  #   values: ['spatial_learned']
-  # transformer_dropout:
-  #   values: [0.1, 0.2]
-  # dropout_rate:
-  #   values: [0.1, 0.2]
-  # learning_rate:
-  #   values: [0.00009, 0.0001] # this has an interplay with token_encoder_dim 
-  # weight_decay:
-  #   values: [0.0001, .001]
-  # batch_size:
-  #   values: [1024]
-  # aug_prob:
-  #   values: [0, 0.45]
-  # epochs:
-  #   values: [70, 90, 110]
-  # num_workers:
-  #   values: [2]
-  # prefetch_factor:
-  #   values: [4]
   input_dim:
-     value: !!int 0
+    value: !!int 0
   token_encoder_dim:
-    value: 20
+    values: [10, 20, 60]
   d_model:
-    value: 128
+    values: [64, 128]
   encoder_output_dim:
-    value: 10
+    values: [10]
   use_alibi:
-    value: True
-  use_attention_pooling:
-    value: True
+    values: [True, False]
   nhead:
-    value: 4
+    values: [2, 4]
   num_layers:
-    value: 4
+    values: [2, 4]
   deep_hidden_dims:
-    value: [512, 256, 128]
+    values:
+     - [256, 128]
+     - [512, 256, 128]
+  cls_init:
+    values: ['spatial_learned']
   transformer_dropout:
-    value: 0.2
+    values: [0.1, 0.2]
   dropout_rate:
-    value: 0.2
+    values: [0.1, 0.2]
   learning_rate:
-    values: [0.01, .001, .0001, .00001, 0.000001]
+    values: [0.00009, 0.0001]
   weight_decay:
-    value: 0.00001
+    values: [0.0001, .001]
   batch_size:
-    value: 1024
+    values: [1024]
   aug_prob:
-    value: 0.3
+    values: [0, 0.3, 0.45]
   epochs:
-    value: 100
+    values: [70, 90, 110]
   num_workers:
-    value: 2
+    values: [2]
   prefetch_factor:
-    value: 4
+    values: [4]
     
 best_parameters:
   input_dim:
@@ -92,8 +54,6 @@ best_parameters:
   encoder_output_dim:
     values: [10]
   use_alibi:
-    values: [True]
-  use_attention_pooling:
     values: [True]
   nhead:
     values: [4]

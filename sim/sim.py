@@ -18,13 +18,13 @@ from data.data_utils import (
 )
 
 from models.base_models import ModelBuild, BaseModel
-# from models.feature_based 
+from models.feature_based import CGEModel, GaussianKernelModel, ExponentialDecayModel
 from models.bilinear import BilinearLowRank, BilinearCM
 from models.pls import PLSTwoStepModel, PLS_MLPDecoderModel, PLS_BilinearDecoderModel
 from models.dynamic_mlp import DynamicMLP
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
-from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionCLSModel, SharedSelfAttentionConvCLSModel, CrossAttentionModel
-from models.feature_based import CGEModel, GaussianKernelModel, ExponentialDecayModel
+from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionPoolingModel, SharedSelfAttentionCLSModel, SharedSelfAttentionCLSPoolingModel
+from models.transformer_models import SharedSelfAttentionConvModel, CrossAttentionModel
 
 MODEL_CLASSES = {
     'cge': CGEModel,
@@ -39,7 +39,9 @@ MODEL_CLASSES = {
     'shared_mlp_encoder': SharedMLPEncoderModel,
     'shared_linear_encoder': SharedLinearEncoderModel,
     'shared_transformer': SharedSelfAttentionModel,
+    'shared_transformer_pool': SharedSelfAttentionPoolingModel,
     'shared_transformer_cls': SharedSelfAttentionCLSModel,
+    'shared_transformer_cls_pool': SharedSelfAttentionCLSPoolingModel,
     'shared_transformer_conv': SharedSelfAttentionConvModel,
     'cross_attention': CrossAttentionModel
 }

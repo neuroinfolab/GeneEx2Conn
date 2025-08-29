@@ -1,5 +1,5 @@
-name: shared_transformer
-method: random
+name: shared_transformer_pool
+method: bayes
 metric:
   name: mean_val_loss
   goal: minimize
@@ -10,37 +10,36 @@ parameters:
   token_encoder_dim:
     values: [10, 20, 60]
   d_model:
-    values: [64, 128]
-  encoder_output_dim:
-    values: [10]
+    values: [32, 64, 128, 256]
   use_alibi:
-    values: [True, False]
+    values: [True]
   nhead:
     values: [2, 4]
   num_layers:
     values: [2, 4]
   deep_hidden_dims:
-    values:
+    values: 
     - [256, 128]
+    - [256, 128, 64]
     - [512, 256, 128]
   transformer_dropout:
-    values: [0.1, 0.2]
+    values: [0, 0.1, 0.2]
   dropout_rate:
-    values: [0.1, 0.2]
+    values: [0, 0.1, 0.2]
   learning_rate:
-    values: [0.00009, 0.0001]
+    values: [.001, .0005, .0003, .0001, .00005, .00001, .000005]
   weight_decay:
-    values: [0.0001, .001]
+    values: [0, 0.00001, .0001]
   batch_size:
-    values: [1024]
+    value: 1024
   aug_prob:
-    values: [0, 0.3, 0.45]
+    value: 0.3
   epochs:
-    values: [70, 90, 110]
+    value: 60
   num_workers:
-    values: [2]
+    value: 2
   prefetch_factor:
-    values: [4]
+    value: 4
 
 best_parameters:
   input_dim:
@@ -49,8 +48,6 @@ best_parameters:
     values: [60]
   d_model:
     values: [128]
-  encoder_output_dim:
-    values: [10]
   use_alibi:
     values: [True]
   nhead:
@@ -61,13 +58,13 @@ best_parameters:
     values:
       - [512, 256, 128]
   transformer_dropout:
-    values: [0.2]
+    values: [0.1]
   dropout_rate:
-    values: [0.2]
+    values: [0.1]
   learning_rate:
-    values: [0.0001]
+    values: [0.0003]
   weight_decay:
-    values: [0.0001]
+    values: [0.00001]
   batch_size:
     values: [1024]
   aug_prob:

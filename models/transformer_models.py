@@ -147,14 +147,14 @@ class BaseTransformerModel(nn.Module):
         # Set by subclasses
         self.optimizer = None
         self.criterion = nn.MSELoss()
-        self.patience = 45
+        self.patience = 35
         self.scheduler = None
 
-    def _setup_optimizer_scheduler(self, learning_rate, weight_decay):
+    def _setup_optimizer_scheduler(self, learning_rate, weight_decay, patience=25):
         """Setup optimizer and scheduler - called by subclasses"""
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.scheduler = ReduceLROnPlateau(
-            self.optimizer, mode='min', factor=0.3, patience=20,
+            self.optimizer, mode='min', factor=0.3, patience=patience,
             threshold=0.1, cooldown=1, min_lr=1e-6, verbose=True
         )
 
@@ -224,11 +224,10 @@ class BaseTransformerModel(nn.Module):
         
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose, dataset=dataset)
 
-
 class SharedSelfAttentionModel(BaseTransformerModel):
     def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128],
                  use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
-                 batch_size=256, aug_prob=0.0, epochs=100, num_workers=2, prefetch_factor=2, use_attention_pooling=False):
+                 batch_size=256, aug_prob=0.0, epochs=100, num_workers=2, prefetch_factor=2):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
         
         self.input_dim = input_dim // 2
@@ -239,7 +238,7 @@ class SharedSelfAttentionModel(BaseTransformerModel):
         self.num_layers = num_layers
         self.aug_prob = aug_prob
         self.use_alibi = use_alibi
-        self.use_attention_pooling = use_attention_pooling
+        self.use_attention_pooling = False
         
         self.num_tokens = self.input_dim // self.token_encoder_dim
         
@@ -252,14 +251,11 @@ class SharedSelfAttentionModel(BaseTransformerModel):
             dropout=transformer_dropout,
             use_alibi=self.use_alibi,
             num_tokens=self.num_tokens,
-            use_attention_pooling=self.use_attention_pooling,
+            use_attention_pooling=False,
         )
         self.encoder = torch.compile(self.encoder)
         
-        if not self.use_attention_pooling:
-            prev_dim = (self.encoder_output_dim * self.num_tokens * 2)
-        else:
-            prev_dim = self.d_model * 2
+        prev_dim = (self.encoder_output_dim * self.num_tokens * 2)
         
         deep_layers = []
         for hidden_dim in deep_hidden_dims:
@@ -291,11 +287,75 @@ class SharedSelfAttentionModel(BaseTransformerModel):
         y_pred = self.output_layer(self.deep_layers(x))
         y_pred = torch.clamp(y_pred, min=-1.0, max=1.0)
         
-        if self.store_attn and self.use_attention_pooling:
+        return y_pred.squeeze()
+
+class SharedSelfAttentionPoolingModel(BaseTransformerModel):
+    def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128],
+                 use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
+                 batch_size=256, aug_prob=0.0, epochs=100, num_workers=2, prefetch_factor=2):
+        super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
+        
+        self.input_dim = input_dim // 2
+        self.token_encoder_dim = token_encoder_dim
+        self.d_model = d_model
+        self.encoder_output_dim = encoder_output_dim
+        self.nhead = nhead
+        self.num_layers = num_layers
+        self.aug_prob = aug_prob
+        self.use_alibi = use_alibi
+        self.use_attention_pooling = True
+        
+        self.num_tokens = self.input_dim // self.token_encoder_dim
+        
+        self.encoder = FlashAttentionEncoder(
+            token_encoder_dim=self.token_encoder_dim,
+            d_model=self.d_model,
+            output_dim=self.encoder_output_dim,
+            nhead=self.nhead,
+            num_layers=self.num_layers,
+            dropout=transformer_dropout,
+            use_alibi=self.use_alibi,
+            num_tokens=self.num_tokens,
+            use_attention_pooling=True,
+        )
+        self.encoder = torch.compile(self.encoder)
+        
+        prev_dim = self.d_model * 2
+        
+        deep_layers = []
+        for hidden_dim in deep_hidden_dims:
+            deep_layers.extend([
+                nn.Linear(prev_dim, hidden_dim),
+                nn.ReLU(),
+                nn.BatchNorm1d(hidden_dim, dtype=torch.float32),
+                nn.Dropout(dropout_rate)
+            ])
+            prev_dim = hidden_dim
+        self.deep_layers = nn.Sequential(*deep_layers)
+        self.output_layer = nn.Linear(prev_dim, 1)
+        
+        num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"Number of learnable parameters in SMT model: {num_params}")
+        
+        self._setup_optimizer_scheduler(learning_rate, weight_decay)
+
+    def forward(self, x):
+        x_i, x_j = torch.chunk(x, chunks=2, dim=1)
+        if self.store_attn:
+            x_i, attn_beta_i = self.encoder(x_i, return_attn=True)
+            x_j, attn_beta_j = self.encoder(x_j, return_attn=True)
+        else:
+            x_i = self.encoder(x_i)
+            x_j = self.encoder(x_j)
+
+        x = torch.cat([x_i, x_j], dim=1)
+        y_pred = self.output_layer(self.deep_layers(x))
+        y_pred = torch.clamp(y_pred, min=-1.0, max=1.0)
+        
+        if self.store_attn:
             return {"output": y_pred.squeeze(), "attn_beta_i": attn_beta_i, "attn_beta_j": attn_beta_j}
         
         return y_pred.squeeze()
-
 
 class SelfAttentionCLSEncoder(nn.Module):    
     def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, cls_init='spatial_learned', use_alibi=False, num_tokens=None, use_attention_pooling=True):
@@ -371,7 +431,7 @@ class SelfAttentionCLSEncoder(nn.Module):
 class SharedSelfAttentionCLSModel(BaseTransformerModel):
     def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
                  cls_init='spatial_learned', use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
-                 batch_size=128, epochs=100, aug_prob=0.0, num_workers=2, prefetch_factor=2, use_attention_pooling=False):
+                 batch_size=128, epochs=100, aug_prob=0.0, num_workers=2, prefetch_factor=2):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
         
         self.include_coords = True
@@ -387,7 +447,7 @@ class SharedSelfAttentionCLSModel(BaseTransformerModel):
         self.num_layers = num_layers
         self.deep_hidden_dims = deep_hidden_dims
         self.dropout_rate = dropout_rate
-        self.use_attention_pooling = use_attention_pooling
+        self.use_attention_pooling = False
         
         self.num_tokens = self.input_dim // self.token_encoder_dim
 
@@ -401,14 +461,11 @@ class SharedSelfAttentionCLSModel(BaseTransformerModel):
             cls_init=self.cls_init,
             use_alibi=self.use_alibi,
             num_tokens=self.num_tokens,
-            use_attention_pooling=self.use_attention_pooling,
+            use_attention_pooling=False,
         )
         self.encoder = torch.compile(self.encoder)
 
-        if not self.use_attention_pooling:
-            prev_dim = (self.encoder_output_dim * (self.num_tokens + 1) * 2)
-        else:
-            prev_dim = self.d_model * 2
+        prev_dim = (self.encoder_output_dim * (self.num_tokens + 1) * 2)
         deep_layers = []
         for hidden_dim in self.deep_hidden_dims:
             deep_layers.extend([
@@ -428,6 +485,73 @@ class SharedSelfAttentionCLSModel(BaseTransformerModel):
     def forward(self, x, coords):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         coords_i, coords_j = torch.chunk(coords, chunks=2, dim=1)
+        x_i = self.encoder(x_i, coords_i)
+        x_j = self.encoder(x_j, coords_j)
+        x = torch.cat([x_i, x_j], dim=1)
+        y_pred = self.output_layer(self.deep_layers(x))
+        y_pred = torch.clamp(y_pred, min=-0.8, max=1.0)
+        return y_pred.squeeze()
+
+    def _forward_with_coords(self, x, coords):
+        return self.forward(x, coords)
+
+class SharedSelfAttentionCLSPoolingModel(BaseTransformerModel):
+    def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
+                 cls_init='spatial_learned', use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
+                 batch_size=128, epochs=100, aug_prob=0.0, num_workers=2, prefetch_factor=2):
+        super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
+        
+        self.include_coords = True
+        self.cls_init = cls_init
+        self.aug_prob = aug_prob
+        self.use_alibi = use_alibi
+        self.input_dim = input_dim // 2
+        self.token_encoder_dim = token_encoder_dim 
+        self.d_model = d_model
+        self.encoder_output_dim = encoder_output_dim
+        self.transformer_dropout = transformer_dropout
+        self.nhead = nhead
+        self.num_layers = num_layers
+        self.deep_hidden_dims = deep_hidden_dims
+        self.dropout_rate = dropout_rate
+        self.use_attention_pooling = True
+        
+        self.num_tokens = self.input_dim // self.token_encoder_dim
+
+        self.encoder = SelfAttentionCLSEncoder(
+            token_encoder_dim=self.token_encoder_dim,
+            d_model=self.d_model,
+            output_dim=self.encoder_output_dim, 
+            nhead=self.nhead, 
+            num_layers=self.num_layers,
+            dropout=self.transformer_dropout,
+            cls_init=self.cls_init,
+            use_alibi=self.use_alibi,
+            num_tokens=self.num_tokens,
+            use_attention_pooling=True
+        )
+        self.encoder = torch.compile(self.encoder)
+
+        prev_dim = self.d_model * 2
+        deep_layers = []
+        for hidden_dim in self.deep_hidden_dims:
+            deep_layers.extend([
+                nn.Linear(prev_dim, hidden_dim),
+                nn.ReLU(),
+                nn.BatchNorm1d(hidden_dim, dtype=torch.float32), 
+                nn.Dropout(dropout_rate)])
+            prev_dim = hidden_dim
+        self.deep_layers = nn.Sequential(*deep_layers)
+        self.output_layer = nn.Linear(prev_dim, 1)
+        
+        num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"Number of learnable parameters in SMT w/ CLS pooled model: {num_params}")
+
+        self._setup_optimizer_scheduler(learning_rate, weight_decay)
+
+    def forward(self, x, coords):
+        x_i, x_j = torch.chunk(x, chunks=2, dim=1)
+        coords_i, coords_j = torch.chunk(coords, chunks=2, dim=1)
         if self.store_attn:
             x_i, attn_beta_i = self.encoder(x_i, coords_i, return_attn=True)
             x_j, attn_beta_j = self.encoder(x_j, coords_j, return_attn=True)
@@ -437,13 +561,12 @@ class SharedSelfAttentionCLSModel(BaseTransformerModel):
         x = torch.cat([x_i, x_j], dim=1)
         y_pred = self.output_layer(self.deep_layers(x))
         y_pred = torch.clamp(y_pred, min=-0.8, max=1.0)
-        if self.store_attn and self.use_attention_pooling:
+        if self.store_attn:
             return {"output": y_pred.squeeze(), "attn_beta_i": attn_beta_i, "attn_beta_j": attn_beta_j}
         return y_pred.squeeze()
 
     def _forward_with_coords(self, x, coords):
         return self.forward(x, coords)
-
 
 class GeneConvEncoder(nn.Module):
     def __init__(self, input_dim, d_model=128, num_tokens=128,
@@ -491,11 +614,11 @@ class SharedSelfAttentionConvModel(BaseTransformerModel):
                  batch_size=256, epochs=100, num_workers=2, prefetch_factor=2):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
 
-        # Split across hemispheres
         self.input_dim = input_dim // 2
         self.d_model = d_model
         self.num_tokens = num_tokens
-
+        self.use_attention_pooling = True
+        
         # Convolutional encoder → outputs (B, num_tokens, d_model)
         self.conv_encoder = GeneConvEncoder(
             input_dim=self.input_dim,
@@ -503,18 +626,19 @@ class SharedSelfAttentionConvModel(BaseTransformerModel):
             num_tokens=num_tokens
         )
 
-        # FlashAttention encoder over tokens
+        # FlashAttention encoder over tokens created by convolution
         self.encoder = FlashAttentionEncoder(
             d_model=d_model,
             nhead=nhead,
             num_layers=num_layers,
             dropout=transformer_dropout,
-            use_alibi=use_alibi
+            use_alibi=use_alibi, 
+            use_attention_pooling=True # this will do the pooling automatically 
         )
         self.encoder = torch.compile(self.encoder)
 
         # Fully connected regression head
-        prev_dim = d_model * num_tokens * 2  # both hemispheres
+        prev_dim = d_model * 2  # both region embeddings
         deep_layers = []
         for hidden_dim in deep_hidden_dims:
             deep_layers.extend([
@@ -544,13 +668,24 @@ class SharedSelfAttentionConvModel(BaseTransformerModel):
         x_i = self.encoder(x_i)
         x_j = self.encoder(x_j)
 
-        # Flatten + concatenate hemispheric embeddings
-        x = torch.cat([x_i.flatten(start_dim=1), x_j.flatten(start_dim=1)], dim=1)
+        # Attention pooling
+        if self.store_attn:
+            x_i, attn_i = self.attn_pool(x_i, return_attn=True)
+            x_j, attn_j = self.attn_pool(x_j, return_attn=True)
+        else:
+            x_i = self.attn_pool(x_i)
+            x_j = self.attn_pool(x_j)
+
+        # Concatenate pooled embeddings
+        x = torch.cat([x_i, x_j], dim=1)
 
         # Deep regression head
         y_pred = self.output_layer(self.deep_layers(x))
+        y_pred = torch.clamp(y_pred, min=-1.0, max=1.0).squeeze()
 
-        return torch.clamp(y_pred, min=-1.0, max=1.0).squeeze()
+        if self.store_attn:
+            return {"output": y_pred, "attn_i": attn_i, "attn_j": attn_j}
+        return y_pred
 
 
 class CrossAttentionBlock(nn.Module):
