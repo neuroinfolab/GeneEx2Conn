@@ -24,7 +24,7 @@ from models.pls import PLSTwoStepModel, PLS_MLPDecoderModel, PLS_BilinearDecoder
 from models.dynamic_mlp import DynamicMLP
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
 from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionPoolingModel, SharedSelfAttentionCLSModel, SharedSelfAttentionCLSPoolingModel
-from models.transformer_models import SharedSelfAttentionConvModel, CrossAttentionModel
+from models.transformer_models import SharedSelfAttentionConvModel, SharedSelfAttentionPCAModel, CrossAttentionModel
 
 MODEL_CLASSES = {
     'cge': CGEModel,
@@ -43,6 +43,7 @@ MODEL_CLASSES = {
     'shared_transformer_cls': SharedSelfAttentionCLSModel,
     'shared_transformer_cls_pool': SharedSelfAttentionCLSPoolingModel,
     'shared_transformer_conv': SharedSelfAttentionConvModel,
+    'shared_transformer_pca': SharedSelfAttentionPCAModel,
     'cross_attention': CrossAttentionModel
 }
 
@@ -78,7 +79,7 @@ class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, resolution=1.0, random_seed=42,
                  omit_subcortical=False, dataset='UKBB', parcellation='S456', impute_strategy='mirror_interpolate', sort_genes='expression', 
                  gene_list='0.2', hemisphere='both', train_shared_regions=False, test_shared_regions=False, 
-                 connectome_target='FC', binarize=None, skip_cv=False, null_model=False):        
+                 connectome_target='FC', skip_cv=False, null_model=False):        
         """
         Initialization of simulation parameters
         """
@@ -92,7 +93,6 @@ class Simulation:
         self.train_shared_regions = train_shared_regions
         self.test_shared_regions = test_shared_regions
         self.connectome_target = connectome_target.upper()
-        self.binarize = binarize
         self.skip_cv = skip_cv
         self.null_model = null_model
         self.results = []
@@ -102,7 +102,8 @@ class Simulation:
         Load transcriptome and connectome data
         """
         self.X = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes, null_model=self.null_model, random_seed=self.random_seed)        
-        self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA=True, hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
+        self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA='95var', hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
+        self.X_pca_full = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA='full', hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
         self.X_cell_types_Jorstad = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='Jorstad')
         self.X_cell_types_Lake_DFC = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeDFC')
         self.X_cell_types_Lake_VIS = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeVIS')
@@ -126,6 +127,7 @@ class Simulation:
         # Subset all data using valid indices
         self.X = self.X[valid_indices]
         self.X_pca = self.X_pca[valid_indices]
+        self.X_pca_full = self.X_pca_full[valid_indices]
         self.X_cell_types_Jorstad = self.X_cell_types_Jorstad[valid_indices]
         self.X_cell_types_Lake_DFC = self.X_cell_types_Lake_DFC[valid_indices]
         self.X_cell_types_Lake_VIS = self.X_cell_types_Lake_VIS[valid_indices]
@@ -141,6 +143,7 @@ class Simulation:
         
         print(f"X shape: {self.X.shape}")
         print(f"X_pca shape: {self.X_pca.shape}")
+        print(f"X_pca_full shape: {self.X_pca_full.shape}")
         print(f"X_cell_types_Jorstad shape: {self.X_cell_types_Jorstad.shape}") 
         print(f"X_cell_types_LakeDFC shape: {self.X_cell_types_Lake_DFC.shape}")
         print(f"X_cell_types_LakeVIS shape: {self.X_cell_types_Lake_VIS.shape}")
@@ -151,10 +154,7 @@ class Simulation:
         print(f"Coordinates shape: {self.coords.shape}")
         
         # Define target connectome
-        if self.binarize:
-            self.Y = self.Y_fc_binary if self.connectome_target == 'FC' else self.Y_sc_binary
-        else:
-            self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
+        self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
         print('Y shape', self.Y.shape)
     
     def select_cv(self):
@@ -188,7 +188,8 @@ class Simulation:
 
         # Possible features types
         feature_dict = {'transcriptome': self.X,
-                        'transcriptome_PCA': self.X_pca,
+                        'transcriptome_PCA_95var': self.X_pca,
+                        'transcriptome_PCA_full': self.X_pca_full,
                         # cell type info 
                         'Jorstad': self.X_cell_types_Jorstad,
                         'LakeDFC': self.X_cell_types_Lake_DFC,
@@ -244,7 +245,7 @@ class Simulation:
 
         if self.skip_cv:
             sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-            best_config = load_best_parameters(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
+            best_config = load_best_parameters(sweep_config_path, input_dim=input_dim)
             best_val_loss = 0.0 # no CV --> no best val loss
         else:
             def train_sweep_wrapper(config=None):
@@ -266,7 +267,6 @@ class Simulation:
                     omit_subcortical=self.omit_subcortical, 
                     gene_list=self.gene_list, 
                     seed=self.random_seed,
-                    binarize=self.binarize,
                     impute_strategy=self.impute_strategy,
                     sort_genes=self.sort_genes,
                     null_model=self.null_model
@@ -288,7 +288,7 @@ class Simulation:
 
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]
-        if 'pls' in self.model_type:
+        if 'pls' in self.model_type or 'pca' in self.model_type:
             best_model = ModelClass(**best_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=self.region_pair_dataset).to(device)
         else:
             best_model = ModelClass(**best_config).to(device)
@@ -316,7 +316,7 @@ class Simulation:
                 if (search_method[0] == 'wandb' or track_wandb):
                     input_dim = self.region_pair_dataset.X_expanded[0].shape[0]
                     sweep_config_path = os.path.join(absolute_root_path, 'models', 'configs', f'{self.model_type}_sweep_config.yml')
-                    sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim, binarize=self.binarize)
+                    sweep_config = load_sweep_config(sweep_config_path, input_dim=input_dim)
                     sweep_id = wandb.sweep(sweep=sweep_config, project="gx2conn")
                     print('Initialized sweep with ID:', sweep_id)
                 
@@ -351,7 +351,6 @@ class Simulation:
                                                     f"hemisphere_{self.hemisphere}",
                                                     f"omit_subcortical_{self.omit_subcortical}",
                                                     f"gene_list_{self.gene_list}",
-                                                    f"binarize_{self.binarize}",
                                                     f"impute_strategy_{self.impute_strategy}",
                                                     f"sort_genes_{self.sort_genes}",
                                                     f"null_model_{self.null_model}"],

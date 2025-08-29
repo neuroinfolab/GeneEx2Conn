@@ -8,8 +8,6 @@ metric:
 parameters:
   input_dim:
     value: !!int 0
-  binarize:
-    value: !!int 0
   hidden_dims:
     values:
       # - [32]
@@ -36,8 +34,6 @@ parameters:
 # REGRESSION
 best_parameters:
   input_dim:
-    value: !!int 0
-  binarize:
     value: !!int 0
   hidden_dims:
     values:    

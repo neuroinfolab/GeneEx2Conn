@@ -4,8 +4,14 @@ from env.imports import *
 relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data'
 absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'
 
-def _apply_pca(data, var_thresh=0.95):
-        """Helper to apply PCA with variance threshold."""
+def _apply_pca(data, var_thresh=0.95, version='95var'):
+        """
+        Helper to apply PCA with variance threshold.
+        Args:
+            data: Input data matrix
+            var_thresh: Variance threshold for PCA components (default 0.95)
+            version: Either '95var' for variance threshold or 'full' for all components
+        """
         # Find rows without NaNs
         valid_rows = ~np.isnan(data).any(axis=1)
         
@@ -14,16 +20,19 @@ def _apply_pca(data, var_thresh=0.95):
         data_valid = data[valid_rows]
         data_pca_valid = pca.fit_transform(data_valid)
         
-        # Get number of components based on variance threshold
-        cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
-        n_components = np.argmax(cumulative_variance >= var_thresh) + 1
-        print(f"Number of components for 95% variance PCA: {n_components}")
-        
-        data_pca = np.full((data.shape[0], n_components), np.nan)
-        
-        # Fill in transformed valid rows
-        data_pca[valid_rows] = data_pca_valid[:, :n_components]
-        
+        if version == '95var':
+            # Get number of components based on variance threshold
+            cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
+            n_components = np.argmax(cumulative_variance >= var_thresh) + 1
+            print(f"Number of components for 95% variance PCA: {n_components}")
+            
+            data_pca = np.full((data.shape[0], n_components), np.nan)
+            data_pca[valid_rows] = data_pca_valid[:, :n_components]
+        else:
+            # Return full PCA matrix
+            data_pca = np.full((data.shape[0], data_pca_valid.shape[1]), np.nan)
+            data_pca[valid_rows] = data_pca_valid
+            
         return data_pca
 
 def get_iPA_masks(parcellation):
@@ -58,7 +67,7 @@ def get_iPA_masks(parcellation):
 
     return hemi_mask_list, subcort_mask_list, n_cortical
 
-def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run_PCA=False, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='refgenome', return_valid_genes=False, null_model='none', random_seed=42):
+def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run_PCA=None, omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', sort_genes='refgenome', return_valid_genes=False, null_model='none', random_seed=42):
     """
     Load transcriptome data with optional PCA reduction.
     
@@ -153,8 +162,8 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             genes_data = np.array(genes_data[valid_genes])
 
         # Apply PCA if specified
-        if run_PCA:
-            genes_data = _apply_pca(genes_data)
+        if run_PCA is not None:
+            genes_data = _apply_pca(genes_data, version=run_PCA)
 
         # base return for iPA parcellation
         if 'iPA' in parcellation:

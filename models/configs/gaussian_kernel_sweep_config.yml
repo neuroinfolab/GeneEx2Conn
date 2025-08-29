@@ -7,13 +7,9 @@ metric:
 parameters:
   input_dim: 
     value: !!int 0
-  binarize:
-    value: !!int 0
   init_sigma:
     values: [None, 0.5, 1.0, 2.0, 5.0]
 
 best_parameters:
   input_dim: 
-    value: !!int 0
-  binarize:
     value: !!int 0

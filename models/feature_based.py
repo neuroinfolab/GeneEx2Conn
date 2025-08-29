@@ -30,7 +30,7 @@ def predict_from_loader(model, loader):
 
 class CGEModel(nn.Module):
     """Simple correlation between gene expression vectors."""
-    def __init__(self, input_dim, binarize, scale_range=False):
+    def __init__(self, input_dim, binarize=None, scale_range=False):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.criterion = nn.MSELoss()
@@ -78,7 +78,7 @@ class CGEModel(nn.Module):
 
 class GaussianKernelModel(nn.Module):
     """Gaussian kernel based on euclidean distance."""
-    def __init__(self, input_dim, binarize, init_sigma=None):
+    def __init__(self, input_dim, binarize=None, init_sigma=None):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.criterion = nn.MSELoss()
@@ -126,7 +126,7 @@ class GaussianKernelModel(nn.Module):
 
 class ExponentialDecayModel(nn.Module):
     """Exponential decay based on euclidean distance."""
-    def __init__(self, input_dim, binarize, SA_inf=-0.2, SA_lambda=15.0):
+    def __init__(self, input_dim, binarize=None, SA_inf=-0.2, SA_lambda=15.0):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.criterion = nn.MSELoss()

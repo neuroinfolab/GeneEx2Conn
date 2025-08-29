@@ -8,8 +8,6 @@ metric:
 parameters:
   input_dim: 
     value: !!int 0
-  binarize: 
-    value: !!int 0
   n_components:
     values: [5, 8, 10, 12, 15, 25, 30, 50]
   max_iter:
@@ -35,8 +33,6 @@ parameters:
 
 best_parameters:
   input_dim: 
-    value: !!int 0
-  binarize: 
     value: !!int 0
   n_components:
     values: [10]

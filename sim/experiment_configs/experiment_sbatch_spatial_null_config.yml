@@ -10,7 +10,6 @@ dataset: 'UKBB'
 parcellation: 'S456'
 hemisphere: 'both'
 connectome_target: 'FC'
-binarize: false
 
 # Gene expression
 impute_strategy: 'mirror_interpolate'

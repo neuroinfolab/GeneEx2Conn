@@ -7,8 +7,6 @@ metric:
 parameters:
   input_dim:
     value: !!int 0
-  binarize:
-    value: !!int 0
   learning_rate:
     values: [0.0005]
   batch_size:
@@ -24,8 +22,6 @@ parameters:
 best_parameters:
   input_dim:
     value: !!int 0 
-  binarize:
-    value: !!int 0
   learning_rate:
     values: [0.0005]
   batch_size:

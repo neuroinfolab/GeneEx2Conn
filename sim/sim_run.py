@@ -19,7 +19,6 @@ def single_sim_run(
     parcellation='S456',
     hemisphere='both',
     connectome_target='FC',
-    binarize=False,
     impute_strategy=None,
     sort_genes=None,
     gene_list='0.2',
@@ -74,9 +73,6 @@ def single_sim_run(
     connectome_target : str, optional
         Target connectome type to predict. Options: 'FC' (functional) or 'SC' (structural).
         Default: 'FC'
-    
-    binarize : bool, optional
-        Whether to binarize the connectome. Default: False
 
     impute_strategy : str, optional
         Imputation strategy to use. Default: None. Options: None, 'mirror', 'interpolate', 'mirror_interpolate'
@@ -133,7 +129,6 @@ def single_sim_run(
                     parcellation=parcellation,
                     hemisphere=hemisphere,
                     connectome_target=connectome_target,
-                    binarize=binarize,
                     impute_strategy=impute_strategy,
                     sort_genes=sort_genes,
                     gene_list=gene_list,

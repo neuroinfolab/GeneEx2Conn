@@ -41,7 +41,8 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
                 predictions, targets = model.predict(val_loader)
                 pearson_corr = pearsonr(predictions, targets)[0]
                 
-                '''if hasattr(model, 'use_alibi'):
+                '''
+                if hasattr(model, 'use_alibi'):
                     save_path = os.path.join('models', 'saved_models')
                     os.makedirs(save_path, exist_ok=True)
                     if hasattr(model, 'cls_init'):
@@ -86,7 +87,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
             with autocast(dtype=torch.bfloat16):
                 if hasattr(model, 'include_coords'): # For models with CLS
                     predictions = model(batch_X, batch_coords).squeeze()
-                elif hasattr(model, 'optimize_encoder'): # For PLS models
+                elif hasattr(model, 'optimize_encoder'): # For PLS and PCA encoder models
                     predictions = model(batch_X, batch_idx).squeeze()
                 else:
                     predictions = model(batch_X).squeeze()

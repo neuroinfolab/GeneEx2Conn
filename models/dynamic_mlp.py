@@ -4,7 +4,7 @@ from models.train_val import train_model
 from models.base_models import BaseModel
 
 class DynamicMLP(nn.Module):
-    def __init__(self, input_dim, binarize, hidden_dims=[512, 256, 128], dropout_rate=0.2, learning_rate=1e-3, weight_decay=0.0001, batch_size=512, epochs=100):
+    def __init__(self, input_dim, binarize=None, hidden_dims=[512, 256, 128], dropout_rate=0.2, learning_rate=1e-3, weight_decay=0.0001, batch_size=512, epochs=100):
         super().__init__()
         self.input_dim = input_dim
         self.binarize = binarize

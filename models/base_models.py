@@ -9,7 +9,7 @@ class BaseModel(nn.Module):
         self.to(self.device)
 
     @staticmethod
-    def predict(self, loader, binarize=False):
+    def predict(self, loader, binarize=None):
         self.eval()
         predictions = []
         targets = []
@@ -21,7 +21,7 @@ class BaseModel(nn.Module):
                 targets.append(batch_y.numpy())
         predictions = np.concatenate(predictions)
         targets = np.concatenate(targets)
-        return ((predictions > 0.5).astype(int) if binarize else predictions), targets
+        return predictions, targets
     
     @staticmethod
     def fit(self, dataset, train_indices, test_indices, criterion, optimizer, scheduler=None, epochs=100, batch_size=512, verbose=True):
@@ -199,7 +199,7 @@ class RandomForestModel(BaseModel):
 class ModelBuild:
     """Factory class to create base models based on the given sklearn-like model type."""
     @staticmethod
-    def init_model(model_type, binarize=False):
+    def init_model(model_type, binarize=None):
         if binarize:
             model_mapping = {
                 'svm': SVCModel,

@@ -24,7 +24,7 @@ class BilinearLoss(nn.Module):
         return mse_loss
 
 class BilinearLowRank(nn.Module):
-    def __init__(self, input_dim, binarize=False, reduced_dim=10, activation='none', learning_rate=0.01, epochs=100, 
+    def __init__(self, input_dim, binarize=None, reduced_dim=10, activation='none', learning_rate=0.01, epochs=100, 
                  batch_size=128, regularization='l1', lambda_reg=1.0, shared_weights=True):
         super().__init__()
         self.learning_rate = learning_rate
@@ -97,7 +97,7 @@ class BilinearLowRank(nn.Module):
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
 
 class BilinearCM(nn.Module):
-    def __init__(self, input_dim, binarize=False,learning_rate=0.01, epochs=100, 
+    def __init__(self, input_dim, binarize=None,learning_rate=0.01, epochs=100, 
                  batch_size=128, regularization='l2', lambda_reg=1.0, bias=True, closed_form=True):
         super().__init__()
         self.learning_rate = learning_rate

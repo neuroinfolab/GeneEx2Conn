@@ -9,7 +9,6 @@ omit_subcortical: false
 parcellation: 'iPA_183'
 hemisphere: 'both'
 connectome_target: 'FC'
-binarize: false
 
 # Gene expression
 impute_strategy: 'mirror_interpolate'

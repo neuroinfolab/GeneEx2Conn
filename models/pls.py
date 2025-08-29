@@ -63,7 +63,7 @@ class PLSEncoder(nn.Module):
 
 class PLS_BilinearDecoderModel(BaseModel):
     def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset,
-                 binarize=False, n_components=10, max_iter=1000, scale=True, optimize_encoder=False,
+                 binarize=None, n_components=10, max_iter=1000, scale=True, optimize_encoder=False,
                  learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100, closed_form=True):
         super().__init__()
         
@@ -121,7 +121,7 @@ class PLS_BilinearDecoderModel(BaseModel):
                 targets.append(batch_y.numpy())
         predictions = np.concatenate(predictions)
         targets = np.concatenate(targets)
-        return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
+        return predictions, targets
     
     def fit(self, dataset, expanded_train_indices, expanded_test_indices, verbose=True):
         train_dataset = Subset(dataset, expanded_train_indices)
@@ -207,7 +207,7 @@ class PLS_BilinearDecoderModel(BaseModel):
 
 class PLS_MLPDecoderModel(BaseModel):
     def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset,
-                 binarize=False, n_components=10, max_iter=1000, scale=True, optimize_encoder=False, hidden_dims=[128, 64],
+                 binarize=None, n_components=10, max_iter=1000, scale=True, optimize_encoder=False, hidden_dims=[128, 64],
                  dropout_rate=0.2, learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100):
         super().__init__()
         
@@ -325,7 +325,7 @@ class PLSConn2Conn(nn.Module):
         return Y_test_pred
 
 class PLSTwoStepModel(nn.Module):
-    def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset, n_components_l=10, n_components_k=10, max_iter=1000, scale=True, binarize=False,):
+    def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset, n_components_l=10, n_components_k=10, max_iter=1000, scale=True, binarize=None):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         

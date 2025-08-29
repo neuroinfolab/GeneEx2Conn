@@ -7,8 +7,6 @@ metric:
 parameters:
   input_dim: 
     value: !!int 0
-  binarize:
-    value: !!int 0
   SA_inf:
     values: [-1.0, -0.5, -0.2, -0.1, 0.0]
   SA_lambda:
@@ -16,8 +14,6 @@ parameters:
 
 best_parameters:
   input_dim: 
-    value: !!int 0
-  binarize:
     value: !!int 0
   SA_inf:
     values: [0.0]

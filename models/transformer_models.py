@@ -2,6 +2,7 @@ from env.imports import *
 from data.data_utils import create_data_loader
 from models.train_val import train_model
 from models.transformer_utils import *
+from models.pls import PLSEncoder
 import torch
 import torch.nn.functional as F
 from torch.nn import RMSNorm
@@ -98,7 +99,7 @@ class FlashAttentionBlock(nn.Module):
             return x
 
 class FlashAttentionEncoder(nn.Module):
-    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, use_alibi=False, num_tokens=None, use_attention_pooling=True):
+    def __init__(self, token_encoder_dim, d_model, output_dim=10, nhead=4, num_layers=4, dropout=0.1, use_alibi=False, use_attention_pooling=True):
         super().__init__()
         
         self.input_projection = nn.Linear(token_encoder_dim, d_model)
@@ -114,8 +115,6 @@ class FlashAttentionEncoder(nn.Module):
         else:
             self.output_projection = nn.Linear(d_model, output_dim)
         
-        self.num_tokens = num_tokens
-
     def forward(self, x, return_attn=False):
         B, T = x.shape
         x = x.view(B, -1, self.input_projection.in_features) # Key chunking step
@@ -149,7 +148,7 @@ class BaseTransformerModel(nn.Module):
         self.criterion = nn.MSELoss()
         self.patience = 35
         self.scheduler = None
-
+    
     def _setup_optimizer_scheduler(self, learning_rate, weight_decay, patience=25):
         """Setup optimizer and scheduler - called by subclasses"""
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
@@ -157,6 +156,18 @@ class BaseTransformerModel(nn.Module):
             self.optimizer, mode='min', factor=0.3, patience=patience,
             threshold=0.1, cooldown=1, min_lr=1e-6, verbose=True
         )
+    
+    def _set_mlp_head(self, prev_dim, deep_hidden_dims, dropout_rate):
+        deep_layers = []
+        for hidden_dim in deep_hidden_dims:
+            deep_layers.extend([
+                nn.Linear(prev_dim, hidden_dim),
+                nn.ReLU(),
+                nn.BatchNorm1d(hidden_dim, dtype=torch.float32),
+                nn.Dropout(dropout_rate)
+            ])
+            prev_dim = hidden_dim
+        return nn.Sequential(*deep_layers), nn.Linear(prev_dim, 1)
 
     def predict(self, loader, collect_attn=False, save_attn_path=None):
         self.eval()
@@ -250,7 +261,6 @@ class SharedSelfAttentionModel(BaseTransformerModel):
             num_layers=self.num_layers,
             dropout=transformer_dropout,
             use_alibi=self.use_alibi,
-            num_tokens=self.num_tokens,
             use_attention_pooling=False,
         )
         self.encoder = torch.compile(self.encoder)
@@ -315,24 +325,16 @@ class SharedSelfAttentionPoolingModel(BaseTransformerModel):
             num_layers=self.num_layers,
             dropout=transformer_dropout,
             use_alibi=self.use_alibi,
-            num_tokens=self.num_tokens,
             use_attention_pooling=True,
         )
         self.encoder = torch.compile(self.encoder)
         
         prev_dim = self.d_model * 2
-        
-        deep_layers = []
-        for hidden_dim in deep_hidden_dims:
-            deep_layers.extend([
-                nn.Linear(prev_dim, hidden_dim),
-                nn.ReLU(),
-                nn.BatchNorm1d(hidden_dim, dtype=torch.float32),
-                nn.Dropout(dropout_rate)
-            ])
-            prev_dim = hidden_dim
-        self.deep_layers = nn.Sequential(*deep_layers)
-        self.output_layer = nn.Linear(prev_dim, 1)
+        self.deep_layers, self.output_layer = self._set_mlp_head(
+            prev_dim=prev_dim,
+            deep_hidden_dims=deep_hidden_dims,
+            dropout_rate=dropout_rate
+        )
         
         num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         print(f"Number of learnable parameters in SMT model: {num_params}")
@@ -460,22 +462,16 @@ class SharedSelfAttentionCLSModel(BaseTransformerModel):
             dropout=self.transformer_dropout,
             cls_init=self.cls_init,
             use_alibi=self.use_alibi,
-            num_tokens=self.num_tokens,
             use_attention_pooling=False,
         )
         self.encoder = torch.compile(self.encoder)
 
         prev_dim = (self.encoder_output_dim * (self.num_tokens + 1) * 2)
-        deep_layers = []
-        for hidden_dim in self.deep_hidden_dims:
-            deep_layers.extend([
-                nn.Linear(prev_dim, hidden_dim),
-                nn.ReLU(),
-                nn.BatchNorm1d(hidden_dim, dtype=torch.float32), 
-                nn.Dropout(dropout_rate)])
-            prev_dim = hidden_dim
-        self.deep_layers = nn.Sequential(*deep_layers)
-        self.output_layer = nn.Linear(prev_dim, 1)
+        self.deep_layers, self.output_layer = self._set_mlp_head(
+            prev_dim=prev_dim,
+            deep_hidden_dims=deep_hidden_dims,
+            dropout_rate=dropout_rate
+        )
         
         num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         print(f"Number of learnable parameters in SMT w/ CLS model: {num_params}")
@@ -527,22 +523,16 @@ class SharedSelfAttentionCLSPoolingModel(BaseTransformerModel):
             dropout=self.transformer_dropout,
             cls_init=self.cls_init,
             use_alibi=self.use_alibi,
-            num_tokens=self.num_tokens,
             use_attention_pooling=True
         )
         self.encoder = torch.compile(self.encoder)
 
         prev_dim = self.d_model * 2
-        deep_layers = []
-        for hidden_dim in self.deep_hidden_dims:
-            deep_layers.extend([
-                nn.Linear(prev_dim, hidden_dim),
-                nn.ReLU(),
-                nn.BatchNorm1d(hidden_dim, dtype=torch.float32), 
-                nn.Dropout(dropout_rate)])
-            prev_dim = hidden_dim
-        self.deep_layers = nn.Sequential(*deep_layers)
-        self.output_layer = nn.Linear(prev_dim, 1)
+        self.deep_layers, self.output_layer = self._set_mlp_head(
+            prev_dim=prev_dim,
+            deep_hidden_dims=deep_hidden_dims,
+            dropout_rate=dropout_rate
+        )
         
         num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         print(f"Number of learnable parameters in SMT w/ CLS pooled model: {num_params}")
@@ -568,9 +558,11 @@ class SharedSelfAttentionCLSPoolingModel(BaseTransformerModel):
     def _forward_with_coords(self, x, coords):
         return self.forward(x, coords)
 
+
 class GeneConvEncoder(nn.Module):
-    def __init__(self, input_dim, d_model=128, num_tokens=128,
-                 kernel_size=32, stride=16):
+    def __init__(self, input_dim, d_model=64, num_tokens=128,
+                 kernel_size=32, out_channels=32, stride=16,
+                 nhead=4, num_layers=4, dropout=0.1, use_alibi=False):
         super().__init__()
         self.input_dim = input_dim
         self.d_model = d_model
@@ -579,7 +571,7 @@ class GeneConvEncoder(nn.Module):
         # First layer: learn local co-expression motifs (~32 genes each)
         self.conv1 = nn.Conv1d(
             in_channels=1,
-            out_channels=64,
+            out_channels=out_channels,
             kernel_size=kernel_size,
             stride=stride,
             padding=kernel_size // 2
@@ -587,12 +579,21 @@ class GeneConvEncoder(nn.Module):
         self.relu = nn.ReLU()
 
         # Project motifs → latent embedding dimension
-        self.proj = nn.Conv1d(in_channels=64, out_channels=d_model, kernel_size=1)
+        self.proj = nn.Conv1d(in_channels=out_channels, out_channels=d_model, kernel_size=1)
 
         # Compress into exactly num_tokens tokens using adaptive pooling
         self.pool = nn.AdaptiveAvgPool1d(output_size=num_tokens)
 
-    def forward(self, x):
+        # Flash attention blocks
+        self.attention_layers = nn.ModuleList([
+            FlashAttentionBlock(d_model, nhead, dropout, use_alibi=use_alibi)
+            for _ in range(num_layers)
+        ])
+
+        # Attention pooling
+        self.attn_pool = AttentionPooling(d_model, hidden_dim=32)
+
+    def forward(self, x, return_attn=False):
         # Input: (B, g) → (B, 1, g)
         x = x.unsqueeze(1)
 
@@ -604,12 +605,22 @@ class GeneConvEncoder(nn.Module):
 
         # Compress into num_tokens positionally relevant tokens
         x = self.pool(x)                 # (B, d_model, num_tokens)
+        x = x.transpose(1, 2)            # (B, num_tokens, d_model)
 
-        return x.transpose(1, 2)         # (B, num_tokens, d_model)
+        # Process through flash attention blocks
+        for layer in self.attention_layers:
+            x = layer(x)
+
+        # Final attention pooling
+        if return_attn:
+            x, attn = self.attn_pool(x, return_attn=True)
+            return x, attn
+        return self.attn_pool(x)
 
 class SharedSelfAttentionConvModel(BaseTransformerModel):
     def __init__(self, input_dim, d_model=128, num_tokens=128, nhead=4, num_layers=4,
-                 deep_hidden_dims=[256, 128], use_alibi=False, transformer_dropout=0.1,
+                 deep_hidden_dims=[256, 128], kernel_size=32, out_channels=32, stride=16, 
+                 use_alibi=False, transformer_dropout=0.1, aug_prob=0.0,
                  dropout_rate=0.1, learning_rate=1e-3, weight_decay=0.0,
                  batch_size=256, epochs=100, num_workers=2, prefetch_factor=2):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
@@ -617,39 +628,30 @@ class SharedSelfAttentionConvModel(BaseTransformerModel):
         self.input_dim = input_dim // 2
         self.d_model = d_model
         self.num_tokens = num_tokens
-        self.use_attention_pooling = True
+        self.aug_prob = aug_prob
         
-        # Convolutional encoder → outputs (B, num_tokens, d_model)
+        # Convolutional encoder with embedded flash attention
         self.conv_encoder = GeneConvEncoder(
             input_dim=self.input_dim,
             d_model=d_model,
-            num_tokens=num_tokens
-        )
-
-        # FlashAttention encoder over tokens created by convolution
-        self.encoder = FlashAttentionEncoder(
-            d_model=d_model,
+            num_tokens=num_tokens,
+            kernel_size=kernel_size,
+            out_channels=out_channels,
+            stride=stride,
             nhead=nhead,
             num_layers=num_layers,
             dropout=transformer_dropout,
-            use_alibi=use_alibi, 
-            use_attention_pooling=True # this will do the pooling automatically 
+            use_alibi=use_alibi
         )
-        self.encoder = torch.compile(self.encoder)
+        self.conv_encoder = torch.compile(self.conv_encoder)
 
         # Fully connected regression head
         prev_dim = d_model * 2  # both region embeddings
-        deep_layers = []
-        for hidden_dim in deep_hidden_dims:
-            deep_layers.extend([
-                nn.Linear(prev_dim, hidden_dim),
-                nn.ReLU(),
-                nn.BatchNorm1d(hidden_dim, dtype=torch.float32),
-                nn.Dropout(dropout_rate)
-            ])
-            prev_dim = hidden_dim
-        self.deep_layers = nn.Sequential(*deep_layers)
-        self.output_layer = nn.Linear(prev_dim, 1)
+        self.deep_layers, self.output_layer = self._set_mlp_head(
+            prev_dim=prev_dim,
+            deep_hidden_dims=deep_hidden_dims,
+            dropout_rate=dropout_rate
+        )
 
         num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         print(f"Number of learnable parameters in Conv+Attention model: {num_params}")
@@ -660,23 +662,15 @@ class SharedSelfAttentionConvModel(BaseTransformerModel):
         # Split into hemispheres
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
 
-        # Convert into structured tokens
-        x_i = self.conv_encoder(x_i)  # (B, num_tokens, d_model)
-        x_j = self.conv_encoder(x_j)
-
-        # Process via FlashAttention blocks
-        x_i = self.encoder(x_i)
-        x_j = self.encoder(x_j)
-
-        # Attention pooling
+        # Process through conv encoder with embedded attention
         if self.store_attn:
-            x_i, attn_i = self.attn_pool(x_i, return_attn=True)
-            x_j, attn_j = self.attn_pool(x_j, return_attn=True)
+            x_i, attn_i = self.conv_encoder(x_i, return_attn=True)
+            x_j, attn_j = self.conv_encoder(x_j, return_attn=True)
         else:
-            x_i = self.attn_pool(x_i)
-            x_j = self.attn_pool(x_j)
+            x_i = self.conv_encoder(x_i)
+            x_j = self.conv_encoder(x_j)
 
-        # Concatenate pooled embeddings
+        # Concatenate embeddings
         x = torch.cat([x_i, x_j], dim=1)
 
         # Deep regression head
@@ -686,6 +680,149 @@ class SharedSelfAttentionConvModel(BaseTransformerModel):
         if self.store_attn:
             return {"output": y_pred, "attn_i": attn_i, "attn_j": attn_j}
         return y_pred
+
+
+class PCAEncoder(nn.Module):
+    def __init__(self, train_indices, region_pair_dataset, n_components=128, scale=True, device=None):
+        super().__init__()
+        self.n_components = n_components
+        self.device = device
+        self.region_pair_dataset = region_pair_dataset
+        self.X = region_pair_dataset.X
+
+        # Fit PCA on training data only
+        X_train = self.X[train_indices]
+        print(f"Fitting PCA on shape: {X_train.shape}")
+        self.pca = PCA(n_components=n_components)
+        self.pca.fit(X_train)
+
+        # Store projection matrix and mean for forward pass
+        self.mean = torch.FloatTensor(self.pca.mean_).to(device)
+        self.proj_matrix = torch.FloatTensor(self.pca.components_.T).to(device)
+        self.cached_projection = torch.matmul(torch.FloatTensor(self.X).to(device) - self.mean, self.proj_matrix)
+
+    def forward(self, x, expanded_idx):
+        idxs = expanded_idx.view(-1).tolist()
+        region_pairs = np.array([self.region_pair_dataset.expanded_idx_to_valid_pair[idx] for idx in idxs])
+        region_i = region_pairs[:, 0]
+        region_j = region_pairs[:, 1]
+        x_scores_i = self.cached_projection[region_i]
+        x_scores_j = self.cached_projection[region_j]
+        return x_scores_i, x_scores_j
+
+class SharedSelfAttentionPCAModel(BaseTransformerModel):
+    def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset,
+                 n_components=128, d_model=128, nhead=4, num_layers=4,
+                 deep_hidden_dims=[256, 128], dropout_rate=0.1, aug_prob=0.0,
+                 transformer_dropout=0.1, learning_rate=1e-3, weight_decay=0.0,
+                 batch_size=256, epochs=100, num_workers=2, prefetch_factor=2):
+        super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
+        
+        self.aug_prob = aug_prob
+        self.input_dim = input_dim
+        self.n_components = n_components
+        self.d_model = d_model
+        self.transformer_dropout = transformer_dropout
+        self.nhead = nhead
+        self.num_layers = num_layers
+        self.deep_hidden_dims = deep_hidden_dims
+        self.dropout_rate = dropout_rate
+        self.use_attention_pooling = True
+        self.optimize_encoder = False
+
+        self.PCAencoder = PCAEncoder(
+            train_indices=train_indices,
+            region_pair_dataset=region_pair_dataset,
+            n_components=n_components,
+            scale=True,
+            device=self.device
+        )
+        
+        self.encoder = FlashAttentionEncoder(
+            token_encoder_dim=n_components,
+            d_model=self.d_model,
+            nhead=self.nhead,
+            num_layers=self.num_layers,
+            dropout=transformer_dropout,
+            use_alibi=False,
+            use_attention_pooling=True,
+        )
+        self.encoder = torch.compile(self.encoder)
+
+        self.deep_layers, self.output_layer = self._set_mlp_head(
+            prev_dim=d_model * 2,
+            deep_hidden_dims=deep_hidden_dims,
+            dropout_rate=dropout_rate
+        )
+
+        self._setup_optimizer_scheduler(learning_rate, weight_decay)
+    def forward(self, x, idx):
+        # PCA encode each half
+        x_i, x_j = self.PCAencoder(x, idx)  # each: (B, n_components)
+
+        if self.store_attn:
+            x_i, attn_beta_i = self.encoder(x_i, return_attn=True)
+            x_j, attn_beta_j = self.encoder(x_j, return_attn=True)
+        else:
+            x_i = self.encoder(x_i)
+            x_j = self.encoder(x_j)
+
+        x = torch.cat([x_i, x_j], dim=1)
+        y_pred = self.output_layer(self.deep_layers(x))
+        y_pred = torch.clamp(y_pred, min=-1.0, max=1.0)
+        
+        if self.store_attn:
+            return {"output": y_pred.squeeze(), "attn_beta_i": attn_beta_i, "attn_beta_j": attn_beta_j}
+        
+        return y_pred.squeeze()
+
+    def predict(self, loader, collect_attn=False, save_attn_path=None):
+        self.eval()
+        predictions = []
+        targets = []
+        
+        all_attn = []
+        total_batches = 0
+        
+        self.store_attn = collect_attn
+        if collect_attn and not getattr(self, 'use_attention_pooling', False):
+            collect_full_attention_heads(self.encoder.layers)
+        
+        with torch.no_grad():
+            for batch_X, batch_y, _, batch_idx in loader:
+                batch_X = batch_X.to(self.device)
+                
+                if collect_attn:
+                    out = self(batch_X, batch_idx)
+                    
+                    if getattr(self, 'use_attention_pooling', False):
+                        batch_preds = out["output"].cpu().numpy()
+                        attns = (out["attn_beta_i"], out["attn_beta_j"])
+                        all_attn.append(attns)
+                    else:
+                        batch_preds = out.cpu().numpy()
+                        accumulate_attention_weights(self.encoder.layers, is_first_batch=(total_batches == 0))
+                        total_batches += 1
+                else:
+                    batch_preds = self(batch_X, batch_idx).cpu().numpy()
+                
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        
+        self.store_attn = False  # Disable attention collection to prevent memory leaks
+        if collect_attn:
+            if getattr(self, 'use_attention_pooling', False):
+                avg_attn_arr = collect_attention_pooling_weights(all_attn, save_attn_path)
+            else:
+                avg_attn = process_full_attention_heads(self.encoder.layers, total_batches, save_attn_path)
+        
+        return predictions, targets
+
+
+
 
 
 class CrossAttentionBlock(nn.Module):
@@ -783,12 +920,10 @@ class CrossAttentionModel(BaseTransformerModel):
         self.encoder = torch.compile(self.encoder)
 
         prev_dim = (self.input_dim // self.token_encoder_dim * self.encoder_output_dim)
-        self.deep_layers = nn.Sequential(
-            nn.Linear(prev_dim, deep_hidden_dims[0]),
-            nn.ReLU(),
-            nn.BatchNorm1d(deep_hidden_dims[0]),
-            nn.Dropout(dropout_rate),
-            nn.Linear(deep_hidden_dims[0], 1)
+        self.deep_layers, self.output_layer = self._set_mlp_head(
+            prev_dim=prev_dim,
+            deep_hidden_dims=deep_hidden_dims,
+            dropout_rate=dropout_rate
         )
 
         self._setup_optimizer_scheduler(learning_rate, weight_decay)

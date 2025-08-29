@@ -52,7 +52,7 @@ def print_system_usage():
 
 
 # CONFIG LOADING
-def load_sweep_config(file_path, input_dim, binarize):
+def load_sweep_config(file_path, input_dim):
     """
     Load a sweep config file and update the input_dim parameter.
     """
@@ -60,13 +60,10 @@ def load_sweep_config(file_path, input_dim, binarize):
         config = yaml.safe_load(file)
     
     config['parameters']['input_dim']['value'] = input_dim
-    
-    if binarize is not None:
-        config['parameters']['binarize']['value'] = binarize
 
     return config
 
-def load_best_parameters(yaml_file_path, input_dim, binarize):
+def load_best_parameters(yaml_file_path, input_dim):
     with open(yaml_file_path, 'r') as file:
         config = yaml.safe_load(file)
     
@@ -77,10 +74,7 @@ def load_best_parameters(yaml_file_path, input_dim, binarize):
     best_config = {key: value['values'][0] if isinstance(value, dict) and 'values' in value else value
                    for key, value in best_parameters.items()}
     
-    best_config['input_dim'] = input_dim    
-    
-    if binarize is not None:
-        best_config['binarize'] = binarize
+    best_config['input_dim'] = input_dim
     
     return best_config
 
@@ -280,7 +274,7 @@ def extract_model_params(model):
 
 
 # WANDB
-def train_sweep_torch(config, model_type, train_indices, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, impute_strategy, sort_genes, null_model):
+def train_sweep_torch(config, model_type, train_indices, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, impute_strategy, sort_genes, null_model):
     """
     Training function for W&B sweeps for deep learning models.
     
@@ -319,7 +313,6 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
             f"hemisphere_{hemisphere}",
             f"omit_subcortical_{omit_subcortical}",
             f"gene_list_{gene_list}",
-            f"binarize_{binarize}",
             f"impute_strategy_{impute_strategy}",
             f"sort_genes_{sort_genes}",
             f"null_model_{null_model}"
@@ -359,7 +352,7 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
             test_indices_expanded = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in test_region_pairs])    
     
             # Initialize model dynamically based on sweep config and fit
-            if 'pls' in model_type:
+            if 'pls' in model_type or 'pca' in model_type:
                 model = ModelClass(**sweep_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=dataset).to(device)
             else:
                 model = ModelClass(**sweep_config).to(device)
