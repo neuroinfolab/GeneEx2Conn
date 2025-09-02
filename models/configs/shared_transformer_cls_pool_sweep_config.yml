@@ -27,15 +27,15 @@ parameters:
   dropout_rate:
     values: [0.1, 0.2]
   learning_rate:
-    values: [.001, .0005, .0003]
+    values: [.001, .0003, .0005]
   weight_decay:
-    values: [0, 0.00001]
+    values: [0, 0.00001, 0.0001]
   batch_size:
     value: 1024
   aug_prob:
     values: [0, 0.3, 0.45]
   epochs:
-    values: [70, 90, 110]
+    values: [90, 110]
   num_workers:
     value: 2
   prefetch_factor:
@@ -64,15 +64,15 @@ best_parameters:
   dropout_rate:
     values: [0.1]
   learning_rate:
-    values: [0.0003]
+    values: [0.001] # 0.0003 for random
   weight_decay:
     values: [0.00001]
   batch_size:
     values: [1024]
   aug_prob:
-    values: [0.3]
+    values: [0.45]
   epochs:
-    values: [100]
+    values: [11]
   num_workers:
     values: [2]
   prefetch_factor:

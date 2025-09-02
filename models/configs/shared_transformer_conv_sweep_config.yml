@@ -7,18 +7,16 @@ metric:
 parameters:
   input_dim:
     value: !!int 0
-  # Convolutional encoder params
   kernel_size:             # Size of local gene motifs to learn
     values: [16, 32, 64]
   out_channels:           # Number of motif filters
-    values: [16, 32, 64]
+    values: [16, 32]
   stride:                 # Stride between motifs
-    values: [8, 16, 32]
+    values: [16, 32]
   num_tokens:            # Number of positionally relevant tokens
-    values: [64, 96, 128, 256]
+    values: [96, 128, 256]
   d_model:               # Latent dimension
     values: [64, 128]
-  # Transformer params
   use_alibi:
     values: [True]
   nhead:
@@ -34,7 +32,7 @@ parameters:
   dropout_rate:
     values: [0.1, 0.2]
   learning_rate:
-    values: [0.00009, 0.0001, 0.0002, 0.0005]
+    values: [0.0002, 0.0005]
   weight_decay:
     values: [0.00001, .0]
   batch_size:
@@ -42,7 +40,7 @@ parameters:
   aug_prob:
     values: [0, 0.3, 0.45]
   epochs:
-    values: [70, 90, 110]
+    values: [90, 110]
   num_workers:
     values: [2]
   prefetch_factor:
@@ -54,28 +52,28 @@ best_parameters:
   kernel_size:
     values: [32]
   out_channels:
-    values: [64]
+    values: [32]
   stride:
-    values: [16]
+    values: [32]
   num_tokens:
     values: [128]
   d_model:
-    values: [64]
+    values: [128]
   use_alibi:
     values: [True]
   nhead:
-    values: [2]
+    values: [4]
   num_layers:
-    values: [2]
+    values: [4]
   deep_hidden_dims:
     values:
-      - [256, 128]
+      - [512, 256, 128]
   transformer_dropout:
     values: [0.1]
   dropout_rate:
     values: [0.1]
   learning_rate:
-    values: [0.0002]
+    values: [0.0005]
   weight_decay:
     values: [0.00001]
   batch_size:
@@ -83,7 +81,7 @@ best_parameters:
   aug_prob:
     values: [0.3]
   epochs:
-    values: [100]
+    values: [20]
   num_workers:
     values: [2]
   prefetch_factor:

@@ -24,7 +24,7 @@ from models.pls import PLSTwoStepModel, PLS_MLPDecoderModel, PLS_BilinearDecoder
 from models.dynamic_mlp import DynamicMLP
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
 from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionPoolingModel, SharedSelfAttentionCLSModel, SharedSelfAttentionCLSPoolingModel
-from models.transformer_models import SharedSelfAttentionConvModel, SharedSelfAttentionPCAModel, CrossAttentionModel
+from models.transformer_models import SharedSelfAttentionConvModel, SharedSelfAttentionPCAModel, SharedSelfAttentionPLSModel, CrossAttentionModel
 
 MODEL_CLASSES = {
     'cge': CGEModel,
@@ -44,6 +44,7 @@ MODEL_CLASSES = {
     'shared_transformer_cls_pool': SharedSelfAttentionCLSPoolingModel,
     'shared_transformer_conv': SharedSelfAttentionConvModel,
     'shared_transformer_pca': SharedSelfAttentionPCAModel,
+    'shared_transformer_pls': SharedSelfAttentionPLSModel,
     'cross_attention': CrossAttentionModel
 }
 

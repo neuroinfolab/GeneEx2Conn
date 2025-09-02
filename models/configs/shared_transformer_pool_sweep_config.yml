@@ -18,7 +18,7 @@ parameters:
   num_layers:
     values: [4]
   deep_hidden_dims:
-    values: 
+    values:
     - [256, 128]
     - [256, 128, 64]
     - [512, 256, 128]
@@ -27,15 +27,15 @@ parameters:
   dropout_rate:
     values: [0.1, 0.2]
   learning_rate:
-    values: [.0007, .0005, .0003, .0002, .0001, .00007]
+    values: [.0007, .0005, .0003]
   weight_decay:
-    values: [0, 0.00001]
+    values: [0, 0.00001, 0.0001]
   batch_size:
     value: 1024
   aug_prob:
     values: [0, 0.3, 0.45]
   epochs:
-    values: [70, 90, 110]
+    values: [90, 110]
   num_workers:
     value: 2
   prefetch_factor:
@@ -47,7 +47,7 @@ best_parameters:
   token_encoder_dim:
     values: [60]
   d_model:
-    values: [128]
+    values: [64]
   use_alibi:
     values: [True]
   nhead:
@@ -70,7 +70,7 @@ best_parameters:
   aug_prob:
     values: [0.3]
   epochs:
-    values: [100]
+    values: [11]
   num_workers:
     values: [2]
   prefetch_factor:

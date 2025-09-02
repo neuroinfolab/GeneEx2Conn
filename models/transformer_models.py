@@ -821,7 +821,119 @@ class SharedSelfAttentionPCAModel(BaseTransformerModel):
         
         return predictions, targets
 
+class SharedSelfAttentionPLSModel(BaseTransformerModel):
+    def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset,
+                 n_components=128, optimize_encoder=False, d_model=128, nhead=4, num_layers=4,
+                 deep_hidden_dims=[256, 128], dropout_rate=0.1, aug_prob=0.0,
+                 transformer_dropout=0.1, learning_rate=1e-3, weight_decay=0.0,
+                 batch_size=256, epochs=100, num_workers=2, prefetch_factor=2):
+        super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
+        
+        self.aug_prob = aug_prob
+        self.input_dim = input_dim
+        self.n_components = n_components
+        self.d_model = d_model
+        self.transformer_dropout = transformer_dropout
+        self.nhead = nhead
+        self.num_layers = num_layers
+        self.deep_hidden_dims = deep_hidden_dims
+        self.dropout_rate = dropout_rate
+        self.use_attention_pooling = True
+        self.optimize_encoder = optimize_encoder
 
+        self.PLSencoder = PLSEncoder(
+            train_indices=train_indices,
+            test_indices=test_indices,
+            region_pair_dataset=region_pair_dataset,
+            n_components=n_components,
+            scale=True,
+            optimize_encoder=optimize_encoder,
+            device=self.device
+        )
+        
+        self.encoder = FlashAttentionEncoder(
+            token_encoder_dim=n_components,
+            d_model=self.d_model,
+            nhead=self.nhead,
+            num_layers=self.num_layers,
+            dropout=transformer_dropout,
+            use_alibi=False,
+            use_attention_pooling=True,
+        )
+        self.encoder = torch.compile(self.encoder)
+
+        self.deep_layers, self.output_layer = self._set_mlp_head(
+            prev_dim=d_model * 2,
+            deep_hidden_dims=deep_hidden_dims,
+            dropout_rate=dropout_rate
+        )
+
+        self._setup_optimizer_scheduler(learning_rate, weight_decay)
+
+    def forward(self, x, idx):
+        # PLS encode each half
+        x_i, x_j = self.PLSencoder(x, idx)  # each: (B, n_components)
+
+        if self.store_attn:
+            x_i, attn_beta_i = self.encoder(x_i, return_attn=True)
+            x_j, attn_beta_j = self.encoder(x_j, return_attn=True)
+        else:
+            x_i = self.encoder(x_i)
+            x_j = self.encoder(x_j)
+
+        x = torch.cat([x_i, x_j], dim=1)
+        y_pred = self.output_layer(self.deep_layers(x))
+        y_pred = torch.clamp(y_pred, min=-1.0, max=1.0)
+        
+        if self.store_attn:
+            return {"output": y_pred.squeeze(), "attn_beta_i": attn_beta_i, "attn_beta_j": attn_beta_j}
+        
+        return y_pred.squeeze()
+
+    def predict(self, loader, collect_attn=False, save_attn_path=None):
+        self.eval()
+        predictions = []
+        targets = []
+        
+        all_attn = []
+        total_batches = 0
+        
+        self.store_attn = collect_attn
+        if collect_attn and not getattr(self, 'use_attention_pooling', False):
+            collect_full_attention_heads(self.encoder.layers)
+        
+        with torch.no_grad():
+            for batch_X, batch_y, _, batch_idx in loader:
+                batch_X = batch_X.to(self.device)
+                
+                if collect_attn:
+                    out = self(batch_X, batch_idx)
+                    
+                    if getattr(self, 'use_attention_pooling', False):
+                        batch_preds = out["output"].cpu().numpy()
+                        attns = (out["attn_beta_i"], out["attn_beta_j"])
+                        all_attn.append(attns)
+                    else:
+                        batch_preds = out.cpu().numpy()
+                        accumulate_attention_weights(self.encoder.layers, is_first_batch=(total_batches == 0))
+                        total_batches += 1
+                else:
+                    batch_preds = self(batch_X, batch_idx).cpu().numpy()
+                
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        
+        self.store_attn = False  # Disable attention collection to prevent memory leaks
+        if collect_attn:
+            if getattr(self, 'use_attention_pooling', False):
+                avg_attn_arr = collect_attention_pooling_weights(all_attn, save_attn_path)
+            else:
+                avg_attn = process_full_attention_heads(self.encoder.layers, total_batches, save_attn_path)
+        
+        return predictions, targets
 
 
 
