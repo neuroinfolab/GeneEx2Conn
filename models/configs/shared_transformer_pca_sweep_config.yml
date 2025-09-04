@@ -8,9 +8,9 @@ parameters:
   input_dim:
     value: !!int 0
   n_components:           # Number of PCA components (tokens)
-    values: [64, 128]
+    values: [64, 128, 256]
   d_model:                # Latent dimension of each token
-    values: [64, 128]
+    values: [64, 128, 256]
   nhead:
     values: [2, 4]
   num_layers:
@@ -42,9 +42,9 @@ best_parameters:
   input_dim:
     value: !!int 0
   n_components:
-    values: [128]
+    values: [32] # 128
   d_model:
-    values: [128]
+    values: [32] # 128
   nhead:
     values: [4]
   num_layers:
@@ -63,9 +63,9 @@ best_parameters:
   batch_size:
     values: [1024]
   aug_prob:
-    values: [0.3]
+    values: [0.5]
   epochs:
-    values: [10]
+    values: [11]
   num_workers:
     values: [2]
   prefetch_factor:

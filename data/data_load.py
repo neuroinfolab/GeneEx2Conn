@@ -135,11 +135,14 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
                         set(abagen.fetch_gene_group('layers')))
 
         # Temporarily subset all sorting methods to ref genome for experiments
-        human_refgenome = pd.read_csv(absolute_data_path + '/human_refgenome/human_refgenome_ordered.csv')
-        ordered_genes = human_refgenome['gene_id'].tolist()
-        gene_order_dict = {gene: idx for idx, gene in enumerate(ordered_genes)}
-        valid_genes = [gene for gene in genes_list if gene in gene_order_dict and gene in genes_data.columns]
-        
+        if gene_list != '1':
+            human_refgenome = pd.read_csv(absolute_data_path + '/human_refgenome/human_refgenome_ordered.csv')
+            ordered_genes = human_refgenome['gene_id'].tolist()
+            gene_order_dict = {gene: idx for idx, gene in enumerate(ordered_genes)}
+            valid_genes = [gene for gene in genes_list if gene in gene_order_dict and gene in genes_data.columns]
+        else: # Specifically for autoencoder style model
+            return np.array(genes_data)
+
         if sort_genes == 'refgenome': # this may drop some genes if the gene list symbol does not directly match to the gene_id of the reference genome (ususally drops <5% of genes)
             human_refgenome = pd.read_csv(absolute_data_path + '/human_refgenome/human_refgenome_ordered.csv')
             ordered_genes = human_refgenome['gene_id'].tolist()

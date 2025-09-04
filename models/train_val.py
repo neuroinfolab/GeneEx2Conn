@@ -4,7 +4,7 @@ from torch.cuda.amp import autocast, GradScaler
 from data.data_utils import augment_batch_y, augment_batch_X
 torch.set_float32_matmul_precision('high')
 
-def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, verbose=True, dataset=None):        
+def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, save_model=None, verbose=True, dataset=None):        
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     for i in range(torch.cuda.device_count()):
@@ -41,17 +41,12 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
                 predictions, targets = model.predict(val_loader)
                 pearson_corr = pearsonr(predictions, targets)[0]
                 
-                '''
-                if hasattr(model, 'use_alibi'):
+                if save_model is not None:
                     save_path = os.path.join('models', 'saved_models')
-                    os.makedirs(save_path, exist_ok=True)
-                    if hasattr(model, 'cls_init'):
-                        model_path = os.path.join(save_path, 'UKBB_SMT_CLS_seed42fold0.pt')
-                    else:
-                        model_path = os.path.join(save_path, 'UKBB_SMT_seed42fold0.pt')
+                    os.makedirs(save_path, exist_ok=True)                    
+                    model_path = os.path.join(save_path, f'{save_model}.pt')
                     torch.save(model.state_dict(), model_path)
                     print(f"Saved best model to {model_path}")
-                '''
                 
                 if patience_counter >= patience:
                     print(f"\nEarly stopping triggered at epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}, Pearson Correlation: {pearson_corr:.4f}")
@@ -73,8 +68,10 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
     total_train_loss = 0
 
     for batch_X, batch_y, batch_coords, batch_idx in train_loader:
-        if dataset is not None: # Target-side augmentation with given linear decaying Pr only for transformer models
-            if np.random.random() < model.aug_prob*(1-epoch/model.epochs):
+        if dataset is not None:
+            # Target-side augmentation with given linear decaying or increasing Pr (only for transformer models)
+            #if np.random.random() < model.aug_prob*(1-epoch/model.epochs):
+            if np.random.random() < model.aug_prob*(epoch/model.epochs):
                 # batch_X = augment_batch_X(batch_X) - if want parametrized feature augmentation
                 batch_y = augment_batch_y(batch_idx, dataset, device)
         

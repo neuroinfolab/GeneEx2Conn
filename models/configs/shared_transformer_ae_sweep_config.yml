@@ -1,0 +1,77 @@
+name: shared_transformer_ae
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+parameters: 
+  input_dim:
+    value: !!int 0
+  n_components:
+    values: [32, 64, 128]
+  finetune_last_layer:
+    values: [False] # True 
+  d_model:
+    values: [64, 128, 256]
+  nhead:
+    values: [4]
+  num_layers:
+    values: [4]
+  deep_hidden_dims:
+    values:
+    #- [256, 128]
+    #- [256, 128, 64]
+    - [512, 256, 128]
+  transformer_dropout:
+    values: [0.2]
+  dropout_rate:
+    values: [0.2] 
+  learning_rate:
+    values: [.0003, .0005] # .0007, .0005, .0003, .0001]
+  weight_decay:
+    values: [0, 0.00001, 0.0001]
+  batch_size:
+    values: [1024]
+  aug_prob:
+    values: [0] #, 0.3]
+  epochs:
+    values: [90, 110]
+  num_workers:
+    value: 2
+  prefetch_factor:
+    value: 4
+
+best_parameters:
+  input_dim:
+    value: !!int 0
+  n_components:
+    values: [128]
+  finetune_last_layer:
+    values: [False]
+  d_model:
+    values: [64]
+  nhead:
+    values: [2]
+  num_layers:
+    values: [2]
+  deep_hidden_dims:
+    values:
+      - [512, 256, 128]
+  transformer_dropout:
+    values: [0.1]
+  dropout_rate:
+    values: [0.1]
+  learning_rate:
+    values: [0.0005]
+  weight_decay:
+    values: [0.00001]
+  batch_size:
+    values: [1024]
+  aug_prob:
+    values: [0.0]
+  epochs:
+    values: [110]
+  num_workers:
+    values: [2]
+  prefetch_factor:
+    values: [4]

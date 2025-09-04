@@ -29,3 +29,4 @@ sim/logs/*
 !run_sim.sh
 !run_sim_parallel_smt_seq_array.sh
 !run_sim_parallel_smt_cls_seq_array.sh
+data/compressed_transcriptomics/

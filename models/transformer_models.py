@@ -8,24 +8,84 @@ import torch.nn.functional as F
 from torch.nn import RMSNorm
 from flash_attn import flash_attn_func, flash_attn_qkvpacked_func
 from torch.cuda.amp import autocast
+from collections import OrderedDict
 
 # === CORE TRANSFORMER COMPONENTS === #
 class AttentionPooling(nn.Module):
     # CellSpliceNet implementation
-    def __init__(self, input_dim, hidden_dim):
+    def __init__(self, input_dim, hidden_dim, use_residual=True):
         super().__init__()
         self.theta1 = nn.Linear(input_dim, hidden_dim)
         self.bn = nn.BatchNorm1d(hidden_dim)
         self.theta2 = nn.Linear(hidden_dim, 1)
-
-    def forward(self, x, return_attn=False):
-        B, L, D = x.shape
-        scores = self.theta2(F.gelu(self.bn(self.theta1(x).transpose(1, 2)).transpose(1, 2)))
-        attn_weights = torch.softmax(scores, dim=1)
-        pooled = torch.bmm(attn_weights.transpose(1, 2), x).squeeze(1)
+        # Dropout layers (automatically disabled in eval mode)
+        self.dropout_gelu = nn.Dropout(0.0)
+        self.dropout_theta2 = nn.Dropout(0.0)
         
+        # FiLM modulation parameters (for CLS token conditioning)
+        self.gamma_proj = nn.Linear(input_dim, input_dim)
+        self.beta_proj = nn.Linear(input_dim, input_dim)
+        self.use_residual = use_residual
+
+        # control how much to bias towards cls token
+        # gate_bias=-1.0
+        # self.cls_gate = nn.Linear(input_dim, input_dim)
+        # self.cls_gate.bias.data.fill_(gate_bias) # more negative values favor genetic data, more positive values favor cls data
+
+    def forward(self, x, return_attn=False, cls_token=False):
+        B, L, D = x.shape
+        
+        if cls_token:
+            # Split CLS from rest
+            cls_token, x_rest = x[:, 0:1, :], x[:, 1:, :]
+
+            # Project features and apply dropout after GELU
+            x1 = self.theta1(x_rest).transpose(1, 2)                # (B, hidden_dim, L-1)
+            x1 = self.bn(x1).transpose(1, 2)                        # (B, L-1, hidden_dim)
+            x1 = F.gelu(x1)
+            x1 = self.dropout_gelu(x1)
+
+            # Project to scalar scores and apply dropout again before softmax
+            scores = self.theta2(x1)                                # (B, L-1, 1)
+            scores = self.dropout_theta2(scores)
+            attn_weights = torch.softmax(scores, dim=1)             # (B, L-1, 1)
+
+            x_gene = torch.bmm(attn_weights.transpose(1, 2), x_rest).squeeze(1)  # (B, D)
+
+            # === FiLM conditioning from CLS token ===
+            gamma = self.gamma_proj(cls_token).squeeze(1)        # (B, D)
+            beta = self.beta_proj(cls_token).squeeze(1)          # (B, D)
+
+            modulated = gamma * x_gene + beta                    # (B, D) - affine transformation to gene expression data
+
+            # Residual connection (optional)
+            pooled = x_gene + modulated if self.use_residual else modulated
+            
+            # GATED CLS TOKEN SCALING
+            # # Compute pooled output
+            # pooled_rest = torch.bmm(attn_weights.transpose(1, 2), x_rest)  # (B, 1, D)
+
+            # # Gate CLS token
+            # cls_gate = torch.sigmoid(self.cls_gate(cls_token))      # (B, 1, D)
+            # pooled = (pooled_rest * (1 - cls_gate) + cls_token * cls_gate).squeeze(1)
+        else:
+            # Project features and apply dropout after GELU
+            x1 = self.theta1(x).transpose(1, 2)                     # (B, hidden_dim, L)
+            x1 = self.bn(x1).transpose(1, 2)                        # (B, L, hidden_dim)
+            x1 = F.gelu(x1)
+            x1 = self.dropout_gelu(x1)
+
+            # Project to scalar scores and apply dropout again before softmax
+            scores = self.theta2(x1)                                # (B, L, 1)
+            scores = self.dropout_theta2(scores)
+            attn_weights = torch.softmax(scores, dim=1)             # (B, L, 1)
+
+            # Weighted sum over tokens
+            pooled = torch.bmm(attn_weights.transpose(1, 2), x).squeeze(1)  # (B, D)
+
         if return_attn:
-            return pooled, attn_weights.squeeze(-1)
+            return pooled, attn_weights.squeeze(-1)                 # (B, D), (B, L)
+        
         return pooled
 
 class FlashAttentionBlock(nn.Module):
@@ -49,7 +109,7 @@ class FlashAttentionBlock(nn.Module):
         self.store_attn = False
         self.last_attn_weights = None
         self.use_alibi = use_alibi
-        
+
         if use_alibi:
             slopes = self.build_alibi_slopes(nhead)
             self.register_buffer("alibi_slopes", slopes)
@@ -84,9 +144,10 @@ class FlashAttentionBlock(nn.Module):
                 attn_output = self.merge_heads(attn_output)
             else:
                 qkv = qkv.view(x.size(0), x.size(1), 3, self.nhead, self.head_dim)
+            
                 attn_output = flash_attn_qkvpacked_func(
                     qkv, dropout_p=0.0, causal=False,
-                    alibi_slopes=self.alibi_slopes if self.use_alibi else None
+                    alibi_slopes=self.alibi_slopes if self.use_alibi else None,
                 )
                 attn_output = attn_output.transpose(1, 2)
                 attn_output = self.merge_heads(attn_output)
@@ -104,7 +165,7 @@ class FlashAttentionEncoder(nn.Module):
         
         self.input_projection = nn.Linear(token_encoder_dim, d_model)
         
-        self.layers = nn.ModuleList([
+        self.transformer_layers = nn.ModuleList([
             FlashAttentionBlock(d_model, nhead, dropout, use_alibi=use_alibi)
             for _ in range(num_layers)
         ])
@@ -120,7 +181,7 @@ class FlashAttentionEncoder(nn.Module):
         x = x.view(B, -1, self.input_projection.in_features) # Key chunking step
         
         x = self.input_projection(x)
-        for layer in self.layers:
+        for layer in self.transformer_layers:
             x = layer(x)
         if self.use_attention_pooling:
             return self.pooling(x, return_attn=return_attn)
@@ -146,10 +207,10 @@ class BaseTransformerModel(nn.Module):
         # Set by subclasses
         self.optimizer = None
         self.criterion = nn.MSELoss()
-        self.patience = 35
+        self.patience = 50
         self.scheduler = None
     
-    def _setup_optimizer_scheduler(self, learning_rate, weight_decay, patience=25):
+    def _setup_optimizer_scheduler(self, learning_rate, weight_decay, patience=30):
         """Setup optimizer and scheduler - called by subclasses"""
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         self.scheduler = ReduceLROnPlateau(
@@ -214,8 +275,10 @@ class BaseTransformerModel(nn.Module):
         if collect_attn:
             if getattr(self, 'use_attention_pooling', False):
                 avg_attn_arr = collect_attention_pooling_weights(all_attn, save_attn_path)
+                return predictions, targets, avg_attn_arr, all_attn
             else:
                 avg_attn = process_full_attention_heads(self.encoder.layers, total_batches, save_attn_path)
+                return predictions, targets, avg_attn
         
         return predictions, targets
 
@@ -223,7 +286,7 @@ class BaseTransformerModel(nn.Module):
         """Default implementation for models without coords - override in subclasses"""
         return self(x)
 
-    def fit(self, dataset, train_indices, test_indices, verbose=True):
+    def fit(self, dataset, train_indices, test_indices, save_model=None, verbose=True):
         """Shared fit function for all transformer models"""
         train_dataset = Subset(dataset, train_indices)
         test_dataset = Subset(dataset, test_indices)
@@ -233,7 +296,7 @@ class BaseTransformerModel(nn.Module):
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True,
                                num_workers=self.num_workers, prefetch_factor=self.prefetch_factor)
         
-        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose, dataset=dataset)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, save_model=save_model, verbose=verbose, dataset=dataset)
 
 class SharedSelfAttentionModel(BaseTransformerModel):
     def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128],
@@ -314,7 +377,6 @@ class SharedSelfAttentionPoolingModel(BaseTransformerModel):
         self.aug_prob = aug_prob
         self.use_alibi = use_alibi
         self.use_attention_pooling = True
-        
         self.num_tokens = self.input_dim // self.token_encoder_dim
         
         self.encoder = FlashAttentionEncoder(
@@ -325,7 +387,7 @@ class SharedSelfAttentionPoolingModel(BaseTransformerModel):
             num_layers=self.num_layers,
             dropout=transformer_dropout,
             use_alibi=self.use_alibi,
-            use_attention_pooling=True,
+            use_attention_pooling=True
         )
         self.encoder = torch.compile(self.encoder)
         
@@ -360,7 +422,7 @@ class SharedSelfAttentionPoolingModel(BaseTransformerModel):
         return y_pred.squeeze()
 
 class SelfAttentionCLSEncoder(nn.Module):    
-    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, cls_init='spatial_learned', use_alibi=False, num_tokens=None, use_attention_pooling=True):
+    def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, cls_init='spatial_learned', use_alibi=False, num_tokens=None, use_attention_pooling=True, cls_in_seq=True, gate_bias=0.5, cls_dropout=0.5):
         super().__init__()
         self.token_encoder_dim = token_encoder_dim
         self.d_model = d_model
@@ -368,10 +430,22 @@ class SelfAttentionCLSEncoder(nn.Module):
         self.use_alibi = use_alibi
         self.num_tokens = num_tokens
         self.use_attention_pooling = use_attention_pooling
-        
+        self.cls_in_seq = cls_in_seq
+        self.gate_bias = gate_bias
         self.input_projection = nn.Linear(token_encoder_dim, d_model)
-        self.coord_to_cls = nn.Linear(3, d_model)
         
+        # === CLS token: (x, y, z, distance) → d_model ===
+        cls_coord_dim = 4  # x, y, z, distance
+        if self.cls_in_seq:
+            self.coord_to_cls = nn.Linear(cls_coord_dim, d_model)
+        else:
+            self.coord_encoder = nn.Sequential(
+                nn.Linear(cls_coord_dim, d_model),
+                nn.GELU(),
+                nn.Linear(d_model, d_model)
+            )
+        self.cls_dropout = nn.Dropout(cls_dropout)  # Adjust the rate as needed
+
         @staticmethod
         def build_coord_remap_table(coord_tensor, seed=42, scale=100.0):
             torch.manual_seed(seed)
@@ -384,11 +458,11 @@ class SelfAttentionCLSEncoder(nn.Module):
             remap_tensor = self.build_coord_remap_table(region_coords)
             self.register_buffer("coord_ref_table", region_coords)
             self.register_buffer("coord_remap_table", remap_tensor)
-        elif self.cls_init == 'spatial_fixed':
+        elif self.cls_in_seq and self.cls_init == 'spatial_fixed':
             self.coord_to_cls.weight.requires_grad = False
             self.coord_to_cls.bias.requires_grad = False
 
-        self.layers = nn.ModuleList([
+        self.transformer_layers = nn.ModuleList([
             FlashAttentionBlock(d_model, nhead, dropout, use_alibi=self.use_alibi)
             for _ in range(num_layers)
         ])
@@ -396,11 +470,11 @@ class SelfAttentionCLSEncoder(nn.Module):
         if self.use_alibi:
             slopes = FlashAttentionBlock.build_alibi_slopes(nhead)
             self.register_buffer("alibi_slopes", slopes)
-            for layer in self.layers:
+            for layer in self.transformer_layers:
                 layer.alibi_slopes = self.alibi_slopes
 
         if self.use_attention_pooling:
-            self.pooling = AttentionPooling(d_model, hidden_dim=32)
+            self.pooling = AttentionPooling(d_model, hidden_dim=32) #, gate_bias=self.gate_bias)
         else:
             self.output_projection = nn.Linear(d_model, output_dim)
     
@@ -411,33 +485,47 @@ class SelfAttentionCLSEncoder(nn.Module):
         remapped = self.coord_remap_table[idx]
         return remapped
     
-    def forward(self, gene_exp, coords, return_attn=False):
+    def forward(self, gene_exp, coords, dist_to_target, return_attn=False):
         B, T = gene_exp.shape
         x = gene_exp.view(B, -1, self.token_encoder_dim)
         x = self.input_projection(x)
-        if self.cls_init == 'random_learned':
-            coords = self.replace_coords_with_remapped(coords)
-        cls_token = self.coord_to_cls(coords).unsqueeze(1)
-        x = torch.cat([cls_token, x], dim=1)
-        for layer in self.layers:
+
+        coords_input = torch.cat([coords, dist_to_target], dim=-1)  # (B, 4)
+
+        if self.cls_in_seq:
+            if self.cls_init == 'random_learned':
+                coords_input[:, :3] = self.replace_coords_with_remapped(coords_input[:, :3])
+            cls_token = self.coord_to_cls(coords_input).unsqueeze(1)
+            x = torch.cat([cls_token, x], dim=1)
+
+        for layer in self.transformer_layers:
             x = layer(x)
+
+        if not self.cls_in_seq:
+            if self.cls_init == 'random_learned':
+                coords_input[:, :3] = self.replace_coords_with_remapped(coords_input[:, :3])
+        
+            cls_token = self.coord_encoder(coords_input).unsqueeze(1)
+            cls_token = self.cls_dropout(cls_token)
+            x = torch.cat([cls_token, x], dim=1)
+        
         if self.use_attention_pooling:
-            return self.pooling(x, return_attn=return_attn)
+            return self.pooling(x, return_attn=return_attn, cls_token=True)
         else:
             x = self.output_projection(x)
             x = x.flatten(start_dim=1)
-            if return_attn:
-                return x, None
-            return x
+            return (x, None) if return_attn else x
 
 class SharedSelfAttentionCLSModel(BaseTransformerModel):
     def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
-                 cls_init='spatial_learned', use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
-                 batch_size=128, epochs=100, aug_prob=0.0, num_workers=2, prefetch_factor=2):
+                 cls_init='spatial_learned', cls_in_seq=True, use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
+                 batch_size=128, epochs=100, aug_prob=0.0, num_workers=2, prefetch_factor=2, cls_dropout=0.5):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
         
         self.include_coords = True
         self.cls_init = cls_init
+        self.cls_in_seq = cls_in_seq
+        self.cls_dropout = cls_dropout
         self.aug_prob = aug_prob
         self.use_alibi = use_alibi
         self.input_dim = input_dim // 2
@@ -463,6 +551,8 @@ class SharedSelfAttentionCLSModel(BaseTransformerModel):
             cls_init=self.cls_init,
             use_alibi=self.use_alibi,
             use_attention_pooling=False,
+            cls_in_seq=self.cls_in_seq,
+            cls_dropout=self.cls_dropout
         )
         self.encoder = torch.compile(self.encoder)
 
@@ -492,13 +582,16 @@ class SharedSelfAttentionCLSModel(BaseTransformerModel):
         return self.forward(x, coords)
 
 class SharedSelfAttentionCLSPoolingModel(BaseTransformerModel):
-    def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
-                 cls_init='spatial_learned', use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
-                 batch_size=128, epochs=100, aug_prob=0.0, num_workers=2, prefetch_factor=2):
+    def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2,
+                 deep_hidden_dims=[256, 128], cls_init='spatial_learned', cls_in_seq=False, use_alibi=False,
+                 transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
+                 batch_size=128, epochs=100, aug_prob=0.0, num_workers=2, prefetch_factor=2, gate_bias=0.5):
+        
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
         
         self.include_coords = True
         self.cls_init = cls_init
+        self.cls_in_seq = cls_in_seq
         self.aug_prob = aug_prob
         self.use_alibi = use_alibi
         self.input_dim = input_dim // 2
@@ -511,7 +604,7 @@ class SharedSelfAttentionCLSPoolingModel(BaseTransformerModel):
         self.deep_hidden_dims = deep_hidden_dims
         self.dropout_rate = dropout_rate
         self.use_attention_pooling = True
-        
+        self.gate_bias = gate_bias
         self.num_tokens = self.input_dim // self.token_encoder_dim
 
         self.encoder = SelfAttentionCLSEncoder(
@@ -523,7 +616,9 @@ class SharedSelfAttentionCLSPoolingModel(BaseTransformerModel):
             dropout=self.transformer_dropout,
             cls_init=self.cls_init,
             use_alibi=self.use_alibi,
-            use_attention_pooling=True
+            use_attention_pooling=True,
+            cls_in_seq=self.cls_in_seq,
+            gate_bias=self.gate_bias
         )
         self.encoder = torch.compile(self.encoder)
 
@@ -533,7 +628,7 @@ class SharedSelfAttentionCLSPoolingModel(BaseTransformerModel):
             deep_hidden_dims=deep_hidden_dims,
             dropout_rate=dropout_rate
         )
-        
+
         num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         print(f"Number of learnable parameters in SMT w/ CLS pooled model: {num_params}")
 
@@ -542,17 +637,26 @@ class SharedSelfAttentionCLSPoolingModel(BaseTransformerModel):
     def forward(self, x, coords):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         coords_i, coords_j = torch.chunk(coords, chunks=2, dim=1)
+        dists = torch.norm(coords_i - coords_j, dim=1, keepdim=True)  # (B, 1)
+
         if self.store_attn:
-            x_i, attn_beta_i = self.encoder(x_i, coords_i, return_attn=True)
-            x_j, attn_beta_j = self.encoder(x_j, coords_j, return_attn=True)
+            x_i, attn_beta_i = self.encoder(x_i, coords_i, dist_to_target=dists, return_attn=True)
+            x_j, attn_beta_j = self.encoder(x_j, coords_j, dist_to_target=dists, return_attn=True)
         else:
-            x_i = self.encoder(x_i, coords_i)
-            x_j = self.encoder(x_j, coords_j)
+            x_i = self.encoder(x_i, coords_i, dist_to_target=dists)
+            x_j = self.encoder(x_j, coords_j, dist_to_target=dists)
+
         x = torch.cat([x_i, x_j], dim=1)
         y_pred = self.output_layer(self.deep_layers(x))
         y_pred = torch.clamp(y_pred, min=-0.8, max=1.0)
+
         if self.store_attn:
-            return {"output": y_pred.squeeze(), "attn_beta_i": attn_beta_i, "attn_beta_j": attn_beta_j}
+            return {
+                "output": y_pred.squeeze(),
+                "attn_beta_i": attn_beta_i,
+                "attn_beta_j": attn_beta_j
+            }
+
         return y_pred.squeeze()
 
     def _forward_with_coords(self, x, coords):
@@ -739,7 +843,7 @@ class SharedSelfAttentionPCAModel(BaseTransformerModel):
         )
         
         self.encoder = FlashAttentionEncoder(
-            token_encoder_dim=n_components,
+            token_encoder_dim=self.n_components,
             d_model=self.d_model,
             nhead=self.nhead,
             num_layers=self.num_layers,
@@ -756,6 +860,7 @@ class SharedSelfAttentionPCAModel(BaseTransformerModel):
         )
 
         self._setup_optimizer_scheduler(learning_rate, weight_decay)
+
     def forward(self, x, idx):
         # PCA encode each half
         x_i, x_j = self.PCAencoder(x, idx)  # each: (B, n_components)
@@ -936,6 +1041,178 @@ class SharedSelfAttentionPLSModel(BaseTransformerModel):
         return predictions, targets
 
 
+# === AUTOENCODER CLASSES === #
+# Implementation from https://github.com/jamesruffle/compressed-transcriptomics/
+class MLP(nn.Module):
+    """
+    A n-layer multi-layer perceptron
+
+    An implementation of a n-layer MLP with
+    ELU activation and batch normalization
+    """
+
+    def __init__(self, layer_sizes):
+        super().__init__()
+        self.layer_sizes = layer_sizes
+        self.mlp = self._create_model(self.layer_sizes)
+
+    def _create_model(self, layer_sizes):
+        layer_list = []
+        previous_size = layer_sizes[0]
+        j = 0
+        for i, size in enumerate(layer_sizes[1:-1]):
+            layer_list.append((f"fc{i}", nn.Linear(previous_size, size)))
+            layer_list.append((f"bn{i}", nn.BatchNorm1d(size)))
+            layer_list.append((f"elu{i}", nn.ELU()))
+            previous_size = size
+            j = i
+        layer_list.append((f"fc{j+1}", nn.Linear(previous_size, layer_sizes[-1])))
+        layers = OrderedDict(layer_list)
+        return nn.Sequential(layers)
+
+    def forward(self, x):
+        return self.mlp(x)
+
+class AE(nn.Module):
+    """Deep Autoencoder
+
+    Arbitrary-depth autoencoder
+    with batch normalization and ELU
+    activation on the hidden layers
+    """
+
+    def __init__(self, layer_sizes, sigmoid_output=False):
+        super().__init__()
+        self.layer_sizes = layer_sizes
+        self.sigmoid_output = sigmoid_output
+        self.encoder = MLP(self.layer_sizes)
+        self.decoder = MLP(list(reversed(self.layer_sizes)))
+
+    def encode(self, x):
+        return self.encoder(x)
+
+    def decode(self, z):
+        return self.decoder(z)
+
+    def forward(self, x):
+        z = self.encode(x)
+        return torch.sigmoid(self.decode(z)) if self.sigmoid_output else self.decode(z)
+
+class AEEncoder(nn.Module):
+    def __init__(self, input_dim, n_components=128, weights_path='./data/compressed_transcriptomics/', 
+                 finetune_last_layer=False, device=None):
+        super().__init__()
+        self.n_components = n_components
+        self.device = device
+        self.finetune_last_layer = finetune_last_layer
+        self.weights_path = weights_path
+
+        # Define autoencoder layer sizes (matching notebook pattern)
+        # Assuming input_dim is the gene expression dimension
+        layer_sizes = [input_dim, 500, 250, 125, n_components]
+        
+        # Create autoencoder
+        self.autoencoder = AE(layer_sizes, sigmoid_output=True).to(device)
+        
+        # Load pretrained weights
+        weight_file = f'autoencode_abagen_{n_components}_components.pt'
+        full_path = weights_path + weight_file
+        try:
+            self.autoencoder.load_state_dict(torch.load(full_path, map_location=device))
+            print(f"Loaded pretrained autoencoder weights from {full_path}")
+        except FileNotFoundError:
+            print(f"Warning: Could not find pretrained weights at {full_path}")
+            print("Autoencoder will be initialized with random weights")
+        
+        # Freeze all parameters except optionally the last layer
+        for param in self.autoencoder.parameters():
+            param.requires_grad = False
+            
+        if finetune_last_layer:
+            # Enable gradients for the last layer of the encoder
+            for param in list(self.autoencoder.encoder.mlp.children())[-1].parameters():
+                param.requires_grad = True
+            print(f"Enabled fine-tuning for last layer of autoencoder encoder")
+
+    def forward(self, x):
+        # Direct encoding of input data
+        return self.autoencoder.encode(x)
+
+class SharedSelfAttentionAEModel(BaseTransformerModel):
+    def __init__(self, input_dim, n_components=128, finetune_last_layer=False, d_model=128, encoder_output_dim=10, nhead=4, num_layers=4, 
+                 deep_hidden_dims=[256, 128], transformer_dropout=0.1, dropout_rate=0.1, 
+                 learning_rate=0.001, weight_decay=0.0, batch_size=256, aug_prob=0.0, epochs=100, 
+                 num_workers=2, prefetch_factor=2):
+        super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
+        
+        self.input_dim = input_dim // 2 # gene_list must be '1' in sim run to match autoencoder dim
+        self.n_components = n_components
+        self.d_model = d_model
+        self.encoder_output_dim = encoder_output_dim
+        self.nhead = nhead
+        self.num_layers = num_layers
+        self.aug_prob = aug_prob
+        self.use_alibi = False
+        self.use_attention_pooling = True
+        self.finetune_last_layer = finetune_last_layer
+
+        # Pretrained autoencoder encoder-only for each region
+        self.ae_encoder = AEEncoder(
+            input_dim=self.input_dim,
+            n_components=n_components,
+            weights_path='./data/compressed_transcriptomics/',
+            finetune_last_layer=self.finetune_last_layer,
+            device=self.device
+        )
+        
+        # Transformer encoder with attention pooling (uses AE embeddings as input)
+        self.encoder = FlashAttentionEncoder(
+            token_encoder_dim=self.n_components, # Learn a projection matrix for full embedding to d_model space
+            d_model=self.d_model,
+            output_dim=self.encoder_output_dim,
+            nhead=self.nhead,
+            num_layers=self.num_layers,
+            dropout=transformer_dropout,
+            use_alibi=self.use_alibi,
+            use_attention_pooling=self.use_attention_pooling
+        )
+        self.encoder = torch.compile(self.encoder)
+
+        prev_dim = self.d_model * 2
+        self.deep_layers, self.output_layer = self._set_mlp_head(
+            prev_dim=prev_dim,
+            deep_hidden_dims=deep_hidden_dims,
+            dropout_rate=dropout_rate
+        )
+
+        num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"Number of learnable parameters in SMT AE model: {num_params}")
+
+        self._setup_optimizer_scheduler(learning_rate, weight_decay)
+
+    def forward(self, x):
+        x_i, x_j = torch.chunk(x, chunks=2, dim=1)
+        
+        # Encode through pretrained autoencoder
+        x_i = self.ae_encoder(x_i)
+        x_j = self.ae_encoder(x_j)
+        
+        if self.store_attn:
+            x_i, attn_beta_i = self.encoder(x_i, return_attn=True)
+            x_j, attn_beta_j = self.encoder(x_j, return_attn=True)
+        else:
+            x_i = self.encoder(x_i)
+            x_j = self.encoder(x_j)
+
+        x = torch.cat([x_i, x_j], dim=1)
+        y_pred = self.output_layer(self.deep_layers(x))
+        y_pred = torch.clamp(y_pred, min=-1.0, max=1.0)
+        
+        if self.store_attn:
+            return {"output": y_pred.squeeze(), "attn_beta_i": attn_beta_i, "attn_beta_j": attn_beta_j}
+        
+        return y_pred.squeeze()
+        
 
 class CrossAttentionBlock(nn.Module):
     def __init__(self, d_model, nhead, dropout=0.1):
@@ -986,7 +1263,7 @@ class CrossAttentionEncoder(nn.Module):
     def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=2, dropout=0.1):
         super().__init__()
         self.input_projection = nn.Linear(token_encoder_dim, d_model)
-        self.layers = nn.ModuleList([
+        self.transformer_layers = nn.ModuleList([
             CrossAttentionBlock(d_model, nhead, dropout)
             for _ in range(num_layers)
         ])
@@ -1003,7 +1280,7 @@ class CrossAttentionEncoder(nn.Module):
         q = self.input_projection(x_i)
         kv = self.input_projection(x_j)
 
-        for layer in self.layers:
+        for layer in self.transformer_layers:
             q = layer(q, kv)
 
         out = self.output_projection(q)

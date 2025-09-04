@@ -24,7 +24,9 @@ from models.pls import PLSTwoStepModel, PLS_MLPDecoderModel, PLS_BilinearDecoder
 from models.dynamic_mlp import DynamicMLP
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
 from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionPoolingModel, SharedSelfAttentionCLSModel, SharedSelfAttentionCLSPoolingModel
-from models.transformer_models import SharedSelfAttentionConvModel, SharedSelfAttentionPCAModel, SharedSelfAttentionPLSModel, CrossAttentionModel
+from models.transformer_models import SharedSelfAttentionConvModel, SharedSelfAttentionPCAModel, SharedSelfAttentionPLSModel
+from models.transformer_models import SharedSelfAttentionAEModel
+from models.transformer_models import CrossAttentionModel
 
 MODEL_CLASSES = {
     'cge': CGEModel,
@@ -45,6 +47,7 @@ MODEL_CLASSES = {
     'shared_transformer_conv': SharedSelfAttentionConvModel,
     'shared_transformer_pca': SharedSelfAttentionPCAModel,
     'shared_transformer_pls': SharedSelfAttentionPLSModel,
+    'shared_transformer_ae': SharedSelfAttentionAEModel,
     'cross_attention': CrossAttentionModel
 }
 
@@ -80,7 +83,7 @@ class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, resolution=1.0, random_seed=42,
                  omit_subcortical=False, dataset='UKBB', parcellation='S456', impute_strategy='mirror_interpolate', sort_genes='expression', 
                  gene_list='0.2', hemisphere='both', train_shared_regions=False, test_shared_regions=False, 
-                 connectome_target='FC', skip_cv=False, null_model=False):        
+                 connectome_target='FC', skip_cv=False, null_model=False, save_model=None):        
         """
         Initialization of simulation parameters
         """
@@ -96,6 +99,7 @@ class Simulation:
         self.connectome_target = connectome_target.upper()
         self.skip_cv = skip_cv
         self.null_model = null_model
+        self.save_model = save_model
         self.results = []
     
     def load_data(self):
@@ -304,7 +308,7 @@ class Simulation:
         self.load_data()
         self.select_cv()
         self.expand_data_torch()
-    
+
         if search_method[0] == 'wandb' or track_wandb:
             wandb.login()
         
@@ -362,14 +366,14 @@ class Simulation:
                         if self.model_type == 'pls_twostep':
                             train_history = best_model.fit(self.region_pair_dataset, train_indices, test_indices)
                         else:
-                            train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
+                            train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded, save_model=self.save_model)
                         for epoch, (train_loss, val_loss) in enumerate(zip(train_history['train_loss'], train_history['val_loss'])):
                             wandb.log({'train_mse_loss': train_loss, 'test_mse_loss': val_loss})
                 else:
                     if self.model_type == 'pls_twostep':
                             train_history = best_model.fit(self.region_pair_dataset, train_indices, test_indices)
                     else: 
-                        train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded)
+                        train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded, save_model=self.save_model)
                 
                 # Evaluate on the test fold
                 train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)

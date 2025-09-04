@@ -31,6 +31,7 @@ def single_sim_run(
     model_type='dynamic_mlp',
     use_gpu=True, 
     null_model='none',
+    save_model=None,
     use_folds=[0, 1, 2, 3]
 ):
     """
@@ -116,6 +117,9 @@ def single_sim_run(
     null_model : str
         Whether to generate a spatial null model of the transcriptome
         Options: 'none', 'random', 'spatial'
+    
+    save_model : str, optional
+        Name of model to save. Saves to models/saved_models/. Default: None
     """
     
     start_time = time.time()
@@ -138,7 +142,8 @@ def single_sim_run(
                     model_type=model_type,
                     gpu_acceleration=use_gpu,
                     skip_cv=skip_cv,
-                    null_model=null_model
+                    null_model=null_model,
+                    save_model=save_model
                 )
     
     if search_method[0] == 'wandb':

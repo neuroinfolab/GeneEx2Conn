@@ -10,16 +10,15 @@ parameters:
   token_encoder_dim:
     values: [20, 60]
   d_model:
-    values: [64, 128]
+    values: [64, 128, 256]
   use_alibi:
-    values: [True]
+    values: [True, False]
   nhead:
     values: [4]
   num_layers:
     values: [4]
   deep_hidden_dims:
     values:
-    - [256, 128]
     - [256, 128, 64]
     - [512, 256, 128]
   transformer_dropout:
@@ -45,18 +44,18 @@ best_parameters:
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [60]
+    values: [20]
   d_model:
-    values: [64]
+    values: [128]
   use_alibi:
-    values: [True]
+    values: [True] 
   nhead:
     values: [4]
   num_layers:
     values: [4]
   deep_hidden_dims:
     values:
-      - [256, 128, 64]
+      - [512, 256, 128]
   transformer_dropout:
     values: [0.1]
   dropout_rate:
@@ -70,7 +69,7 @@ best_parameters:
   aug_prob:
     values: [0.3]
   epochs:
-    values: [11]
+    values: [21]
   num_workers:
     values: [2]
   prefetch_factor:
