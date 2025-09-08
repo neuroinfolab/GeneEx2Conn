@@ -19,8 +19,8 @@ class AttentionPooling(nn.Module):
         self.bn = nn.BatchNorm1d(hidden_dim)
         self.theta2 = nn.Linear(hidden_dim, 1)
         # Dropout layers (automatically disabled in eval mode)
-        self.dropout_gelu = nn.Dropout(0.0)
-        self.dropout_theta2 = nn.Dropout(0.0)
+        self.dropout_gelu = nn.Dropout(0.1)
+        self.dropout_theta2 = nn.Dropout(0.1)
         
         # FiLM modulation parameters (for CLS token conditioning)
         self.gamma_proj = nn.Linear(input_dim, input_dim)
@@ -519,13 +519,12 @@ class SelfAttentionCLSEncoder(nn.Module):
 class SharedSelfAttentionCLSModel(BaseTransformerModel):
     def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
                  cls_init='spatial_learned', cls_in_seq=True, use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
-                 batch_size=128, epochs=100, aug_prob=0.0, num_workers=2, prefetch_factor=2, cls_dropout=0.5):
+                 batch_size=128, epochs=100, aug_prob=0.0, num_workers=2, prefetch_factor=2):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
         
         self.include_coords = True
         self.cls_init = cls_init
         self.cls_in_seq = cls_in_seq
-        self.cls_dropout = cls_dropout
         self.aug_prob = aug_prob
         self.use_alibi = use_alibi
         self.input_dim = input_dim // 2
@@ -551,8 +550,7 @@ class SharedSelfAttentionCLSModel(BaseTransformerModel):
             cls_init=self.cls_init,
             use_alibi=self.use_alibi,
             use_attention_pooling=False,
-            cls_in_seq=self.cls_in_seq,
-            cls_dropout=self.cls_dropout
+            cls_in_seq=self.cls_in_seq
         )
         self.encoder = torch.compile(self.encoder)
 
@@ -583,7 +581,7 @@ class SharedSelfAttentionCLSModel(BaseTransformerModel):
 
 class SharedSelfAttentionCLSPoolingModel(BaseTransformerModel):
     def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2,
-                 deep_hidden_dims=[256, 128], cls_init='spatial_learned', cls_in_seq=False, use_alibi=False,
+                 deep_hidden_dims=[256, 128], cls_init='spatial_learned', cls_in_seq=False, cls_dropout=0.5, use_alibi=False,
                  transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
                  batch_size=128, epochs=100, aug_prob=0.0, num_workers=2, prefetch_factor=2, gate_bias=0.5):
         
@@ -592,6 +590,7 @@ class SharedSelfAttentionCLSPoolingModel(BaseTransformerModel):
         self.include_coords = True
         self.cls_init = cls_init
         self.cls_in_seq = cls_in_seq
+        self.cls_dropout = cls_dropout
         self.aug_prob = aug_prob
         self.use_alibi = use_alibi
         self.input_dim = input_dim // 2
@@ -618,7 +617,8 @@ class SharedSelfAttentionCLSPoolingModel(BaseTransformerModel):
             use_alibi=self.use_alibi,
             use_attention_pooling=True,
             cls_in_seq=self.cls_in_seq,
-            gate_bias=self.gate_bias
+            gate_bias=self.gate_bias,
+            cls_dropout=self.cls_dropout
         )
         self.encoder = torch.compile(self.encoder)
 

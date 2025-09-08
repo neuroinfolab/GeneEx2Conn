@@ -61,15 +61,15 @@ best_parameters:
   dropout_rate:
     values: [0.1]
   learning_rate:
-    values: [0.0005]
+    values: [0.0007]
   weight_decay:
     values: [0.00001]
   batch_size:
     values: [1024]
   aug_prob:
-    values: [0.3]
+    values: [0.0]
   epochs:
-    values: [21]
+    values: [110]
   num_workers:
     values: [2]
   prefetch_factor:

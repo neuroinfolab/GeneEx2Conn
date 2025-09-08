@@ -296,102 +296,99 @@ def process_model_feature_combinations(cv_type, null_model, models, model_featur
                 print(f"✗ {model} with {feature_type}: {str(e)}")
             except Exception as e:
                 print(f"! {model} with {feature_type}: Unexpected error: {str(e)}")
-
-
-
-def plot_model_barchart(summary_dict, metric="test_pearson_r", model_groups=None, xlim=(0.1, 0.9)):
+                
+def plot_model_barchart(summary_dict, metric="test_pearson_r", xlim=(0.1, 0.9), highlight_models=None, highlight_label=None, ascending=False):
     """
-    Create a horizontal bar plot of model performance with error bars, ordered by descending mean.
+    Create a horizontal bar plot of model performance with error bars, ordered by performance.
+    
+    Args:
+        summary_dict: dict of result DataFrames from fetch_and_summarize_wandb_runs
+        metric: str, metric column to visualize (e.g., 'test_pearson_r')
+        xlim: tuple, x-axis limits
+        highlight_models: list of model names to highlight with a different color
+        highlight_label: str, label to add next to highlighted models (e.g. "uses pooling")
+        ascending: bool, if True sort from worst to best, if False sort from best to worst (default)
     """
-    if model_groups is None:
-        model_groups = {
-            'Deep Learning': {
-                'dynamic_mlp': 'Deep Neural Net',
-                'dynamic_mlp_coords': 'Deep Neural Net w/ coords',
-                'shared_transformer': 'SMT',
-                'shared_transformer_cls': 'SMT w/ [CLS]'
-            },
-            'Bilinear': {
-                'bilinear_CM': 'CM',
-                'bilinear_CM_PCA': 'CM (PCA)',
-                'pls_bilineardecoder': 'CM (PLS)',
-                'bilinear_lowrank': 'CM (Low-Rank)'},
-            'Rules-Based': {
-                'cge': 'CGE',
-                'gaussian_kernel': 'Gaussian Kernel', 
-                'exponential_decay': 'Exponential Decay'
-            }
-        }
-    else:
-        # Convert list-based model_groups to dict format
-        formatted_groups = {}
-        for group_name, models_list in model_groups.items():
-            formatted_groups[group_name] = {
-                model: model.replace('_', ' ').title() 
-                for model in models_list
-            }
-        model_groups = formatted_groups
-
     # Set global font size and derived sizes
     base_fontsize = 20
     plt.rcParams.update({'font.size': base_fontsize})
-    label_fontsize = base_fontsize * 0.67  # ~12
-    legend_fontsize = base_fontsize * 0.78  # ~14
+    label_fontsize = base_fontsize * 0.67
+    legend_fontsize = base_fontsize * 0.78
 
     # Flatten model info into DataFrame
     plot_data = []
-    for group_name, model_dict in model_groups.items():
-        for model_key, model_display in model_dict.items():
-            if model_key in summary_dict:
-                df = summary_dict[model_key]
-                if metric in df.columns:
-                    plot_data.append({
-                        "Model": model_display,
-                        "Group": group_name,
-                        "Mean": df.loc["mean", metric],
-                        "StdErr": df.loc["stderr", metric]
-                    })
+    for model_key in summary_dict:
+        df = summary_dict[model_key]
+        if metric in df.columns:
+            # Format model name
+            display_name = model_key
+            if 'shared_transformer' in display_name:
+                display_name = display_name.replace('shared_transformer', 'smt')
+            if 'dynamic_mlp' in display_name:
+                display_name = display_name.replace('dynamic_mlp', 'mlp')
+                
+            plot_data.append({
+                "Model": display_name,
+                "Mean": df.loc["mean", metric],
+                "StdErr": df.loc["stderr", metric],
+                "Highlighted": model_key in (highlight_models or [])
+            })
 
     plot_df = pd.DataFrame(plot_data)
 
-    # Sort by descending mean performance
-    plot_df = plot_df.sort_values("Mean", ascending=True)
+    # Sort by performance (ascending=True for worst to best, ascending=False for best to worst)
+    plot_df = plot_df.sort_values("Mean", ascending=ascending)
 
     # Plot
     plt.figure(figsize=(8, 7), dpi=300)
-    ax = sns.barplot(
-        data=plot_df,
-        y="Model",
-        x="Mean",
-        hue="Group",
-        dodge=False,
-        palette=sns.color_palette("viridis", n_colors=8, desat=1.0)[::3],  # Using every 3rd color from 8 viridis colors for more contrast
-        errorbar=None
-    )
-
-    # Add error bars manually
-    for idx, (_, row) in enumerate(plot_df.iterrows()):
-        ax.errorbar(
+    
+    # Create two color palettes
+    default_color = sns.color_palette("viridis", as_cmap=True)(0.3)
+    highlight_color = sns.color_palette("husl", as_cmap=True)(0.7)
+    
+    # Plot bars with different colors based on highlight status
+    for i, (_, row) in enumerate(plot_df.iterrows()):
+        color = highlight_color if row["Highlighted"] else default_color
+        plt.barh(i, row["Mean"], height=0.6, color=color)
+        
+        # Add error bars
+        plt.errorbar(
             x=row["Mean"],
-            y=idx,
+            y=i,
             xerr=row["StdErr"],
             fmt='none',
             ecolor='black',
             capsize=3,
             linewidth=2
         )
+        
+        # Add mean value text
+        plt.text(
+            row["Mean"] + 0.01,  # Small offset from bar end
+            i,
+            f'{row["Mean"]:.3f}',
+            va='center',
+            fontsize=label_fontsize
+        )
 
-    ax.set_xlim(0.1, 1.0)
+    ax = plt.gca()
+    ax.set_xlim(xlim)
     ax.set_xticks([0.1, 0.3, 0.5, 0.7, 0.9])
     ax.set_xlabel("Pearson-r", fontsize=label_fontsize)
     ax.set_ylabel("")
+    ax.set_yticks(range(len(plot_df)))
+    ax.set_yticklabels(plot_df["Model"])
     ax.invert_yaxis()  # best at top, worst at bottom
 
-    # Set tick label sizes relative to base font size
+    # Set tick label sizes
     ax.tick_params(axis='both', which='major', labelsize=label_fontsize)
 
-    # Adjust legend with relative font size
-    plt.legend(fontsize=legend_fontsize, bbox_to_anchor=(1.05, 1), loc='upper left')
+    # Add legend if there are highlighted models
+    if highlight_models and highlight_label:
+        legend_elements = [
+            Patch(facecolor=highlight_color, label=highlight_label)
+        ]
+        ax.legend(handles=legend_elements, loc='center right', fontsize=legend_fontsize)
 
     sns.despine()
     plt.tight_layout()

@@ -47,13 +47,13 @@ best_parameters:
   n_components:
     values: [128]
   finetune_last_layer:
-    values: [False]
+    values: [True]
   d_model:
-    values: [64]
+    values: [128]
   nhead:
-    values: [2]
+    values: [4]
   num_layers:
-    values: [2]
+    values: [4]
   deep_hidden_dims:
     values:
       - [512, 256, 128]

@@ -70,7 +70,7 @@ class DynamicMLP(nn.Module):
         targets = np.concatenate(targets)
         return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
     
-    def fit(self, dataset, train_indices, test_indices, verbose=True):
+    def fit(self, dataset, train_indices, test_indices, verbose=True, save_model=None):
         train_dataset = Subset(dataset, train_indices)
         test_dataset = Subset(dataset, test_indices)
 

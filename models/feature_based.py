@@ -51,7 +51,7 @@ class CGEModel(nn.Module):
             
         return corr
 
-    def fit(self, dataset, train_indices, test_indices):
+    def fit(self, dataset, train_indices, test_indices, save_model=None):
         train_X = dataset.X_expanded[train_indices].to(self.device)
         train_y = dataset.Y_expanded[train_indices].to(self.device)
         test_X = dataset.X_expanded[test_indices].to(self.device)
@@ -91,7 +91,7 @@ class GaussianKernelModel(nn.Module):
         dist = torch.sum((x_i - x_j)**2, dim=1) # Compute euclidean distance
         return torch.exp(-dist / (2 * self.sigma**2)) # Apply gaussian kernel
         
-    def fit(self, dataset, train_indices, test_indices):
+    def fit(self, dataset, train_indices, test_indices, save_model=None):
         train_X = dataset.X_expanded[train_indices].to(self.device)
         train_y = dataset.Y_expanded[train_indices].to(self.device)
         test_X = dataset.X_expanded[test_indices].to(self.device)
@@ -139,7 +139,7 @@ class ExponentialDecayModel(nn.Module):
         dist = torch.sum((x_i - x_j)**2, dim=1).sqrt() # Compute euclidean distance
         return self.SA_inf + (1 - self.SA_inf) * torch.exp(-dist / self.SA_lambda) # Apply exponential decay
         
-    def fit(self, dataset, train_indices, test_indices):
+    def fit(self, dataset, train_indices, test_indices, save_model=None):
         train_X = dataset.X_expanded[train_indices].to(self.device) # indices are expanded
         train_y = dataset.Y_expanded[train_indices].to(self.device)
         test_X = dataset.X_expanded[test_indices].to(self.device)
