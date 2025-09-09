@@ -388,7 +388,7 @@ def plot_model_barchart(summary_dict, metric="test_pearson_r", xlim=(0.1, 0.9), 
         legend_elements = [
             Patch(facecolor=highlight_color, label=highlight_label)
         ]
-        ax.legend(handles=legend_elements, loc='center right', fontsize=legend_fontsize)
+        ax.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.3, 1.0), fontsize=legend_fontsize-2)
 
     sns.despine()
     plt.tight_layout()

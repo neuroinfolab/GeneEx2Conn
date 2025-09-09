@@ -87,7 +87,9 @@ class GaussianKernelModel(nn.Module):
         self.init_sigma = init_sigma
         
     def forward(self, x):
-        x_i, x_j = torch.chunk(x, chunks=2, dim=1) 
+        x_i, x_j = torch.chunk(x, chunks=2, dim=1)
+        x_i[:, 0] = -torch.abs(x_i[:, 0])  # Make x coordinate negative
+        x_j[:, 0] = -torch.abs(x_j[:, 0])  # Make x coordinate negative
         dist = torch.sum((x_i - x_j)**2, dim=1) # Compute euclidean distance
         return torch.exp(-dist / (2 * self.sigma**2)) # Apply gaussian kernel
         
@@ -99,6 +101,8 @@ class GaussianKernelModel(nn.Module):
         
         # Calculate distances and initialize sigma based on std dev if not provided
         x_i, x_j = torch.chunk(train_X, chunks=2, dim=1)
+        x_i[:, 0] = -torch.abs(x_i[:, 0])  # Make x coordinate negative
+        x_j[:, 0] = -torch.abs(x_j[:, 0])  # Make x coordinate negative
         dist = torch.sum((x_i - x_j)**2, dim=1).sqrt().cpu().numpy()
         if self.init_sigma is None:
             init_sigma = np.std(dist)
@@ -123,6 +127,9 @@ class GaussianKernelModel(nn.Module):
         
     def predict(self, loader):
         return predict_from_loader(self, loader)
+        
+        # x_i = -torch.abs(x_i[:, 0:1])  # Take negative of absolute value of first coordinate
+        # x_j = -torch.abs(x_j[:, 0:1])  # Take negative of absolute value of first coordinate
 
 class ExponentialDecayModel(nn.Module):
     """Exponential decay based on euclidean distance."""
@@ -136,6 +143,8 @@ class ExponentialDecayModel(nn.Module):
         
     def forward(self, x):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1) 
+        x_i[:, 0] = -torch.abs(x_i[:, 0])  # Make x coordinate negative
+        x_j[:, 0] = -torch.abs(x_j[:, 0])  # Make x coordinate negative
         dist = torch.sum((x_i - x_j)**2, dim=1).sqrt() # Compute euclidean distance
         return self.SA_inf + (1 - self.SA_inf) * torch.exp(-dist / self.SA_lambda) # Apply exponential decay
         
@@ -147,6 +156,8 @@ class ExponentialDecayModel(nn.Module):
         
         # Optimize parameters using curve_fit
         x_i, x_j = torch.chunk(train_X, chunks=2, dim=1)
+        x_i[:, 0] = -torch.abs(x_i[:, 0])  # Make x coordinate negative
+        x_j[:, 0] = -torch.abs(x_j[:, 0])  # Make x coordinate negative
         dist = torch.sum((x_i - x_j)**2, dim=1).sqrt().cpu().numpy() # if slow can replace this with distances_expanded
         
         def exp_decay(x, SA_inf, SA_lambda):

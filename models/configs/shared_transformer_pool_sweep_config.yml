@@ -44,7 +44,7 @@ best_parameters:
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [20]
+    values: [60]
   d_model:
     values: [128]
   use_alibi:

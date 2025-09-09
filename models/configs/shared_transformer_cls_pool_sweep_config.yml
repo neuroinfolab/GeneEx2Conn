@@ -46,7 +46,7 @@ best_parameters:
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [20]
+    values: [60]
   d_model:
     values: [128]
   use_alibi:
@@ -65,7 +65,7 @@ best_parameters:
   dropout_rate:
     values: [0.1]
   cls_dropout:
-    values: [0.8]
+    values: [0.5]
   learning_rate:
     values: [0.0007] # 0.001 for spatial, 0.0003 for random
   weight_decay:

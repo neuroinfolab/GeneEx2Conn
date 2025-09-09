@@ -292,6 +292,10 @@ def load_connectome(parcellation='S456', omit_subcortical=False, dataset='UKBB',
             print("Warning: SC measure not available for UKBB dataset, returning HCP S456 SC")
             matrix = np.log1p(loadmat(f'./data/HCP1200/4{parcellation}_DTI_count.mat')['connectivity'])
             matrix = matrix / matrix.max()
+        elif measure=='exp_decay':
+            matrix = np.array(pd.read_csv(f'./data/UKBB/UKBB_{parcellation}_FC_exp_decay.csv'))
+        elif measure == 'residual':
+            matrix = np.array(pd.read_csv(f'./data/UKBB/UKBB_{parcellation}_FC_exp_decay_residual.csv'))
         else:
             matrix = np.array(pd.read_csv(f'./data/UKBB/UKBB_{parcellation}_FC_mu.csv'))
     elif dataset == 'HCP':
