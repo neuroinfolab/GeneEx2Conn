@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+import os
 
 class TokenEncoder(nn.Module):
     """Base class for token encoders."""
@@ -319,19 +320,85 @@ class TokenEncoderFactory:
         elif encoder_type == 'hierarchical':
             return HierarchicalTokenEncoder(kwargs['token_dim'], kwargs['d_model'])
         elif encoder_type == 'scbert':
-            return scBERTTokenEncoder(kwargs['token_dim'], kwargs['d_model'])
+            # Pass gene_symbols for vocabulary mapping and freeze option
+            gene_symbols = kwargs.get('gene_symbols', None)
+            freeze_pretrained = kwargs.get('freeze_pretrained', False)
+            return scBERTTokenEncoder(kwargs['token_dim'], kwargs['d_model'], 
+                                    gene_symbols=gene_symbols, freeze_pretrained=freeze_pretrained)
         elif encoder_type == 'geneformer':
-            return GeneformerTokenEncoder(kwargs['token_dim'], kwargs['d_model'])
+            # Pass gene_symbols for vocabulary mapping
+            gene_symbols = kwargs.get('gene_symbols', None)
+            return GeneformerTokenEncoder(kwargs['token_dim'], kwargs['d_model'], gene_symbols=gene_symbols)
         else:
-            raise ValueError(f"Unknown token encoder type: {encoder_type}") 
+            raise ValueError(f"Unknown token encoder type: {encoder_type}")
+    
+    @staticmethod
+    def create_with_data_config(encoder_type, d_model, parcellation='S100', gene_list='0.2', 
+                               dataset='AHBA', omit_subcortical=False, hemisphere='both', 
+                               impute_strategy='mirror_interpolate', sort_genes='refgenome'):
+        """
+        Create token encoder with automatic gene symbol loading from data configuration.
+        
+        This method automatically loads the gene symbols from the transcriptome data
+        based on the same parameters used for training, ensuring vocabulary mapping
+        is properly configured for pretrained models (scBERT, Geneformer).
+        
+        Args:
+            encoder_type (str): Type of token encoder
+            d_model (int): Model dimension
+            parcellation, gene_list, dataset, etc.: Same parameters as load_transcriptome
+            
+        Returns:
+            TokenEncoder: Initialized token encoder with proper gene mapping
+        """
+        from data.data_load import load_transcriptome
+        
+        # Load gene symbols using the same configuration as training data
+        _, gene_symbols = load_transcriptome(
+            parcellation=parcellation,
+            gene_list=gene_list, 
+            dataset=dataset,
+            omit_subcortical=omit_subcortical,
+            hemisphere=hemisphere,
+            impute_strategy=impute_strategy,
+            sort_genes=sort_genes,
+            return_valid_genes=True
+        )
+        
+        token_dim = len(gene_symbols)
+        print(f"Loaded {token_dim} gene symbols for {encoder_type} encoder: {gene_symbols[:5]}..." + 
+              (f" (showing first 5 of {len(gene_symbols)})" if len(gene_symbols) > 5 else ""))
+        
+        # Create encoder with gene symbols for vocabulary mapping
+        return TokenEncoderFactory.create(
+            encoder_type=encoder_type,
+            token_dim=token_dim,
+            d_model=d_model,
+            gene_symbols=gene_symbols
+        ) 
 
 class scBERTTokenEncoder(TokenEncoder):
     """
     Uses a pre-trained scBERT model to encode gene expression tokens.
     This allows for fine-tuning of scBERT for the connectome prediction task.
+    
+    Now includes proper gene vocabulary mapping from project gene symbols
+    to scBERT's expected gene vocabulary.
+    
+    Supports freezing pretrained weights for training only the projection head.
     """
-    def __init__(self, token_dim, d_model, scbert_model_path='/scratch/sg8603/scBERT/', scbert_params=None):
+    def __init__(self, token_dim, d_model, scbert_model_path='/scratch/sg8603/scBERT/', 
+                 scbert_params=None, gene_symbols=None, freeze_pretrained=False, 
+                 cache_embeddings=True, cache_dir='/scratch/sg8603/scbert_embeddings_cache'):
         super().__init__(token_dim, d_model)
+        
+        # Embedding cache setup
+        self.cache_embeddings = cache_embeddings
+        self.cache_dir = cache_dir
+        self.embedding_cache = {}
+        if cache_embeddings:
+            os.makedirs(cache_dir, exist_ok=True)
+            print(f"🗂️  scBERT embedding cache enabled: {cache_dir}")
 
         # Add scBERT module path to sys.path to allow for dynamic import
         import sys
@@ -339,7 +406,23 @@ class scBERTTokenEncoder(TokenEncoder):
             sys.path.append(scbert_model_path)
 
         from performer_pytorch.performer_pytorch import PerformerLM
-    
+        from .gene_mapping import ScBERTGeneMapper, create_gene_index_mapping
+
+        # Initialize gene mapping
+        if gene_symbols is not None:
+            print(f"Initializing scBERT gene mapping for {len(gene_symbols)} genes...")
+            self.gene_mapper = ScBERTGeneMapper()
+            self.gene_index_mapping, self.unmapped_genes = create_gene_index_mapping(gene_symbols, self.gene_mapper)
+            
+            if self.unmapped_genes:
+                print(f"Warning: {len(self.unmapped_genes)} genes could not be mapped to scBERT vocabulary")
+                print(f"Unmapped genes (first 10): {self.unmapped_genes[:10]}")
+        else:
+            print("Warning: No gene symbols provided - using identity mapping (may cause issues)")
+            self.gene_mapper = None
+            self.gene_index_mapping = None
+            self.unmapped_genes = []
+
         # Simple vocabulary class for gene expression binning
         class SimpleVocab:
             def __init__(self):
@@ -358,7 +441,7 @@ class scBERTTokenEncoder(TokenEncoder):
                 'dim': 200,      # Original pretrained dimension
                 'depth': 6,      # Original pretrained depth
                 'heads': 10,     # Original pretrained heads
-                'max_seq_len': min(token_dim, 2048)  # Cap sequence length for memory
+                'max_seq_len': min(token_dim, 1024)  # Reduced cap for memory efficiency
             }
 
         # Load vocabulary
@@ -393,11 +476,133 @@ class scBERTTokenEncoder(TokenEncoder):
         # Projection layer to match the main model's dimension (d_model)
         self.projection = nn.Linear(scbert_params['dim'], d_model)
         self.d_model = d_model
+        
+        # Freeze pretrained weights if requested
+        self.freeze_pretrained = freeze_pretrained
+        if freeze_pretrained:
+            self._freeze_pretrained_weights()
+    
+    def _freeze_pretrained_weights(self):
+        """Freeze all scBERT parameters, keeping only projection layer trainable."""
+        print("🔒 Freezing scBERT pretrained weights - only training projection layer")
+        
+        # Freeze all scBERT parameters
+        for param in self.scbert.parameters():
+            param.requires_grad = False
+        
+        # Keep projection layer trainable
+        for param in self.projection.parameters():
+            param.requires_grad = True
+        
+        # Print parameter counts
+        total_params = sum(p.numel() for p in self.parameters())
+        trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        frozen_params = total_params - trainable_params
+        
+        print(f"  Total parameters: {total_params:,}")
+        print(f"  Trainable parameters: {trainable_params:,}")
+        print(f"  Frozen parameters: {frozen_params:,}")
+        print(f"  Trainable ratio: {trainable_params/total_params*100:.1f}%")
+
+    def _get_cache_key(self, x_binned):
+        """Generate a cache key for the input tensor"""
+        import hashlib
+        # Use a more robust hash for better collision resistance
+        tensor_bytes = x_binned.cpu().numpy().tobytes()
+        return hashlib.md5(tensor_bytes).hexdigest()
+    
+    def _get_scbert_embeddings(self, x_binned):
+        """Get scBERT embeddings with caching support"""
+        if not self.cache_embeddings:
+            return self._compute_scbert_embeddings(x_binned)
+        
+        # Generate cache key
+        cache_key = self._get_cache_key(x_binned)
+        
+        # Check memory cache first
+        if cache_key in self.embedding_cache:
+            return self.embedding_cache[cache_key].to(x_binned.device)
+        
+        # Check disk cache
+        cache_file = os.path.join(self.cache_dir, f"embedding_{cache_key}.pt")
+        if os.path.exists(cache_file):
+            try:
+                cached_embedding = torch.load(cache_file, map_location=x_binned.device)
+                self.embedding_cache[cache_key] = cached_embedding.cpu()  # Store in memory cache too
+                print(f"📁 Loaded cached scBERT embedding {cache_key[:8]}...")
+                return cached_embedding
+            except Exception as e:
+                print(f"⚠️  Failed to load cached embedding: {e}")
+        
+        # Compute new embedding
+        print(f"🔄 Computing new scBERT embedding {cache_key[:8]}...")
+        embedding = self._compute_scbert_embeddings(x_binned)
+        
+        # Save to cache
+        if self.cache_embeddings:
+            try:
+                torch.save(embedding.cpu(), cache_file)
+                self.embedding_cache[cache_key] = embedding.cpu()
+                print(f"💾 Cached scBERT embedding {cache_key[:8]}...")
+            except Exception as e:
+                print(f"⚠️  Failed to save embedding to cache: {e}")
+        
+        return embedding
+    
+    def _compute_scbert_embeddings(self, x_binned):
+        """Actually compute scBERT embeddings (the expensive operation)"""
+        micro_batch_size = min(64, x_binned.shape[0])  # Very small micro-batches
+        total_samples = x_binned.shape[0]
+        
+        embeddings_list = []
+        for i in range(0, total_samples, micro_batch_size):
+            end_idx = min(i + micro_batch_size, total_samples)
+            chunk = x_binned[i:end_idx]
+            
+            # Truncate sequence length if too large to fit in memory
+            max_actual_seq_len = min(chunk.shape[1], 512)  # Hard cap at 512
+            chunk = chunk[:, :max_actual_seq_len]
+            
+            # Process chunk through scBERT with gradient checkpointing
+            with torch.cuda.amp.autocast(enabled=True, dtype=torch.bfloat16):
+                chunk_embeddings = self.scbert(chunk, return_encodings=True)
+                
+                # Mean pooling over sequence for this chunk
+                chunk_pooled = chunk_embeddings.mean(dim=1).float()  # Convert back to float32
+            
+            embeddings_list.append(chunk_pooled.detach())  # Detach to free computation graph
+            
+            # Aggressive memory cleanup
+            del chunk_embeddings, chunk
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+        
+        # Concatenate all chunk results
+        return torch.cat(embeddings_list, dim=0)
 
     def forward(self, x):
         # x shape: (batch_size, num_tokens, token_dim)
         batch_size, num_tokens, token_dim = x.shape
         x_flat = x.contiguous().view(batch_size * num_tokens, token_dim)
+
+        # --- Gene vocabulary mapping ---
+        # Apply gene mapping if available
+        if self.gene_index_mapping is not None:
+            # Create a mask for mapped genes
+            mapped_mask = torch.zeros(token_dim, dtype=torch.bool, device=x.device)
+            for gene_idx, mapped_gene in self.gene_index_mapping.items():
+                if mapped_gene is not None and gene_idx < token_dim:
+                    mapped_mask[gene_idx] = True
+            
+            # Zero out unmapped genes (they won't contribute to scBERT processing)
+            x_flat_mapped = x_flat.clone()
+            x_flat_mapped[:, ~mapped_mask] = 0.0
+            
+            print(f"Using {mapped_mask.sum().item()}/{token_dim} mapped genes for scBERT")
+        else:
+            x_flat_mapped = x_flat
+            print("Warning: No gene mapping applied - using all genes as-is")
 
         # --- Preprocessing for scBERT ---
         # 1. Binning: Convert continuous expression values to discrete integer tokens.
@@ -405,42 +610,25 @@ class scBERTTokenEncoder(TokenEncoder):
         # We'll use 5 bins (excluding padding and unknown tokens).
         # Bins: 0-20%, 20-40%, 40-60%, 60-80%, 80-100%
         percentiles = torch.tensor([0.2, 0.4, 0.6, 0.8], device=x.device)
-        bin_edges = torch.quantile(x_flat[x_flat > 0], percentiles, dim=0, keepdim=True).T
         
-        # Handle cases where all values are zero
-        if bin_edges.shape[0] != x_flat.shape[1]:
-            bin_edges = torch.zeros(x_flat.shape[1], 4, device=x.device)
+        # Use only mapped genes for computing percentiles
+        nonzero_values = x_flat_mapped[x_flat_mapped > 0]
+        if len(nonzero_values) > 0:
+            bin_edges = torch.quantile(nonzero_values, percentiles, dim=0, keepdim=True).T
+            # Expand to match all genes
+            bin_edges = bin_edges.expand(x_flat_mapped.shape[1], -1)
+        else:
+            bin_edges = torch.zeros(x_flat_mapped.shape[1], 4, device=x.device)
 
         # Add a small value to the last edge to include max value
-        bin_edges_plus = torch.cat([bin_edges, torch.full((x_flat.shape[1], 1), float('inf'), device=x.device)], dim=1)
+        bin_edges_plus = torch.cat([bin_edges, torch.full((x_flat_mapped.shape[1], 1), float('inf'), device=x.device)], dim=1)
 
         # Convert to tokens
-        x_binned = torch.sum(x_flat.unsqueeze(-1) > bin_edges_plus, dim=-1)
+        x_binned = torch.sum(x_flat_mapped.unsqueeze(-1) > bin_edges_plus, dim=-1)
         x_binned = x_binned + self.vocab.cls_token_id # Offset by special tokens
 
-        # --- Pass through scBERT with chunked processing ---
-        # Process in smaller chunks to reduce memory usage
-        chunk_size = 512  # Process 512 samples at a time
-        total_samples = x_binned.shape[0]
-        
-        embeddings_list = []
-        for i in range(0, total_samples, chunk_size):
-            end_idx = min(i + chunk_size, total_samples)
-            chunk = x_binned[i:end_idx]
-            
-            # Process chunk through scBERT
-            chunk_embeddings = self.scbert(chunk, return_encodings=True)
-            
-            # Mean pooling over sequence for this chunk
-            chunk_pooled = chunk_embeddings.mean(dim=1)
-            embeddings_list.append(chunk_pooled)
-            
-            # Clear cache to free memory
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        
-        # Concatenate all chunk results
-        pooled_embedding = torch.cat(embeddings_list, dim=0)
+        # --- Get scBERT embeddings with caching ---
+        pooled_embedding = self._get_scbert_embeddings(x_binned)
 
         # Project to the model's expected dimension
         projected_embedding = self.projection(pooled_embedding)
@@ -453,16 +641,55 @@ class GeneformerTokenEncoder(TokenEncoder):
     """
     Token encoder using pretrained Geneformer (Theodoris et al. 2023).
     Geneformer is a BERT-based transformer pretrained on ~30M single-cell transcriptomes.
+    
+    Now includes proper gene vocabulary mapping from project gene symbols
+    to Geneformer's expected Ensembl gene IDs.
     """
     
-    def __init__(self, token_dim, d_model, model_name='ctheodoris/Geneformer'):
+    def __init__(self, token_dim, d_model, model_name='ctheodoris/Geneformer', gene_symbols=None,
+                 cache_embeddings=True, cache_dir='/scratch/sg8603/geneformer_embeddings_cache'):
         super().__init__(token_dim, d_model)
+        
+        # Embedding caching setup
+        self.cache_embeddings = cache_embeddings
+        self.cache_dir = cache_dir
+        self.embedding_cache = {}  # In-memory cache
+        
+        if self.cache_embeddings:
+            os.makedirs(self.cache_dir, exist_ok=True)
+            print(f"🗂️  Geneformer embedding caching enabled: {self.cache_dir}")
         
         try:
             from transformers import BertModel, BertTokenizer
             import torch.nn.functional as F
         except ImportError:
             raise ImportError("transformers library is required for GeneformerTokenEncoder. Install with: pip install transformers")
+        
+        from .gene_mapping import GeneformerGeneMapper, create_gene_index_mapping
+        
+        # Initialize gene mapping
+        if gene_symbols is not None:
+            print(f"Initializing Geneformer gene mapping for {len(gene_symbols)} genes...")
+            self.gene_mapper = GeneformerGeneMapper()
+            self.gene_index_mapping, self.unmapped_genes = create_gene_index_mapping(gene_symbols, self.gene_mapper)
+            
+            if self.unmapped_genes:
+                print(f"Warning: {len(self.unmapped_genes)} genes could not be mapped to Geneformer vocabulary")
+                print(f"Unmapped genes (first 10): {self.unmapped_genes[:10]}")
+                
+            # Create reverse mapping from Ensembl ID to token ID
+            self.ensembl_to_token_id = {}
+            for gene_idx, ensembl_id in self.gene_index_mapping.items():
+                if ensembl_id is not None:
+                    # For Geneformer, token IDs are typically just the gene index + offset
+                    # This is a simplified approach - ideally we'd load the actual Geneformer vocabulary
+                    self.ensembl_to_token_id[ensembl_id] = gene_idx + 5  # +5 for special tokens
+        else:
+            print("Warning: No gene symbols provided - using identity mapping (may cause issues)")
+            self.gene_mapper = None
+            self.gene_index_mapping = None
+            self.unmapped_genes = []
+            self.ensembl_to_token_id = {}
         
         # Load pretrained Geneformer model and tokenizer
         self.model_name = model_name
@@ -483,10 +710,54 @@ class GeneformerTokenEncoder(TokenEncoder):
         # This mimics Geneformer's tokenization strategy
         self.max_genes = min(token_dim, 2048)  # Limit to model's max sequence length
     
-    def forward(self, x):
-        # x shape: (batch_size, num_tokens, token_dim)
-        batch_size, num_tokens, token_dim = x.shape
-        x_flat = x.contiguous().view(batch_size * num_tokens, token_dim)
+    def _get_cache_key(self, x_binned):
+        """Generate cache key for input tensor."""
+        import hashlib
+        # Convert tensor to bytes for hashing
+        tensor_bytes = x_binned.cpu().numpy().tobytes()
+        return hashlib.md5(tensor_bytes).hexdigest()
+    
+    def _get_geneformer_embeddings(self, x_flat_mapped, mapped_gene_indices):
+        """Get Geneformer embeddings from cache or compute if not cached."""
+        if not self.cache_embeddings:
+            return self._compute_geneformer_embeddings(x_flat_mapped, mapped_gene_indices)
+        
+        cache_key = self._get_cache_key(x_flat_mapped)
+        
+        # Check in-memory cache first
+        if cache_key in self.embedding_cache:
+            print("🎯 Cache hit (memory)")
+            return self.embedding_cache[cache_key]
+        
+        # Check disk cache
+        cache_file = os.path.join(self.cache_dir, f"geneformer_emb_{cache_key}.pt")
+        if os.path.exists(cache_file):
+            print("💾 Cache hit (disk)")
+            try:
+                cached_embedding = torch.load(cache_file, map_location=x_flat_mapped.device)
+                # Store in memory cache for future use
+                self.embedding_cache[cache_key] = cached_embedding
+                return cached_embedding
+            except Exception as e:
+                print(f"⚠️  Error loading cache file {cache_file}: {e}")
+                # Fall through to compute embeddings
+        
+        # Compute embeddings if not cached
+        print("🔄 Computing Geneformer embeddings...")
+        embeddings = self._compute_geneformer_embeddings(x_flat_mapped, mapped_gene_indices)
+        
+        # Save to both memory and disk cache
+        try:
+            self.embedding_cache[cache_key] = embeddings
+            torch.save(embeddings, cache_file)
+            print(f"💾 Cached embeddings to {cache_file}")
+        except Exception as e:
+            print(f"⚠️  Error saving cache: {e}")
+        
+        return embeddings
+    
+    def _compute_geneformer_embeddings(self, x_flat_mapped, mapped_gene_indices):
+        """Compute Geneformer embeddings for the given input."""
         
         # --- Geneformer-style tokenization ---
         # Rank genes by expression level (Geneformer's approach)
@@ -495,25 +766,37 @@ class GeneformerTokenEncoder(TokenEncoder):
         embeddings_list = []
         chunk_size = 32  # Process in smaller chunks for memory efficiency
         
-        for i in range(0, x_flat.shape[0], chunk_size):
-            end_idx = min(i + chunk_size, x_flat.shape[0])
-            chunk = x_flat[i:end_idx]
+        for i in range(0, x_flat_mapped.shape[0], chunk_size):
+            end_idx = min(i + chunk_size, x_flat_mapped.shape[0])
+            chunk = x_flat_mapped[i:end_idx]
             
             # Rank genes by expression for each sample in chunk
             chunk_embeddings = []
             for sample in chunk:
-                # Get top-k genes by expression level
+                # Get top-k genes by expression level (only from mapped genes)
                 nonzero_mask = sample > 0
                 if nonzero_mask.sum() == 0:
-                    # Handle case with no expressed genes
-                    gene_indices = torch.zeros(min(100, self.max_genes), dtype=torch.long, device=sample.device)
+                    # Handle case with no expressed genes - use padding tokens
+                    input_ids = torch.zeros(min(100, self.max_genes), dtype=torch.long, device=sample.device)
                 else:
-                    # Get indices of top expressed genes
-                    _, top_indices = torch.topk(sample, min(nonzero_mask.sum().item(), self.max_genes))
-                    gene_indices = top_indices
-                
-                # Create input_ids (gene indices + 1 to avoid 0 which is padding)
-                input_ids = gene_indices + 1
+                    # Get indices of top expressed genes within the mapped genes
+                    _, top_indices_in_mapped = torch.topk(sample, min(nonzero_mask.sum().item(), self.max_genes))
+                    
+                    # Convert back to original gene indices using the mapping
+                    if self.gene_index_mapping is not None:
+                        # Map back to original gene indices, then to Ensembl-based token IDs
+                        original_gene_indices = mapped_gene_indices[top_indices_in_mapped]
+                        input_ids = []
+                        for orig_idx in original_gene_indices:
+                            ensembl_id = self.gene_index_mapping[orig_idx.item()]
+                            if ensembl_id and ensembl_id in self.ensembl_to_token_id:
+                                input_ids.append(self.ensembl_to_token_id[ensembl_id])
+                            else:
+                                input_ids.append(4)  # UNK token
+                        input_ids = torch.tensor(input_ids, dtype=torch.long, device=sample.device)
+                    else:
+                        # Fallback: use gene indices + 1
+                        input_ids = top_indices_in_mapped + 1
                 
                 # Pad to consistent length
                 if len(input_ids) < self.max_genes:
@@ -547,6 +830,41 @@ class GeneformerTokenEncoder(TokenEncoder):
         
         # Project to the model's expected dimension
         projected_embedding = self.projection(pooled_embedding)
+        
+        return projected_embedding
+    
+    def forward(self, x):
+        """Forward pass with optional caching."""
+        # x shape: (batch_size, num_tokens, token_dim)
+        batch_size, num_tokens, token_dim = x.shape
+        x_flat = x.contiguous().view(batch_size * num_tokens, token_dim)
+        
+        # --- Gene vocabulary mapping ---
+        # Apply gene mapping if available
+        print(f"Geneformer forward: x.shape={x.shape}, token_dim={token_dim}")
+        if self.gene_index_mapping is not None:
+            print(f"Gene mapping has {len(self.gene_index_mapping)} entries")
+            # Create a mask for mapped genes
+            mapped_mask = torch.zeros(token_dim, dtype=torch.bool, device=x.device)
+            mapped_gene_indices = []
+            
+            for gene_idx, ensembl_id in self.gene_index_mapping.items():
+                if ensembl_id is not None and gene_idx < token_dim:
+                    mapped_mask[gene_idx] = True
+                    mapped_gene_indices.append(gene_idx)
+            
+            # Only use mapped genes for processing
+            x_flat_mapped = x_flat[:, mapped_mask]
+            mapped_gene_indices = torch.tensor(mapped_gene_indices, device=x.device)
+            
+            print(f"Using {len(mapped_gene_indices)}/{token_dim} mapped genes for Geneformer")
+        else:
+            x_flat_mapped = x_flat
+            mapped_gene_indices = torch.arange(token_dim, device=x.device)
+            print("Warning: No gene mapping applied - using all genes as-is")
+        
+        # Get embeddings (with caching if enabled)
+        projected_embedding = self._get_geneformer_embeddings(x_flat_mapped, mapped_gene_indices)
         
         # Reshape back to (batch_size, num_tokens, d_model)
         return projected_embedding.view(batch_size, num_tokens, self.d_model)

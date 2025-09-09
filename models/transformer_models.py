@@ -127,8 +127,21 @@ class FastSelfAttentionEncoder(nn.Module):
 
     def forward(self, x):
         batch_size, total_features = x.shape
-        L = total_features // self.token_encoder.token_dim
-        x = x.view(batch_size, L, -1)
+        token_dim = self.token_encoder.token_dim
+        L = total_features // token_dim
+        
+        # Debug shape calculation
+        if total_features % token_dim != 0:
+            print(f"⚠️  Shape mismatch: total_features={total_features}, token_dim={token_dim}")
+            print(f"   total_features % token_dim = {total_features % token_dim}")
+            # Truncate to make it divisible
+            truncated_features = (total_features // token_dim) * token_dim
+            x = x[:, :truncated_features]
+            total_features = truncated_features
+            L = total_features // token_dim
+            print(f"   Truncated to {truncated_features} features, L={L}")
+        
+        x = x.view(batch_size, L, token_dim)
         x = self.token_encoder(x)
 
         for layer in self.layers:
@@ -141,7 +154,8 @@ class FastSelfAttentionEncoder(nn.Module):
 class SharedSelfAttentionModel(nn.Module):
     def __init__(self, input_dim, binarize=False, token_encoder_dim=20, token_encoder_type='conv1d', d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128],
                  use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
-                 batch_size=256, aug_prob=0.0, epochs=100, num_workers=2, prefetch_factor=2):
+                 batch_size=256, aug_prob=0.0, epochs=100, num_workers=2, prefetch_factor=2, 
+                 freeze_token_encoder=False):
         super().__init__()
         
         self.binarize = binarize
@@ -159,11 +173,50 @@ class SharedSelfAttentionModel(nn.Module):
         self.prefetch_factor = prefetch_factor
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        token_encoder = TokenEncoderFactory.create(
-            token_encoder_type,
-            token_dim=self.token_encoder_dim,
-            d_model=self.d_model
-        )
+        # For scBERT/Geneformer, we need to load gene symbols from data
+        if token_encoder_type in ['scbert', 'geneformer']:
+            try:
+                # Import here to avoid circular imports
+                from data.data_load import load_transcriptome
+                
+                print("🧬 Loading gene symbols for scBERT/Geneformer...")
+                # Use default AHBA dataset parameters (load_transcriptome defaults)
+                _, gene_symbols = load_transcriptome(
+                    parcellation='S100',
+                    gene_list='0.2', 
+                    dataset='AHBA',  # This is a parameter for load_transcriptome, not single_sim_run
+                    omit_subcortical=False,
+                    hemisphere='both',
+                    impute_strategy='mirror_interpolate',
+                    sort_genes='refgenome',
+                    return_valid_genes=True
+                )
+                
+                print(f"📊 Loaded {len(gene_symbols)} gene symbols for {token_encoder_type}")
+                
+                token_encoder = TokenEncoderFactory.create(
+                    token_encoder_type,
+                    token_dim=self.token_encoder_dim,
+                    d_model=self.d_model,
+                    freeze_pretrained=freeze_token_encoder,
+                    gene_symbols=gene_symbols
+                )
+            except Exception as e:
+                print(f"⚠️ Failed to load gene symbols: {e}")
+                print(f"🔄 Falling back to default token encoder creation")
+                token_encoder = TokenEncoderFactory.create(
+                    token_encoder_type,
+                    token_dim=self.token_encoder_dim,
+                    d_model=self.d_model,
+                    freeze_pretrained=freeze_token_encoder
+                )
+        else:
+            token_encoder = TokenEncoderFactory.create(
+                token_encoder_type,
+                token_dim=self.token_encoder_dim,
+                d_model=self.d_model,
+                freeze_pretrained=freeze_token_encoder
+            )
 
         self.encoder = FastSelfAttentionEncoder(
             token_encoder=token_encoder,
