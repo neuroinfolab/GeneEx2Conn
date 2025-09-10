@@ -1,5 +1,5 @@
 name: shared_transformer_pool_cls
-method: grid
+method: random
 metric:
   name: mean_val_loss
   goal: minimize
@@ -8,7 +8,7 @@ parameters:
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [20]
+    values: [60]
   d_model:
     values: [128]
   use_alibi:
@@ -22,13 +22,13 @@ parameters:
     # - [256, 128, 64]
     - [512, 256, 128]
   transformer_dropout:
-    values: [0.1, 0.2]
+    values: [0.1] #, 0.2]
   dropout_rate:
-    values: [0.1, 0.2]
+    values: [0.1] #, 0.2]
   cls_dropout:
-    values: [0, .1, .2, .3, .4, .5, .6, .7, .8, .9]
+    values: [0, .2, .4, .6, .8]
   learning_rate:
-    values: [.0003] #, .0005, .0007]
+    values: [.0005] #, .0003, .0005, .0007]
   weight_decay:
     values: [0.00001] #, 0.0001]
   batch_size:
@@ -36,7 +36,7 @@ parameters:
   aug_prob:
     values: [0] #, 0.3, 0.45]
   epochs:
-    values: [100]
+    values: [90]
   num_workers:
     value: 2
   prefetch_factor:
