@@ -74,7 +74,8 @@ class Simulation:
     def __init__(self, feature_type, cv_type, model_type, gpu_acceleration, resolution=1.0, random_seed=42,
                  omit_subcortical=False, parcellation='S100', impute_strategy='mirror_interpolate', sort_genes='expression', 
                  gene_list='0.2', hemisphere='both', use_shared_regions=False, test_shared_regions=False, 
-                 connectome_target='FC', binarize=False, skip_cv=False, null_model=False, token_encoder_type=None):        
+                 connectome_target='FC', binarize=False, skip_cv=False, null_model=False, token_encoder_type=None,
+                 freeze_token_encoder=False):
         """
         Initialization of simulation parameters
         """
@@ -92,6 +93,7 @@ class Simulation:
         self.skip_cv = skip_cv
         self.null_model = null_model
         self.token_encoder_type = token_encoder_type
+        self.freeze_token_encoder = freeze_token_encoder
         self.results = []
     
     def load_data(self):
@@ -249,7 +251,8 @@ class Simulation:
                     impute_strategy=self.impute_strategy,
                     sort_genes=self.sort_genes,
                     null_model=self.null_model,
-                    token_encoder_type=self.token_encoder_type
+                    token_encoder_type=self.token_encoder_type,
+                    freeze_token_encoder=self.freeze_token_encoder
                 )
             
             # Run sweep
@@ -257,7 +260,7 @@ class Simulation:
 
             # Get best run from sweep
             api = wandb.Api()
-            sweep = api.sweep(f"alexander-ratzan-new-york-university/gx2conn/{sweep_id}")
+            sweep = api.sweep(f"sidharthgoel/gx2conn/{sweep_id}")
             best_run = sweep.best_run()
             wandb.teardown()
 
@@ -266,9 +269,11 @@ class Simulation:
         
         print('BEST CONFIG', best_config)
 
-        # Override with token_encoder_type if provided
+        # Override with token_encoder_type and freeze_token_encoder if provided
         if self.token_encoder_type is not None:
             best_config['token_encoder_type'] = self.token_encoder_type
+        if self.freeze_token_encoder:
+            best_config['freeze_token_encoder'] = self.freeze_token_encoder
 
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]

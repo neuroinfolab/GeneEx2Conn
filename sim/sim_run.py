@@ -4,6 +4,8 @@ import argparse
 import multiprocessing as mp
 from env.imports import *
 from sim.sim import Simulation
+import torch._dynamo
+torch._dynamo.config.suppress_errors = True  # Suppress compilation errors, fall back to eager
 
 relative_root_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 absolute_root_path = '/home/sg8603/Gene2Conn'
@@ -32,7 +34,8 @@ def single_sim_run(
     use_gpu=True, 
     null_model='none',
     use_folds=[0, 1, 2, 3],
-    token_encoder_type=None
+    token_encoder_type=None,
+    freeze_token_encoder=False
 ):
     """
     Runs a single simulation for a given feature type and model configuration.
@@ -140,13 +143,14 @@ def single_sim_run(
                     gpu_acceleration=use_gpu,
                     skip_cv=skip_cv,
                     null_model=null_model,
-                    token_encoder_type=token_encoder_type
+                    token_encoder_type=token_encoder_type,
+                    freeze_token_encoder=freeze_token_encoder
                 )
     
     if search_method[0] == 'wandb':
         sim.run_sim_torch(search_method, track_wandb, use_folds)
     else:
-        sim.run_sim(search_method, track_wandb)
+        sim.run_sim_torch(search_method, track_wandb, use_folds)
     
     elapsed_time = time.time() - start_time
     print(f'Simulation completed in {elapsed_time:.2f} seconds ({elapsed_time/60:.2f} minutes)')
@@ -169,7 +173,8 @@ if __name__ == "__main__":
     parser.add_argument('--random_seed', type=int, help='Override random seed from config')
     parser.add_argument('--null_model', help='Override null model type from config')
     parser.add_argument('--use_folds', nargs='+', type=int, help='Override use folds from config')
-    parser.add_argument('--token_encoder_type', help='Override token encoder type for transformer models. Options: linear, mlp, conv1d')
+    parser.add_argument('--token_encoder_type', help='Override token encoder type for transformer models. Options: linear, mlp, conv1d, scbert, geneformer')
+    parser.add_argument('--freeze_token_encoder', action='store_true', help='Freeze pretrained token encoder weights (only train projection/head)')
     
     args = parser.parse_args()
 
@@ -191,6 +196,8 @@ if __name__ == "__main__":
         config['use_folds'] = args.use_folds
     if args.token_encoder_type:
         config['token_encoder_type'] = args.token_encoder_type
+    if args.freeze_token_encoder:
+        config['freeze_token_encoder'] = True
 
     print(f"Running simulation with config: {args.config}")
     print(f"Model type: {config['model_type']}")

@@ -277,7 +277,7 @@ def extract_model_params(model):
 
 
 # WANDB
-def train_sweep_torch(config, model_type, train_indices, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, impute_strategy, sort_genes, null_model, token_encoder_type=None):
+def train_sweep_torch(config, model_type, train_indices, feature_type, connectome_target, dataset, cv_type, cv_obj, outer_fold_idx, device, sweep_id, model_classes, parcellation, hemisphere, omit_subcortical, gene_list, seed, binarize, impute_strategy, sort_genes, null_model, token_encoder_type=None, freeze_token_encoder=False):
     """
     Training function for W&B sweeps for deep learning models.
     
@@ -324,10 +324,13 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
     )
     sweep_config = wandb.config
     
-    # Add token_encoder_type to sweep_config if provided
-    if token_encoder_type is not None:
+    # Add token_encoder_type and freeze_token_encoder to sweep_config if provided
+    if token_encoder_type is not None or freeze_token_encoder:
         sweep_config = dict(sweep_config)
-        sweep_config['token_encoder_type'] = token_encoder_type
+        if token_encoder_type is not None:
+            sweep_config['token_encoder_type'] = token_encoder_type
+        if freeze_token_encoder:
+            sweep_config['freeze_token_encoder'] = freeze_token_encoder
     
     inner_fold_metrics = {'final_train_loss': [], 'final_val_loss': [], 
                           'final_train_pearson': [], 'final_val_pearson': []}
