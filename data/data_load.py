@@ -99,6 +99,8 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean_interpolate.csv'))
             elif impute_strategy == 'mirror_interpolate':
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean_mirror_interpolate.csv'))
+            elif impute_strategy == 'raw_mirror_interpolate':
+                genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_raw_mean_mirror_interpolate.csv'))
             else:
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
             genes_data = genes_data.drop('label', axis=1)
@@ -141,7 +143,10 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             gene_order_dict = {gene: idx for idx, gene in enumerate(ordered_genes)}
             valid_genes = [gene for gene in genes_list if gene in gene_order_dict and gene in genes_data.columns]
         else: # Specifically for autoencoder style model
+            if return_valid_genes:
+                return np.array(genes_data), genes_list
             return np.array(genes_data)
+
 
         if sort_genes == 'refgenome': # this may drop some genes if the gene list symbol does not directly match to the gene_id of the reference genome (ususally drops <5% of genes)
             human_refgenome = pd.read_csv(absolute_data_path + '/human_refgenome/human_refgenome_ordered.csv')
