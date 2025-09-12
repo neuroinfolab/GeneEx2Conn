@@ -1,0 +1,61 @@
+name: xgboost
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+parameters: 
+  input_dim:
+    value: !!int 0
+  n_estimators:
+    values: [50, 150, 250, 350]
+  max_depth:
+    values: [2, 3, 4, 5, 6, 7]
+  learning_rate:
+    values: [0.001, 0.01, 0.1, 0.3]
+  subsample:
+    values: [0.6, 0.8, 1.0]
+  colsample_bytree:
+    values: [0.6, 0.8, 1.0]
+  gamma:
+    values: [0, 0.1, 0.5]
+  reg_lambda:
+    values: [0, 0.0001, 0.01, 0.1, 1]
+  reg_alpha:
+    values: [0, 0.0001, 0.01, 0.1, 1]
+  min_child_weight:
+    values: [1, 3, 5]
+  scale_pos_weight:
+    values: [1, 2, 3, 4, 5]
+  batch_size:
+    values: [512]
+  epochs:
+    values: [1]
+
+best_parameters:
+  input_dim:
+    value: !!int 0
+  n_estimators:
+    values: [250]
+  max_depth:
+    values: [5]
+  learning_rate:
+    values: [0.1]
+  subsample:
+    values: [0.8]
+  colsample_bytree:
+    values: [0.8]
+  gamma:
+    values: [0.1]
+  reg_lambda:
+    values: [0.1]
+  reg_alpha:
+    values: [0.01]
+  min_child_weight:
+    values: [3]
+  scale_pos_weight:
+    values: [1]
+  batch_size:
+    values: [512]
+  epochs:
+    values: [1]

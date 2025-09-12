@@ -17,7 +17,7 @@ from data.data_utils import (
     RegionPairDataset
 )
 
-from models.base_models import ModelBuild, BaseModel
+from models.base_models import ModelBuild, BaseModel, XGBRegressorModel
 from models.feature_based import CGEModel, GaussianKernelModel, ExponentialDecayModel
 from models.bilinear import BilinearLowRank, BilinearCM
 from models.pls import PLSTwoStepModel, PLS_MLPDecoderModel, PLS_BilinearDecoderModel
@@ -33,6 +33,7 @@ MODEL_CLASSES = {
     'gaussian_kernel': GaussianKernelModel,
     'exponential_decay': ExponentialDecayModel,
     'bilinear_lowrank': BilinearLowRank,
+    'xgboost': XGBRegressorModel, 
     'bilinear_CM': BilinearCM,
     'pls_twostep': PLSTwoStepModel,
     'pls_mlpdecoder': PLS_MLPDecoderModel,

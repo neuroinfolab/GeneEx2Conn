@@ -43,6 +43,10 @@ class LinearModel(BaseModel):
             'fit_intercept': Categorical([True, False]),
             'positive': Categorical([True, False])
         }
+    
+    def get_model(self):
+        """Return the sklearn model for GridSearchCV compatibility"""
+        return self.model
 
 class RidgeModel(BaseModel):
     def __init__(self):
@@ -56,6 +60,10 @@ class RidgeModel(BaseModel):
             'alpha': Real(1e-6, 1e2, prior='log-uniform'),  # Log-uniform to explore a wide range of alphas
             'solver': Categorical(['auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga'])  # Different solvers to try
         }
+    
+    def get_model(self):
+        """Return the sklearn model for GridSearchCV compatibility"""
+        return self.model
 
 class PLSModel(BaseModel):
     def __init__(self):
@@ -71,87 +79,257 @@ class PLSModel(BaseModel):
             'n_components': Categorical([1, 2, 3, 4, 5, 7, 10]),  # Integer range for number of components
             'scale': Categorical([True, False])  # Whether to scale the data
         }
+    
+    def get_model(self):
+        """Return the sklearn model for GridSearchCV compatibility"""
+        return self.model
 
-class XGBRegressorModel(BaseModel):
-    def __init__(self):
+class XGBRegressorModel(nn.Module):
+    def __init__(self, input_dim=None, n_estimators=100, max_depth=5, learning_rate=0.1, 
+                 subsample=0.8, colsample_bytree=0.8, gamma=0, reg_lambda=0.1, reg_alpha=0.01,
+                 min_child_weight=3, batch_size=512, epochs=1, **kwargs):
         super().__init__()
-        self.model = XGBRegressor()
         
-        self.param_grid = {
-            'n_estimators': [50, 150, 250, 250],  # Num trees
-            'max_depth': [2, 3, 5, 7],                 # Maximum depth of each tree
-            'learning_rate': [0.01, 0.1, 0.3],         # Learning rate (shrinkage)
-            'subsample': [0.6, 0.8, 1],                # Subsample ratio of the training data
-            'colsample_bytree': [0.5, 0.8, 1],         # Subsample ratio of columns when constructing each tree
-            'gamma': [0, 0.1],                         # Minimum loss reduction required to make a split
-            'reg_lambda': [0.01, 0.1, 1],              # L2 regularization term (Ridge penalty)
-            'reg_alpha': [0.01, 0.1, 1],               # L1 regularization term (Lasso penalty)
-            'random_state': [42],                      # Seed for reproducibility
-            'min_child_weight': [1, 3, 5],             # Child weight for pruning
-            'tree_method':['gpu_hist'],                    # Use the GPU
-            'device':['cuda'],                         # Use GPU predictor
-            'n_gpus':[-1],
-            'verbosity': [0]
-        }
+        # Torch-style parameters
+        self.batch_size = batch_size
+        self.epochs = epochs  # For XGBoost, this is just 1 epoch since it's not iterative like neural nets
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        self.param_dist = {
-            'learning_rate': Categorical([1e-3, 1e-2, 1e-1, 0.3]), #1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]), #Real(1e-6, 1e-1, prior='log-uniform'),
-            'n_estimators': Categorical([50, 150, 250, 350]), # Categorical([10, 100, 300]), #Categorical([50, 100, 150, 200, 250, 300, 350, 400]), # Integer(50, 400)
-            'max_depth': Categorical([2, 3, 4, 5, 6, 7]), # Categorical([1, 2, 6]), # Integer(2, 6),  #, 10),
-            'subsample': Categorical([0.6, 0.8, 1]), # Categorical([0.6, 0.6]), #, 0.7, 0.8, 0.9, 1.0]),
-            'colsample_bytree': Categorical([0.6, 0.8, 1]), # Categorical([0.6, 0.6]), # 0.7, 0.8, 0.9, 1.0]),
-            'reg_lambda': Categorical([0, 1e-4, 1e-2, 1e-1, 1]),  # L2 regularization term (Ridge penalty)
-            'reg_alpha': Categorical([0, 1e-4, 1e-2, 1e-1, 1]),             # L1 regularization term (Lasso penalty)
-            'tree_method': Categorical(['gpu_hist']),
-            'device':['cuda'],
-            'n_gpus':[-1],
-            'random_state': [42],
-            'verbosity': [0] # consider adding this hyperparam: Sampling method. Used only by the GPU version of hist tree method. uniform: select random training instances uniformly. gradient_based select random training instances with higher probability when the gradient and hessian are larger. (cf. CatBoost)
+        # XGBoost handles its own device management, so we don't move parameters
+        
+        # XGBoost parameters
+        xgb_params = {
+            'n_estimators': n_estimators,
+            'max_depth': max_depth,
+            'learning_rate': learning_rate,
+            'subsample': subsample,
+            'colsample_bytree': colsample_bytree,
+            'gamma': gamma,
+            'reg_lambda': reg_lambda,
+            'reg_alpha': reg_alpha,
+            'min_child_weight': min_child_weight,
+            'tree_method': 'gpu_hist' if torch.cuda.is_available() else 'hist',
+            'random_state': 42,
+            'verbosity': 0
         }
+        xgb_params.update(kwargs)
+        
+        self.model = XGBRegressor(**xgb_params)
+        self.criterion = nn.MSELoss()  # For compatibility with torch interface
+    
+    def to(self, device):
+        """Override to() method since XGBoost handles GPU internally"""
+        # Call parent's to() method to maintain nn.Module behavior
+        super().to(device)
+        self.device = device
+        return self
+        
+    def forward(self, x):
+        """Forward pass - not used for XGBoost but required for nn.Module"""
+        # Convert torch tensor to numpy if needed
+        if isinstance(x, torch.Tensor):
+            x = x.detach().cpu().numpy()
+        return torch.tensor(self.model.predict(x), dtype=torch.float32)
+    
+    def fit(self, dataset, train_indices, test_indices, save_model=None, verbose=True):
+        """Torch-style fit method compatible with your training pipeline"""
+        # Extract data from dataset
+        if hasattr(dataset, 'X_expanded') and hasattr(dataset, 'Y_expanded'):
+            X_train = dataset.X_expanded[train_indices]
+            y_train = dataset.Y_expanded[train_indices]
+            X_test = dataset.X_expanded[test_indices] 
+            y_test = dataset.Y_expanded[test_indices]
+        else:
+            # Fallback for different dataset structures
+            train_dataset = torch.utils.data.Subset(dataset, train_indices)
+            test_dataset = torch.utils.data.Subset(dataset, test_indices)
+            
+            # Extract all training data
+            X_train_list, y_train_list = [], []
+            for x, y, *_ in train_dataset:
+                X_train_list.append(x.numpy() if isinstance(x, torch.Tensor) else x)
+                y_train_list.append(y.numpy() if isinstance(y, torch.Tensor) else y)
+            X_train = np.vstack(X_train_list)
+            y_train = np.concatenate(y_train_list)
+            
+            # Extract all test data
+            X_test_list, y_test_list = [], []
+            for x, y, *_ in test_dataset:
+                X_test_list.append(x.numpy() if isinstance(x, torch.Tensor) else x)
+                y_test_list.append(y.numpy() if isinstance(y, torch.Tensor) else y)
+            X_test = np.vstack(X_test_list)
+            y_test = np.concatenate(y_test_list)
+        
+        # Convert torch tensors to numpy
+        if isinstance(X_train, torch.Tensor):
+            X_train = X_train.cpu().numpy()
+            y_train = y_train.cpu().numpy()
+            X_test = X_test.cpu().numpy()
+            y_test = y_test.cpu().numpy()
+        
+        # Fit XGBoost model
+        self.model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=verbose)
+        
+        # Calculate losses for torch-style return
+        train_pred = self.model.predict(X_train)
+        test_pred = self.model.predict(X_test)
+        
+        train_loss = np.mean((train_pred - y_train) ** 2)
+        val_loss = np.mean((test_pred - y_test) ** 2)
+        
+        return {'train_loss': [train_loss], 'val_loss': [val_loss]}
+    
+    def predict(self, loader):
+        """Torch-style predict method compatible with your evaluation pipeline"""
+        predictions = []
+        targets = []
+        
+        for batch_data in loader:
+            batch_X, batch_y = batch_data[0], batch_data[1]
+            
+            # Convert to numpy
+            if isinstance(batch_X, torch.Tensor):
+                batch_X = batch_X.cpu().numpy()
+            if isinstance(batch_y, torch.Tensor):
+                batch_y = batch_y.cpu().numpy()
+            
+            # Make predictions
+            batch_preds = self.model.predict(batch_X)
+            
+            predictions.append(batch_preds)
+            targets.append(batch_y)
+        
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        
+        return predictions, targets
 
 
-class XGBClassifierModel(BaseModel):
-    def __init__(self):
+class XGBClassifierModel(nn.Module):
+    def __init__(self, input_dim=None, n_estimators=100, max_depth=5, learning_rate=0.1,
+                 subsample=0.8, colsample_bytree=0.8, gamma=0, reg_lambda=0.1, reg_alpha=0.01,
+                 min_child_weight=3, scale_pos_weight=1, batch_size=512, epochs=1, **kwargs):
         super().__init__()
-        self.model = XGBClassifier()
         
-        self.param_grid = {
-            'n_estimators': [50, 150, 250, 250],  # Num trees
-            'max_depth': [2, 3, 5, 7],                 # Maximum depth of each tree
-            'learning_rate': [0.01, 0.1, 0.3],         # Learning rate (shrinkage)
-            'subsample': [0.6, 0.8, 1],                # Subsample ratio of the training data
-            'colsample_bytree': [0.5, 0.8, 1],         # Subsample ratio of columns when constructing each tree
-            'gamma': [0, 0.1],                         # Minimum loss reduction required to make a split
-            'reg_lambda': [0.01, 0.1, 1],              # L2 regularization term (Ridge penalty)
-            'reg_alpha': [0.01, 0.1, 1],               # L1 regularization term (Lasso penalty)
-            'random_state': [42],                      # Seed for reproducibility
-            'min_child_weight': [1, 3, 5],             # Child weight for pruning
-            'tree_method':['gpu_hist'],                # Use the GPU
-            'device':['cuda'],                         # Use GPU predictor
-            'n_gpus':[-1],
-            'verbosity': [0],
-            'objective': ['binary:logistic'],          # For binary classification
-            'eval_metric': ['logloss'],                 # Evaluation metric for binary classification
-            'scale_pos_weight': [1, 2, 3, 4, 5]
-        }
+        # Torch-style parameters
+        self.batch_size = batch_size
+        self.epochs = epochs
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        self.param_dist = {
-            'learning_rate': Categorical([1e-3, 1e-2, 1e-1, 0.3]), 
-            'n_estimators': Categorical([50, 150, 250, 350]),
-            'max_depth': Categorical([2, 3, 4, 5, 6, 7]),
-            'subsample': Categorical([0.6, 0.8, 1]),
-            'colsample_bytree': Categorical([0.6, 0.8, 1]),
-            'reg_lambda': Categorical([0, 1e-4, 1e-2, 1e-1, 1]),  # L2 regularization term (Ridge penalty)
-            'reg_alpha': Categorical([0, 1e-4, 1e-2, 1e-1, 1]),   # L1 regularization term (Lasso penalty)
-            'tree_method': Categorical(['gpu_hist']),
-            'scale_pos_weight': Categorical([3, 4, 5]),
-            'device':['cuda'],
-            'n_gpus':[-1],
-            'random_state': [42],
-            'verbosity': [0],
-            'objective': ['binary:logistic'],
-            'eval_metric': ['logloss']
+        # XGBoost parameters
+        xgb_params = {
+            'n_estimators': n_estimators,
+            'max_depth': max_depth,
+            'learning_rate': learning_rate,
+            'subsample': subsample,
+            'colsample_bytree': colsample_bytree,
+            'gamma': gamma,
+            'reg_lambda': reg_lambda,
+            'reg_alpha': reg_alpha,
+            'min_child_weight': min_child_weight,
+            'scale_pos_weight': scale_pos_weight,
+            'tree_method': 'gpu_hist' if torch.cuda.is_available() else 'hist',
+            'random_state': 42,
+            'verbosity': 0,
+            'objective': 'binary:logistic',
+            'eval_metric': 'logloss'
         }
+        xgb_params.update(kwargs)
+        
+        self.model = XGBClassifier(**xgb_params)
+        self.criterion = nn.CrossEntropyLoss()  # For compatibility with torch interface
+    
+    def to(self, device):
+        """Override to() method since XGBoost handles GPU internally"""
+        # Call parent's to() method to maintain nn.Module behavior
+        super().to(device)
+        self.device = device
+        return self
+        
+    def forward(self, x):
+        """Forward pass - not used for XGBoost but required for nn.Module"""
+        # Convert torch tensor to numpy if needed
+        if isinstance(x, torch.Tensor):
+            x = x.detach().cpu().numpy()
+        # Return probabilities as torch tensor
+        probs = self.model.predict_proba(x)
+        return torch.tensor(probs, dtype=torch.float32)
+    
+    def fit(self, dataset, train_indices, test_indices, save_model=None, verbose=True):
+        """Torch-style fit method compatible with your training pipeline"""
+        # Extract data from dataset
+        if hasattr(dataset, 'X_expanded') and hasattr(dataset, 'Y_expanded'):
+            X_train = dataset.X_expanded[train_indices]
+            y_train = dataset.Y_expanded[train_indices]
+            X_test = dataset.X_expanded[test_indices]
+            y_test = dataset.Y_expanded[test_indices]
+        else:
+            # Fallback for different dataset structures
+            train_dataset = torch.utils.data.Subset(dataset, train_indices)
+            test_dataset = torch.utils.data.Subset(dataset, test_indices)
+            
+            # Extract all training data
+            X_train_list, y_train_list = [], []
+            for x, y, *_ in train_dataset:
+                X_train_list.append(x.numpy() if isinstance(x, torch.Tensor) else x)
+                y_train_list.append(y.numpy() if isinstance(y, torch.Tensor) else y)
+            X_train = np.vstack(X_train_list)
+            y_train = np.concatenate(y_train_list)
+            
+            # Extract all test data
+            X_test_list, y_test_list = [], []
+            for x, y, *_ in test_dataset:
+                X_test_list.append(x.numpy() if isinstance(x, torch.Tensor) else x)
+                y_test_list.append(y.numpy() if isinstance(y, torch.Tensor) else y)
+            X_test = np.vstack(X_test_list)
+            y_test = np.concatenate(y_test_list)
+        
+        # Convert torch tensors to numpy
+        if isinstance(X_train, torch.Tensor):
+            X_train = X_train.cpu().numpy()
+            y_train = y_train.cpu().numpy()
+            X_test = X_test.cpu().numpy()
+            y_test = y_test.cpu().numpy()
+        
+        # Fit XGBoost model
+        self.model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=verbose)
+        
+        # Calculate losses for torch-style return
+        train_pred_proba = self.model.predict_proba(X_train)[:, 1]  # Get positive class probabilities
+        test_pred_proba = self.model.predict_proba(X_test)[:, 1]
+        
+        # Binary cross-entropy loss
+        train_loss = -np.mean(y_train * np.log(train_pred_proba + 1e-15) + 
+                             (1 - y_train) * np.log(1 - train_pred_proba + 1e-15))
+        val_loss = -np.mean(y_test * np.log(test_pred_proba + 1e-15) + 
+                           (1 - y_test) * np.log(1 - test_pred_proba + 1e-15))
+        
+        return {'train_loss': [train_loss], 'val_loss': [val_loss]}
+    
+    def predict(self, loader):
+        """Torch-style predict method compatible with your evaluation pipeline"""
+        predictions = []
+        targets = []
+        
+        for batch_data in loader:
+            batch_X, batch_y = batch_data[0], batch_data[1]
+            
+            # Convert to numpy
+            if isinstance(batch_X, torch.Tensor):
+                batch_X = batch_X.cpu().numpy()
+            if isinstance(batch_y, torch.Tensor):
+                batch_y = batch_y.cpu().numpy()
+            
+            # Make predictions (probabilities)
+            batch_preds = self.model.predict_proba(batch_X)[:, 1]  # Positive class probabilities
+            
+            predictions.append(batch_preds)
+            targets.append(batch_y)
+        
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        
+        return predictions, targets
 
 class SVCModel(BaseModel):
     def __init__(self):
@@ -174,6 +352,10 @@ class SVCModel(BaseModel):
             'class_weight': Categorical(['balanced']),
             # 'random_state': [42]
         }
+    
+    def get_model(self):
+        """Return the sklearn model for GridSearchCV compatibility"""
+        return self.model
 
 class RandomForestModel(BaseModel):
     def __init__(self):
@@ -195,11 +377,15 @@ class RandomForestModel(BaseModel):
             'max_features': ['auto', 'sqrt', 'log2'],  # Number of features to consider when looking for the best split
             'bootstrap': [True, False]  # Whether bootstrap samples are used when building trees
         }
+    
+    def get_model(self):
+        """Return the sklearn model for GridSearchCV compatibility"""
+        return self.model
 
 class ModelBuild:
-    """Factory class to create base models based on the given sklearn-like model type."""
+    """Factory class to create base models based on the given model type."""
     @staticmethod
-    def init_model(model_type, binarize=None):
+    def init_model(model_type, binarize=None, **kwargs):
         if binarize:
             model_mapping = {
                 'svm': SVCModel,
@@ -215,6 +401,11 @@ class ModelBuild:
             }
 
         if model_type in model_mapping:
-            return model_mapping[model_type]()
+            model_class = model_mapping[model_type]
+            # XGBoost models now have torch-style constructors
+            if model_type == 'xgboost':
+                return model_class(**kwargs)
+            else:
+                return model_class()
         else:
             raise ValueError(f"Model type '{model_type}' is not recognized.")
