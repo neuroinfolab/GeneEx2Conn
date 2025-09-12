@@ -65,7 +65,7 @@ best_parameters:
   dropout_rate:
     values: [0.1]
   cls_dropout:
-    values: [0.5]
+    values: [0.6]
   learning_rate:
     values: [0.0007] # 0.001 for spatial, 0.0003 for random
   weight_decay:

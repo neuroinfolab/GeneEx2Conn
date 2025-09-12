@@ -8,11 +8,11 @@ parameters:
   input_dim:
     value: !!int 0
   n_estimators:
-    values: [50, 150, 250, 350]
+    values: [150, 250, 350]
   max_depth:
-    values: [2, 3, 4, 5, 6, 7]
+    values: [3, 4, 5, 6, 7]
   learning_rate:
-    values: [0.001, 0.01, 0.1, 0.3]
+    values: [.0001, 0.001, 0.01, 0.1]
   subsample:
     values: [0.6, 0.8, 1.0]
   colsample_bytree:
