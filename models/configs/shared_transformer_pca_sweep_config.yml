@@ -8,7 +8,7 @@ parameters:
   input_dim:
     value: !!int 0
   n_components:           # Number of PCA components (tokens)
-    values: [64, 128, 256]
+    values: [64, 128, 256, 320]
   d_model:                # Latent dimension of each token
     values: [64, 128, 256]
   nhead:
@@ -17,7 +17,7 @@ parameters:
     values: [2, 4]
   deep_hidden_dims:
     values:
-      - [256, 128]
+      # - [256, 128]
       - [512, 256, 128]
   transformer_dropout:
     values: [0.1, 0.2]
@@ -30,7 +30,7 @@ parameters:
   batch_size:
     values: [1024]
   aug_prob:
-    values: [0, 0.3, 0.45]
+    values: [0] #, 0.3, 0.45]
   epochs:
     values: [90, 110]
   num_workers:

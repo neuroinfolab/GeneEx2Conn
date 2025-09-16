@@ -297,11 +297,15 @@ def load_connectome(parcellation='S456', omit_subcortical=False, dataset='UKBB',
             print("Warning: SC measure not available for UKBB dataset, returning HCP S456 SC")
             matrix = np.log1p(loadmat(f'./data/HCP1200/4{parcellation}_DTI_count.mat')['connectivity'])
             matrix = matrix / matrix.max()
-        elif measure=='exp_decay':
-            matrix = np.array(pd.read_csv(f'./data/UKBB/UKBB_{parcellation}_FC_exp_decay.csv'))
-        elif measure == 'residual':
-            matrix = np.array(pd.read_csv(f'./data/UKBB/UKBB_{parcellation}_FC_exp_decay_residual.csv'))
-        else:
+        elif measure=='FC_EXP_DECAY':
+            matrix = np.array(pd.read_csv(f'./data/UKBB/UKBB_{parcellation}_FC_exp_decay.csv', header=None))
+        elif measure == 'FC_EXP_RES':
+            matrix = np.array(pd.read_csv(f'./data/UKBB/UKBB_{parcellation}_FC_exp_decay_residual.csv', header=None))
+        elif measure == 'FC_FOCAL_DECAY':
+            matrix = np.array(pd.read_csv(f'./data/UKBB/UKBB_{parcellation}_FC_focal_exp_decay.csv', header=None))
+        elif measure == 'FC_FOCAL_RES':
+            matrix = np.array(pd.read_csv(f'./data/UKBB/UKBB_{parcellation}_FC_focal_exp_decay_residual.csv', header=None))
+        else: # default mean FC
             matrix = np.array(pd.read_csv(f'./data/UKBB/UKBB_{parcellation}_FC_mu.csv'))
     elif dataset == 'HCP':
         if parcellation == 'S100':

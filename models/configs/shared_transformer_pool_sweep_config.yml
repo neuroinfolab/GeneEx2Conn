@@ -8,7 +8,7 @@ parameters:
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [20, 60]
+    values: [10, 20, 60]
   d_model:
     values: [64, 128, 256]
   use_alibi:
@@ -19,20 +19,20 @@ parameters:
     values: [4]
   deep_hidden_dims:
     values:
-    - [256, 128, 64]
+    # - [256, 128, 64]
     - [512, 256, 128]
   transformer_dropout:
     values: [0.1, 0.2]
   dropout_rate:
     values: [0.1, 0.2]
   learning_rate:
-    values: [.0007, .0005, .0003]
+    values: [.0005] #, .0005, .0003]
   weight_decay:
     values: [0, 0.00001, 0.0001]
   batch_size:
     value: 1024
   aug_prob:
-    values: [0, 0.3, 0.45]
+    values: [0, 0.3] # 0.45]
   epochs:
     values: [90, 110]
   num_workers:
@@ -61,7 +61,7 @@ best_parameters:
   dropout_rate:
     values: [0.1]
   learning_rate:
-    values: [0.0007]
+    values: [0.0005]
   weight_decay:
     values: [0.00001]
   batch_size:

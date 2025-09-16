@@ -117,7 +117,7 @@ class Simulation:
         self.Y_sc_binary = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
         self.Y_sc_spectralL = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L', hemisphere=self.hemisphere)
         self.Y_sc_spectralA = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', spectral='A', hemisphere=self.hemisphere)
-        self.Y_fc = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='FC', hemisphere=self.hemisphere)
+        self.Y_fc = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure=self.connectome_target, hemisphere=self.hemisphere)
         self.Y_fc_binary = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='FC', binarize=True, hemisphere=self.hemisphere)
         self.coords = load_coords(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
         self.labels, self.network_labels = load_network_labels(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
@@ -160,7 +160,8 @@ class Simulation:
         print(f"Coordinates shape: {self.coords.shape}")
         
         # Define target connectome
-        self.Y = self.Y_fc if self.connectome_target == 'FC' else self.Y_sc
+        self.Y = self.Y_fc if 'FC' in self.connectome_target else self.Y_sc
+        print('connectome target', self.connectome_target)
         print('Y shape', self.Y.shape)
     
     def select_cv(self):
