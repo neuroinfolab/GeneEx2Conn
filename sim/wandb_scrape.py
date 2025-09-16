@@ -98,7 +98,7 @@ def weighted_mean_and_se(values, weights):
     
     return weighted_mean, weighted_se
 
-def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='transcriptome', within_last=60, before_last=0, use_weighted=False, exclude='HCP', return_history=False):
+def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='transcriptome', target='FC', within_last=60, before_last=0, use_weighted=False, exclude='HCP', return_history=False):
     """
     Fetches wandb runs matching specific tags and summarizes their final train/test metrics.
     Handles different CV types with their expected number of runs:
@@ -111,6 +111,7 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
         cv_type (str): CV type, one of: 'random', 'spatial', 'schaefer', 'lobe'
         null_model (str): Null model label, e.g., 'none'
         feature_type (str): Feature type, e.g., 'transcriptome_PCA'
+        target (str): Target connectome type, e.g., 'FC'
         within_last (int): Search for runs within this many days ago (default: 60)
         before_last (int): Exclude runs from this many days ago (default: 0)
         use_weighted (bool): Whether to compute weighted statistics for schaefer/lobe CV
@@ -140,6 +141,7 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
             "$all": [
                 "final_eval",
                 f"model_{model}",
+                f"target_{target}",
                 f"cv_type_{cv_type}",
                 f"null_model_{null_model}",
                 f"feature_type_{feature_type}"

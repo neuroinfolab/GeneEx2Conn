@@ -107,8 +107,8 @@ class Simulation:
         """
         Load transcriptome and connectome data
         """
-        self.X = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes, null_model=self.null_model, random_seed=self.random_seed)        
-        self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA='95var', hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
+        self.X, self.valid_genes = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes, null_model=self.null_model, random_seed=self.random_seed, return_valid_genes=True)
+        self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA='95var', hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed, return_valid_genes=True)
         self.X_pca_full = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA='full', hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
         self.X_cell_types_Jorstad = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='Jorstad')
         self.X_cell_types_Lake_DFC = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeDFC')
@@ -239,7 +239,8 @@ class Simulation:
             self.coords,
             self.valid2true_index_mapping, 
             self.dataset,
-            self.parcellation
+            self.parcellation,
+            self.valid_genes
         )
     
     def run_innercv_wandb_torch(self, input_dim, train_indices, test_indices, train_network_dict, outer_fold_idx, search_method=('random', 'mse', 3), sweep_id=None):

@@ -22,6 +22,9 @@ sim/sim_results/*
 sim/logs/
 sim/logs/*
 *.sh
+data/compressed_transcriptomics/
+data/gene_emb/
+data/geneformer*
 
 !glass/cv_split_s400_structural_connectivity_spatial_split_10-3.gif
 !glass/cv_split_s400_structural_connectivity_random_split_4.gif
@@ -29,4 +32,3 @@ sim/logs/*
 !run_sim.sh
 !run_sim_parallel_smt_seq_array.sh
 !run_sim_parallel_smt_cls_seq_array.sh
-data/compressed_transcriptomics/
