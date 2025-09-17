@@ -4,7 +4,7 @@ from torch.cuda.amp import autocast, GradScaler
 from data.data_utils import augment_batch_y, augment_batch_X
 torch.set_float32_matmul_precision('high')
 
-def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, save_model=None, verbose=True, dataset=None):        
+def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, train_scheduler=None, save_model=None, verbose=True, dataset=None):        
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     for i in range(torch.cuda.device_count()):
@@ -20,7 +20,7 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
     for epoch in range(epochs):
         start_time = time.time() if (epoch + 1) % 5 == 0 else None    
         
-        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler=scaler, dataset=dataset)
+        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler=scaler, dataset=dataset, scheduler=train_scheduler)
         train_history["train_loss"].append(train_loss)
         
         if val_loader:
@@ -63,7 +63,7 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
 
     return train_history
 
-def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler=None, dataset=None):
+def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler=None, dataset=None, scheduler=None):
     model.train()
     total_train_loss = 0
 
@@ -103,6 +103,16 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
             loss.backward()
             optimizer.step()
         
+        if scheduler is not None: # for cosine warmup LR scheduler
+            scheduler.step()
+            '''
+            # Print learning rate every 100 batches
+            if (len(train_loader) > 50) and (optimizer is not None):
+                current_step = epoch * len(train_loader) + batch_idx[0].item()  # or keep an explicit counter
+                if current_step % 50 == 0:
+                    current_lr = optimizer.param_groups[0]['lr']
+                    print(f"Step {current_step}: Current LR = {current_lr:.6f}")
+            '''
         total_train_loss += loss.item()
     return total_train_loss / len(train_loader)
 

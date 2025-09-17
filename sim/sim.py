@@ -27,6 +27,7 @@ from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttent
 from models.transformer_models import SharedSelfAttentionConvModel, SharedSelfAttentionPCAModel, SharedSelfAttentionPLSModel
 from models.transformer_models import SharedSelfAttentionAEModel
 from models.transformer_models import SharedSelfAttentionCelltypeModel
+from models.transformer_models import SharedSelfAttentionGeneformerModel
 from models.transformer_models import CrossAttentionModel
 
 MODEL_CLASSES = {
@@ -51,6 +52,7 @@ MODEL_CLASSES = {
     'shared_transformer_pls': SharedSelfAttentionPLSModel,
     'shared_transformer_ae': SharedSelfAttentionAEModel,
     'shared_transformer_celltype': SharedSelfAttentionCelltypeModel,
+    'shared_transformer_geneformer': SharedSelfAttentionGeneformerModel,
     'cross_attention': CrossAttentionModel
 }
 

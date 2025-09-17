@@ -92,6 +92,7 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             region_labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in pd.read_csv('./data/enigma/schaef114_regions.txt', header=None).values.flatten().tolist()]
             genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r1_schaefer_{parcellation[1:]}.csv") # from https://github.com/saratheriver/enigma-extra/tree/master/ahba
         elif parcellation == 'S456':
+            # True data
             AHBA_UKBB_path = absolute_data_path + '/Penn_UKBB_data/AHBA_population_MH/'
             if impute_strategy == 'mirror':
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean_mirror.csv'))
@@ -105,6 +106,7 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
             genes_data = genes_data.drop('label', axis=1)
             region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv').iterrows()]
+            
         elif 'iPA' in parcellation:
             # options are iPA_183, iPA_391, iPA_568. iPA_729
             BHA2_path = absolute_data_path + '/BHA2/'
@@ -135,6 +137,9 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
                         set(abagen.fetch_gene_group('oligodendrocyte')),
                         set(abagen.fetch_gene_group('synaptome')),
                         set(abagen.fetch_gene_group('layers')))
+        elif gene_list == 'lake_shared':
+            genes_list = pd.read_csv('./data/enigma/gene_lists/lake_shared.txt', header=None)[0].tolist()
+        
 
         # Temporarily subset all sorting methods to ref genome for experiments
         if gene_list != '1':
@@ -166,6 +171,23 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             random_genes = np.random.permutation(valid_genes)
             genes_data = np.array(genes_data[random_genes])
             valid_genes = random_genes
+        # Geneformer embeddings hack
+        elif sort_genes == 'geneformer_raw':
+            genes_data = pd.read_csv("./data/gene_emb/geneformer_raw/embeddings/ahba_embeddings.csv", index_col=0)
+            genes_data = genes_data.to_numpy()
+            # Z-score normalize the embeddings
+            genes_data = (genes_data - np.mean(genes_data, axis=0)) / np.std(genes_data, axis=0)
+            # Shift rows 454 and above down by 1 and insert NaN row at 454
+            genes_data = np.insert(genes_data, 454, np.nan, axis=0)
+            return genes_data, genes_list
+        elif sort_genes == 'geneformer_srs':
+            genes_data = pd.read_csv("./data/gene_emb/geneformer_srs/embeddings/ahba_embeddings.csv", index_col=0)
+            genes_data = genes_data.to_numpy()
+            # Z-score normalize the embeddings
+            genes_data = (genes_data - np.mean(genes_data, axis=0)) / np.std(genes_data, axis=0)
+            # Shift rows 454 and above down by 1 and insert NaN row at 454
+            genes_data = np.insert(genes_data, 454, np.nan, axis=0)
+            return genes_data, genes_list
         else:
             genes_data = np.array(genes_data[valid_genes])
 

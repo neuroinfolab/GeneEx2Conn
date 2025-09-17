@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from torch.nn import RMSNorm
 from flash_attn import flash_attn_func, flash_attn_qkvpacked_func
 from torch.cuda.amp import autocast
+from transformers import get_cosine_schedule_with_warmup
 from collections import OrderedDict
 
 # === CORE TRANSFORMER COMPONENTS === #
@@ -210,13 +211,26 @@ class BaseTransformerModel(nn.Module):
         self.patience = 50
         self.scheduler = None
     
-    def _setup_optimizer_scheduler(self, learning_rate, weight_decay, patience=30):
+    def _setup_optimizer_scheduler(self, learning_rate, weight_decay, patience=30, use_cosine=False):
         """Setup optimizer and scheduler - called by subclasses"""
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
-        self.scheduler = ReduceLROnPlateau(
-            self.optimizer, mode='min', factor=0.3, patience=patience,
-            threshold=0.1, cooldown=1, min_lr=1e-6, verbose=True
-        )
+        
+        if use_cosine:
+            # Calculate total steps and warmup steps
+            training_samples = 120000
+            total_steps = int(self.epochs * training_samples / self.batch_size)
+            warmup_steps = int(0.1 * total_steps)  # 10% warmup
+            
+            self.scheduler = get_cosine_schedule_with_warmup(
+                self.optimizer,
+                num_warmup_steps=warmup_steps,
+                num_training_steps=total_steps
+            )
+        else:
+            self.scheduler = ReduceLROnPlateau(
+                self.optimizer, mode='min', factor=0.3, patience=patience,
+                threshold=0.1, cooldown=1, min_lr=1e-6, verbose=True
+            )
     
     def _set_mlp_head(self, prev_dim, deep_hidden_dims, dropout_rate):
         deep_layers = []
@@ -1215,17 +1229,18 @@ class SharedSelfAttentionAEModel(BaseTransformerModel):
         
 # === CELLTYPE ENCODER CLASSES === #
 class CelltypeEncoder(nn.Module):
-    def __init__(self, aux_feature_dim, d_model, nhead=4, num_layers=4, dropout=0.1, use_alibi=False, projection_layers=2):
+    def __init__(self, aux_feature_dim, d_model, nhead=4, num_layers=4, dropout=0.1, use_alibi=False, projection_layers=2, use_attention_pooling=True):
         super().__init__()
         self.aux_feature_dim = aux_feature_dim
         self.d_model = d_model
         self.projection_layers = projection_layers
+        self.use_attention_pooling = use_attention_pooling
         
         # Project from (expression + aux_features) to transformer embedding dimension
         # Input: gene expression (1) + auxiliary features (aux_feature_dim) = (aux_feature_dim + 1)
         if projection_layers == 1:
             self.feature_projection = nn.Linear(aux_feature_dim + 1, d_model)
-        else:
+        else: # 3 is MLP
             # More expressive MLP projection
             hidden_dim = max(d_model, (aux_feature_dim + 1) * 2)
             self.feature_projection = nn.Sequential(
@@ -1243,8 +1258,11 @@ class CelltypeEncoder(nn.Module):
             for _ in range(num_layers)
         ])
         
-        # Attention pooling to get fixed-size representation
-        self.pooling = AttentionPooling(d_model, hidden_dim=32)
+        # Choose pooling method
+        if use_attention_pooling:
+            self.pooling = AttentionPooling(d_model, hidden_dim=32)
+        else:
+            self.pooling = nn.Linear(d_model, 1)
         
     def forward(self, gene_expression, aux_features, return_attn=False):
         """
@@ -1254,7 +1272,7 @@ class CelltypeEncoder(nn.Module):
             return_attn: bool - whether to return attention weights
         
         Returns:
-            pooled representation: (B, d_model)
+            pooled representation: (B, d_model) if use_attention_pooling else (B, num_genes)
             optionally attention weights
         """
         B, num_genes = gene_expression.shape
@@ -1275,19 +1293,26 @@ class CelltypeEncoder(nn.Module):
         for layer in self.transformer_layers:
             x = layer(x)
         
-        # Attention pooling to get fixed-size representation
-        if return_attn:
-            pooled, attn_weights = self.pooling(x, return_attn=True)
-            return pooled, attn_weights
+        # Pool output based on method
+        if self.use_attention_pooling:
+            if return_attn:
+                pooled, attn_weights = self.pooling(x, return_attn=True)
+                return pooled, attn_weights
+            else:
+                pooled = self.pooling(x)
+                return pooled
         else:
-            pooled = self.pooling(x)
-            return pooled
-
+            # Project each token to scalar
+            x = self.pooling(x).squeeze(-1)  # (B, num_genes)
+            if return_attn:
+                # Return dummy attention weights when not using attention pooling
+                return x, None
+            return x
 
 class SharedSelfAttentionCelltypeModel(BaseTransformerModel):
     def __init__(self, input_dim, region_pair_dataset, aux_data_path_dfc='./data/gene_emb/LakeDFC_gene_signature.csv', aux_data_path_vis='./data/gene_emb/LakeVIS_gene_signature.csv', 
                  d_model=128, nhead=4, num_layers=4, deep_hidden_dims=[512, 256, 128],
-                 projection_layers=2, use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, 
+                 projection_layers=1, use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, pooling=True,
                  learning_rate=0.001, weight_decay=0.0, batch_size=512, epochs=100, 
                  aug_prob=0.0, num_workers=2, prefetch_factor=2):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
@@ -1295,9 +1320,9 @@ class SharedSelfAttentionCelltypeModel(BaseTransformerModel):
         self.input_dim = input_dim // 2
         self.d_model = d_model
         self.aug_prob = aug_prob
-        self.use_attention_pooling = True
+        self.pooling = pooling
         self.valid_genes = region_pair_dataset.valid_genes
-        
+
         # Load and process auxiliary data
         self._load_auxiliary_data(aux_data_path_dfc, aux_data_path_vis)
         
@@ -1309,12 +1334,17 @@ class SharedSelfAttentionCelltypeModel(BaseTransformerModel):
             num_layers=num_layers,
             dropout=transformer_dropout,
             use_alibi=use_alibi,
-            projection_layers=projection_layers
+            projection_layers=projection_layers,
+            use_attention_pooling=self.pooling
         )
         self.celltype_encoder = torch.compile(self.celltype_encoder)
         
         # MLP head for final prediction
-        prev_dim = d_model * 2  # Concatenated embeddings from both regions
+        if self.pooling:
+            prev_dim = d_model * 2  # Concatenated embeddings from both regions
+        else:
+            prev_dim = len(self.shared_gene_indices)  * 2  # Concatenated token projections from both regions
+        
         self.deep_layers, self.output_layer = self._set_mlp_head(
             prev_dim=prev_dim,
             deep_hidden_dims=deep_hidden_dims,
@@ -1326,7 +1356,7 @@ class SharedSelfAttentionCelltypeModel(BaseTransformerModel):
         print(f"Number of genes after intersection: {len(self.shared_gene_indices)}")
         print(f"Auxiliary feature dimension: {self.aux_feature_dim}")
         
-        self._setup_optimizer_scheduler(learning_rate, weight_decay)
+        self._setup_optimizer_scheduler(learning_rate, weight_decay, use_cosine=True)
     
     def _load_auxiliary_data(self, aux_data_path_dfc, aux_data_path_vis):
         """Load and process auxiliary cell type data"""
@@ -1399,6 +1429,156 @@ class SharedSelfAttentionCelltypeModel(BaseTransformerModel):
         
         return y_pred.squeeze()
 
+    def fit(self, dataset, train_indices, test_indices, save_model=None, verbose=True):
+        """Shared fit function for all transformer models"""
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
+        
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True,
+                                num_workers=self.num_workers, prefetch_factor=self.prefetch_factor)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True,
+                               num_workers=self.num_workers, prefetch_factor=self.prefetch_factor)
+        
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, scheduler = None, train_scheduler=self.scheduler, save_model=save_model, verbose=verbose, dataset=dataset)
+
+
+class GeneformerEncoder(nn.Module):
+    def __init__(self, token_encoder_dim, d_model, nhead=4, num_layers=4, dropout=0.1, use_alibi=False, use_attention_pooling=False, use_mlp_downsampler=False):
+        super().__init__()
+        
+        # Linear input projection from scalar token (token_encoder_dim=1) to d_model space
+        self.input_projection = nn.Linear(token_encoder_dim, d_model)
+        
+        # Transformer layers
+        self.transformer_layers = nn.ModuleList([
+            FlashAttentionBlock(d_model, nhead, dropout, use_alibi=use_alibi)
+            for _ in range(num_layers)
+        ])
+        
+        self.use_attention_pooling = use_attention_pooling
+        if self.use_attention_pooling:
+            self.pooling = AttentionPooling(d_model, hidden_dim=32)
+        else:
+            # Downsampler: either linear or 2-layer MLP (mimicking CelltypeEncoder logic)
+            if use_mlp_downsampler:
+                # 2-layer MLP downsampler
+                self.downsampler = nn.Sequential(
+                    nn.Linear(d_model, d_model // 2),
+                    nn.ReLU(),
+                    nn.Dropout(dropout),
+                    nn.Linear(d_model // 2, 1)
+                )
+            else:
+                # Simple linear downsampler (like CelltypeEncoder)
+                self.downsampler = nn.Linear(d_model, 1)
+        
+    def forward(self, x, return_attn=False):
+        B, T = x.shape
+        # Reshape to (B, num_tokens, token_encoder_dim) where token_encoder_dim=1
+        x = x.view(B, T, 1)  # Each token is a scalar
+        
+        # Linear projection to d_model space
+        x = self.input_projection(x)
+        
+        # Apply transformer layers
+        for layer in self.transformer_layers:
+            x = layer(x)
+        
+        if self.use_attention_pooling:
+            return self.pooling(x, return_attn=return_attn)
+        else:
+            # Apply downsampler to each token: (B, num_tokens, d_model) -> (B, num_tokens, 1)
+            x = self.downsampler(x).squeeze(-1)  # (B, num_tokens)
+            if return_attn:
+                return x, None
+            return x
+
+class SharedSelfAttentionGeneformerModel(BaseTransformerModel):
+    def __init__(self, input_dim, token_encoder_dim=1, d_model=128, nhead=4, num_layers=4, deep_hidden_dims=[256, 128],
+                 use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
+                 batch_size=512, aug_prob=0.0, epochs=100, num_workers=2, prefetch_factor=2, 
+                 use_attention_pooling=False, use_mlp_downsampler=False):
+        super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
+        
+        self.input_dim = input_dim // 2  # Split for two regions
+        self.token_encoder_dim = token_encoder_dim  # Should be 1 for Geneformer embeddings
+        self.d_model = d_model
+        self.nhead = nhead
+        self.num_layers = num_layers
+        self.aug_prob = aug_prob
+        self.use_alibi = use_alibi
+        self.use_attention_pooling = use_attention_pooling
+        self.use_mlp_downsampler = use_mlp_downsampler
+        
+        # Number of tokens (approximately 770)
+        self.num_tokens = self.input_dim // self.token_encoder_dim
+        
+        # Geneformer encoder
+        self.encoder = GeneformerEncoder(
+            token_encoder_dim=self.token_encoder_dim,
+            d_model=self.d_model,
+            nhead=self.nhead,
+            num_layers=self.num_layers,
+            dropout=transformer_dropout,
+            use_alibi=self.use_alibi,
+            use_attention_pooling=self.use_attention_pooling,
+            use_mlp_downsampler=self.use_mlp_downsampler
+        )
+        self.encoder = torch.compile(self.encoder)
+        
+        # Calculate output dimension from encoder
+        if self.use_attention_pooling:
+            prev_dim = self.d_model * 2  # Pooled output from both regions
+        else:
+            # Downsampler outputs (B, num_tokens) per region, so total is num_tokens * 2
+            prev_dim = self.num_tokens * 2  # Both regions
+        
+        # MLP head for final prediction
+        self.deep_layers, self.output_layer = self._set_mlp_head(
+            prev_dim=prev_dim,
+            deep_hidden_dims=deep_hidden_dims,
+            dropout_rate=dropout_rate
+        )
+        
+        num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"Number of learnable parameters in SharedSelfAttentionGeneformer model: {num_params}")
+        print(f"Number of tokens per region: {self.num_tokens}")
+        print(f"Attention pooling: {self.use_attention_pooling}")
+        print(f"MLP downsampler: {self.use_mlp_downsampler}")
+        
+        self._setup_optimizer_scheduler(learning_rate, weight_decay) #, use_cosine=True)
+
+    def forward(self, x):
+        x_i, x_j = torch.chunk(x, chunks=2, dim=1)
+        
+        if self.store_attn:
+            x_i, attn_beta_i = self.encoder(x_i, return_attn=True)
+            x_j, attn_beta_j = self.encoder(x_j, return_attn=True)
+        else:
+            x_i = self.encoder(x_i)
+            x_j = self.encoder(x_j)
+
+        x = torch.cat([x_i, x_j], dim=1)
+        y_pred = self.output_layer(self.deep_layers(x))
+        
+        if self.store_attn:
+            return {"output": y_pred.squeeze(), "attn_beta_i": attn_beta_i, "attn_beta_j": attn_beta_j}
+        
+        return y_pred.squeeze()
+
+    '''
+    def fit(self, dataset, train_indices, test_indices, save_model=None, verbose=True):
+        """Shared fit function for all transformer models"""
+        train_dataset = Subset(dataset, train_indices)
+        test_dataset = Subset(dataset, test_indices)
+        
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True,
+                                num_workers=self.num_workers, prefetch_factor=self.prefetch_factor)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True,
+                               num_workers=self.num_workers, prefetch_factor=self.prefetch_factor)
+        
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, scheduler = None, train_scheduler=self.scheduler, save_model=save_model, verbose=verbose, dataset=dataset)
+    '''
 
 
 class CrossAttentionBlock(nn.Module):

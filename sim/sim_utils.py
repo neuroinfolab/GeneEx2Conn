@@ -354,6 +354,8 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
             # Initialize model dynamically based on sweep config and fit
             if 'pls' in model_type or 'pca' in model_type:
                 model = ModelClass(**sweep_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=dataset).to(device)
+            elif 'celltype' in model_type: 
+                model = ModelClass(**sweep_config, region_pair_dataset=dataset).to(device)
             else:
                 model = ModelClass(**sweep_config).to(device)
             

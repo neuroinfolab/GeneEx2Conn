@@ -7,7 +7,7 @@ metric:
 parameters:
   input_dim:
     value: !!int 0
-  n_components:           # Number of PCA components (tokens)
+  n_components:           # Number of PLS components (tokens)
     values: [64, 128, 256, 320]
   d_model:                # Latent dimension of each token
     values: [64, 128]
