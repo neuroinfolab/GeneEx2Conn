@@ -402,10 +402,11 @@ def augment_batch_y(batch_idx, dataset, device, verbose=False):
     return batch_y
 
 class RegionPairDataset(Dataset):
-    def __init__(self, X, Y, coords, valid2true_mapping, dataset, parcellation):
+    def __init__(self, X, Y, coords, valid2true_mapping, dataset, parcellation, valid_genes):
         self.X = torch.tensor(X, dtype=torch.float32)
         self.Y = torch.tensor(Y, dtype=torch.float32)
         self.coords = torch.tensor(coords, dtype=torch.float32)
+        self.valid_genes = valid_genes
         self.valid_indices = np.array(list(valid2true_mapping.keys()), dtype=np.int32) # subset indices
         self.true_indices = np.array(list(valid2true_mapping.values()), dtype=np.int32) # full dataset indices
 

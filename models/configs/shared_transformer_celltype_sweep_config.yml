@@ -1,0 +1,72 @@
+name: shared_transformer_celltype
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+parameters:
+  input_dim:
+    value: !!int 0
+  d_model:                # Latent dimension for transformer
+    values: [64, 128, 256]
+  nhead:                  # Number of attention heads
+    values: [2, 4]
+  num_layers:            # Number of transformer layers
+    values: [2, 4]
+  projection_layers:     # Number of layers in celltype projection
+    values: [1, 2, 3]
+  deep_hidden_dims:      # MLP head dimensions
+    values:
+      - [256, 128]
+      - [512, 256, 128] 
+  transformer_dropout:   # Dropout in transformer blocks
+    values: [0.1, 0.2]
+  dropout_rate:         # Dropout in MLP head
+    values: [0.1, 0.2]
+  learning_rate:
+    values: [0.0007, 0.0005, 0.0003, 0.0001]
+  weight_decay:
+    values: [0.00001, 0.0001, .0]
+  batch_size:
+    values: [512, 1024]
+  aug_prob:             # Data augmentation probability
+    values: [0.0]
+  epochs:
+    values: [90, 110, 130]
+  num_workers:
+    values: [2]
+  prefetch_factor:
+    values: [2]
+
+best_parameters:
+  input_dim:
+    value: !!int 0
+  d_model:
+    values: [64]
+  nhead:
+    values: [2]
+  num_layers:
+    values: [2]
+  projection_layers:
+    values: [2]
+  deep_hidden_dims:
+    values:
+      - [256, 128]
+  transformer_dropout:
+    values: [0.0]
+  dropout_rate:
+    values: [0.0]
+  learning_rate:
+    values: [0.0005]
+  weight_decay:
+    values: [0.0]
+  batch_size:
+    values: [1024]
+  aug_prob:
+    values: [0.0]
+  epochs:
+    values: [100]
+  num_workers:
+    values: [2]
+  prefetch_factor:
+    values: [2]

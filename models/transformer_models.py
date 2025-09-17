@@ -1213,6 +1213,193 @@ class SharedSelfAttentionAEModel(BaseTransformerModel):
         
         return y_pred.squeeze()
         
+# === CELLTYPE ENCODER CLASSES === #
+class CelltypeEncoder(nn.Module):
+    def __init__(self, aux_feature_dim, d_model, nhead=4, num_layers=4, dropout=0.1, use_alibi=False, projection_layers=2):
+        super().__init__()
+        self.aux_feature_dim = aux_feature_dim
+        self.d_model = d_model
+        self.projection_layers = projection_layers
+        
+        # Project from (expression + aux_features) to transformer embedding dimension
+        # Input: gene expression (1) + auxiliary features (aux_feature_dim) = (aux_feature_dim + 1)
+        if projection_layers == 1:
+            self.feature_projection = nn.Linear(aux_feature_dim + 1, d_model)
+        else:
+            # More expressive MLP projection
+            hidden_dim = max(d_model, (aux_feature_dim + 1) * 2)
+            self.feature_projection = nn.Sequential(
+                nn.Linear(aux_feature_dim + 1, hidden_dim),
+                nn.LayerNorm(hidden_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(hidden_dim, d_model),
+                nn.LayerNorm(d_model)
+            )
+        
+        # Transformer layers for self-attention across genes
+        self.transformer_layers = nn.ModuleList([
+            FlashAttentionBlock(d_model, nhead, dropout, use_alibi=use_alibi)
+            for _ in range(num_layers)
+        ])
+        
+        # Attention pooling to get fixed-size representation
+        self.pooling = AttentionPooling(d_model, hidden_dim=32)
+        
+    def forward(self, gene_expression, aux_features, return_attn=False):
+        """
+        Args:
+            gene_expression: (B, num_genes) - gene expression values
+            aux_features: (num_genes, aux_feature_dim) - fixed auxiliary features per gene
+            return_attn: bool - whether to return attention weights
+        
+        Returns:
+            pooled representation: (B, d_model)
+            optionally attention weights
+        """
+        B, num_genes = gene_expression.shape
+        
+        # Expand aux_features to match batch size: (B, num_genes, aux_feature_dim)
+        aux_features_expanded = aux_features.unsqueeze(0).expand(B, -1, -1)
+        
+        # Expand gene expression: (B, num_genes, 1)
+        gene_expression_expanded = gene_expression.unsqueeze(-1)
+        
+        # Concatenate: (B, num_genes, aux_feature_dim + 1)
+        combined_features = torch.cat([gene_expression_expanded, aux_features_expanded], dim=-1)
+        
+        # Project to transformer embedding dimension: (B, num_genes, d_model)
+        x = self.feature_projection(combined_features)
+        
+        # Apply transformer layers
+        for layer in self.transformer_layers:
+            x = layer(x)
+        
+        # Attention pooling to get fixed-size representation
+        if return_attn:
+            pooled, attn_weights = self.pooling(x, return_attn=True)
+            return pooled, attn_weights
+        else:
+            pooled = self.pooling(x)
+            return pooled
+
+
+class SharedSelfAttentionCelltypeModel(BaseTransformerModel):
+    def __init__(self, input_dim, region_pair_dataset, aux_data_path_dfc='./data/gene_emb/LakeDFC_gene_signature.csv', aux_data_path_vis='./data/gene_emb/LakeVIS_gene_signature.csv', 
+                 d_model=128, nhead=4, num_layers=4, deep_hidden_dims=[512, 256, 128],
+                 projection_layers=2, use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, 
+                 learning_rate=0.001, weight_decay=0.0, batch_size=512, epochs=100, 
+                 aug_prob=0.0, num_workers=2, prefetch_factor=2):
+        super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor)
+
+        self.input_dim = input_dim // 2
+        self.d_model = d_model
+        self.aug_prob = aug_prob
+        self.use_attention_pooling = True
+        self.valid_genes = region_pair_dataset.valid_genes
+        
+        # Load and process auxiliary data
+        self._load_auxiliary_data(aux_data_path_dfc, aux_data_path_vis)
+        
+        # Create celltype encoder
+        self.celltype_encoder = CelltypeEncoder(
+            aux_feature_dim=self.aux_feature_dim,
+            d_model=d_model,
+            nhead=nhead,
+            num_layers=num_layers,
+            dropout=transformer_dropout,
+            use_alibi=use_alibi,
+            projection_layers=projection_layers
+        )
+        self.celltype_encoder = torch.compile(self.celltype_encoder)
+        
+        # MLP head for final prediction
+        prev_dim = d_model * 2  # Concatenated embeddings from both regions
+        self.deep_layers, self.output_layer = self._set_mlp_head(
+            prev_dim=prev_dim,
+            deep_hidden_dims=deep_hidden_dims,
+            dropout_rate=dropout_rate
+        )
+        
+        num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"Number of learnable parameters in Celltype model: {num_params}")
+        print(f"Number of genes after intersection: {len(self.shared_gene_indices)}")
+        print(f"Auxiliary feature dimension: {self.aux_feature_dim}")
+        
+        self._setup_optimizer_scheduler(learning_rate, weight_decay)
+    
+    def _load_auxiliary_data(self, aux_data_path_dfc, aux_data_path_vis):
+        """Load and process auxiliary cell type data"""
+        # Load auxiliary data
+        lake_dfc_df = pd.read_csv(aux_data_path_dfc, index_col=0)
+        lake_vis_df = pd.read_csv(aux_data_path_vis, index_col=0)
+        
+        # Get gene lists
+        lake_dfc_genes = lake_dfc_df.index.tolist()
+        lake_vis_genes = lake_vis_df.index.tolist()
+        
+        # Find intersection between DFC, VIS, and valid genes
+        lake_shared_genes = list(set(lake_dfc_genes).intersection(set(lake_vis_genes)))
+        lake_shared_valid = list(set(lake_shared_genes).intersection(set(self.valid_genes)))
+        
+        # Get indices of shared valid genes in the original gene list
+        self.shared_gene_indices = [self.valid_genes.index(gene) for gene in lake_shared_valid]
+        
+        # Subset auxiliary data to shared valid genes
+        lake_dfc_subset = lake_dfc_df.loc[lake_shared_valid]
+        lake_vis_subset = lake_vis_df.loc[lake_shared_valid]
+        
+        # Convert to numpy and apply log1p normalization
+        lake_dfc_matrix = np.log1p(lake_dfc_subset.values)
+        lake_vis_matrix = np.log1p(lake_vis_subset.values)
+        
+        # Average the DFC and VIS matrices (or use separately if needed, logical since they are highly correlated (0.94), so using both may be redundant)
+        # For now, averaging them as a combined cell type signature
+        combined_aux_matrix = (lake_dfc_matrix + lake_vis_matrix) / 2
+        
+        # Store as tensor
+        self.aux_features = torch.FloatTensor(combined_aux_matrix).to(self.device)
+        self.aux_feature_dim = combined_aux_matrix.shape[1]
+
+        self.input_dim = len(self.shared_gene_indices) + self.aux_feature_dim
+        
+        print(f"Loaded auxiliary data: {combined_aux_matrix.shape[0]} genes x {combined_aux_matrix.shape[1]} cell types")
+    
+    def _subset_gene_expression(self, x):
+        """Subset gene expression to shared valid genes"""
+        # x shape: (B, input_dim) where input_dim = 2 * num_genes
+        x_i, x_j = torch.chunk(x, chunks=2, dim=1)  # Each: (B, num_genes)
+        
+        # Subset to shared genes
+        x_i_subset = x_i[:, self.shared_gene_indices]  # (B, num_shared_genes)
+        x_j_subset = x_j[:, self.shared_gene_indices]  # (B, num_shared_genes)
+        
+        return x_i_subset, x_j_subset
+    
+    def forward(self, x):
+        # Subset gene expression to shared valid genes
+        x_i, x_j = self._subset_gene_expression(x)
+        
+        # Encode both regions using celltype encoder
+        if self.store_attn:
+            x_i, attn_beta_i = self.celltype_encoder(x_i, self.aux_features, return_attn=True)
+            x_j, attn_beta_j = self.celltype_encoder(x_j, self.aux_features, return_attn=True)
+        else:
+            x_i = self.celltype_encoder(x_i, self.aux_features)
+            x_j = self.celltype_encoder(x_j, self.aux_features)
+        
+        # Concatenate region embeddings
+        x = torch.cat([x_i, x_j], dim=1)
+        
+        # Final prediction
+        y_pred = self.output_layer(self.deep_layers(x))
+        
+        if self.store_attn:
+            return {"output": y_pred.squeeze(), "attn_beta_i": attn_beta_i, "attn_beta_j": attn_beta_j}
+        
+        return y_pred.squeeze()
+
+
 
 class CrossAttentionBlock(nn.Module):
     def __init__(self, d_model, nhead, dropout=0.1):

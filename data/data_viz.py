@@ -167,7 +167,7 @@ def plot_connectome(parcellation='S100', dataset='UKBB', measure='FC', omit_subc
     plt.show()
 
 
-def plot_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run_PCA=False, 
+def plot_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run_PCA=None, 
                       omit_subcortical=False, hemisphere='both', impute_strategy='mirror_interpolate', 
                       sort_genes='expression', null_model='none', random_seed=42, 
                       cmap='viridis', title='Allen Human Brain Atlas Gene Expression', fontsize=20, 

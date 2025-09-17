@@ -26,6 +26,7 @@ from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEnco
 from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionPoolingModel, SharedSelfAttentionCLSModel, SharedSelfAttentionCLSPoolingModel
 from models.transformer_models import SharedSelfAttentionConvModel, SharedSelfAttentionPCAModel, SharedSelfAttentionPLSModel
 from models.transformer_models import SharedSelfAttentionAEModel
+from models.transformer_models import SharedSelfAttentionCelltypeModel
 from models.transformer_models import CrossAttentionModel
 
 MODEL_CLASSES = {
@@ -49,6 +50,7 @@ MODEL_CLASSES = {
     'shared_transformer_pca': SharedSelfAttentionPCAModel,
     'shared_transformer_pls': SharedSelfAttentionPLSModel,
     'shared_transformer_ae': SharedSelfAttentionAEModel,
+    'shared_transformer_celltype': SharedSelfAttentionCelltypeModel,
     'cross_attention': CrossAttentionModel
 }
 
@@ -108,7 +110,7 @@ class Simulation:
         Load transcriptome and connectome data
         """
         self.X, self.valid_genes = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes, null_model=self.null_model, random_seed=self.random_seed, return_valid_genes=True)
-        self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA='95var', hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed, return_valid_genes=True)
+        self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA='95var', hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
         self.X_pca_full = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA='full', hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
         self.X_cell_types_Jorstad = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='Jorstad')
         self.X_cell_types_Lake_DFC = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeDFC')
@@ -297,7 +299,9 @@ class Simulation:
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]
         if 'pls' in self.model_type or 'pca' in self.model_type:
-            best_model = ModelClass(**best_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=self.region_pair_dataset).to(device)
+            best_model = ModelClass(**best_config, train_indices=train_indices, test_indices=test_indices).to(device)   
+        elif 'celltype' in self.model_type:
+            best_model = ModelClass(**best_config, region_pair_dataset=self.region_pair_dataset).to(device)
         else:
             best_model = ModelClass(**best_config).to(device)
             
@@ -374,7 +378,7 @@ class Simulation:
                             wandb.log({'train_mse_loss': train_loss, 'test_mse_loss': val_loss})
                 else:
                     if self.model_type == 'pls_twostep':
-                            train_history = best_model.fit(self.region_pair_dataset, train_indices, test_indices)
+                        train_history = best_model.fit(self.region_pair_dataset, train_indices, test_indices)
                     else: 
                         train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded, save_model=self.save_model)
                 
