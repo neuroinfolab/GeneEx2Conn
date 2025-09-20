@@ -1,0 +1,27 @@
+name: cnn1d
+method: random #  grid/random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+parameters:
+  input_dim:
+    value: !!int 0   
+  binarize:
+    value: false  # FC/SC  false
+  channels:
+    values: [[32,64,128], [16,32,64]]
+  kernel_sizes:
+    values: [[7,5,3], [5,5,5]]
+  fc_hidden:
+    values: [128, 256, 512]
+  dropout_rate:
+    values: [0.0, 0.1, 0.3]
+  weight_decay:
+    values: [0.001, 0.005] 
+  learning_rate:
+    values: [0.0001, 0.0005]
+  batch_size:
+    values: [256, 512]
+  epochs:
+    value: 3
