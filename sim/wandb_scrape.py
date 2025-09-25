@@ -149,7 +149,7 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
         },
         "created_at": {
             "$gte": start_time.isoformat(), 
-            "$lte": end_time.isoformat()
+            #"$lte": end_time.isoformat()
         },
         "state": "finished"
     }

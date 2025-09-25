@@ -23,12 +23,12 @@ from models.bilinear import BilinearLowRank, BilinearCM
 from models.pls import PLSTwoStepModel, PLS_MLPDecoderModel, PLS_BilinearDecoderModel
 from models.dynamic_mlp import DynamicMLP
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
-from models.transformer_models import SharedSelfAttentionModel, SharedSelfAttentionPoolingModel, SharedSelfAttentionCLSModel, SharedSelfAttentionCLSPoolingModel
-from models.transformer_models import SharedSelfAttentionConvModel, SharedSelfAttentionPCAModel, SharedSelfAttentionPLSModel
-from models.transformer_models import SharedSelfAttentionAEModel
-from models.transformer_models import SharedSelfAttentionCelltypeModel
-from models.transformer_models import SharedSelfAttentionGeneformerModel
-from models.transformer_models import CrossAttentionModel
+from models.smt import SharedSelfAttentionModel, SharedSelfAttentionPoolingModel, SharedSelfAttentionCLSModel, SharedSelfAttentionCLSPoolingModel
+from models.smt_advanced import SharedSelfAttentionPCAModel, SharedSelfAttentionPLSModel, SharedSelfAttentionConvModel
+from models.smt_advanced import SharedSelfAttentionAEModel
+from models.smt_advanced import SharedSelfAttentionCelltypeModel
+from models.smt_advanced import SharedSelfAttentionGeneformerModel
+from models.smt_cross import CrossAttentionModel
 
 MODEL_CLASSES = {
     'cge': CGEModel,

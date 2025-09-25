@@ -166,14 +166,13 @@ class SharedMLPEncoderModel(nn.Module):
                 prev_dim = hidden_dim
             self.deep_layers = nn.Sequential(*deep_layers)
             self.output_layer = nn.Linear(prev_dim, 1)  # Final output layer
-        
-        '''
+
         if torch.cuda.device_count() > 1:
             self.encoder = nn.DataParallel(self.encoder)
             if not self.use_bilinear:
                 self.deep_layers = nn.DataParallel(self.deep_layers)
                 self.output_layer = nn.DataParallel(self.output_layer)
-        '''
+        
         self.criterion = SparseEncoderLoss(self.encoder, base_loss=nn.MSELoss(), lambda_reg=lambda_reg)
         self.optimizer = Adam(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
