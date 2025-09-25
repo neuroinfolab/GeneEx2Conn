@@ -47,7 +47,7 @@ best_parameters:
   n_components:
     values: [128]
   finetune_last_layer:
-    values: [True]
+    values: [False]
   d_model:
     values: [128]
   nhead:

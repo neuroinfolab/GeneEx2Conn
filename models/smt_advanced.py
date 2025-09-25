@@ -2,7 +2,7 @@ from env.imports import *
 from models.train_val import train_model
 from models.smt_utils import *
 from models.pls import PLSEncoder
-from models.smt import BaseTransformerModel
+from models.smt import *
 
 import torch
 import torch.nn.functional as F
