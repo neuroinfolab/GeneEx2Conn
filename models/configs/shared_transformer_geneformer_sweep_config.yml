@@ -42,6 +42,8 @@ parameters:
     values: [True, False]  # Default False, but test both
   use_mlp_downsampler:
     values: [True, False]  # Default False (linear), but test MLP too
+  cosine_lr:
+    values: [True, False]
 
 best_parameters:
   input_dim:
@@ -72,12 +74,14 @@ best_parameters:
   aug_prob:
     values: [0.0]
   epochs:
-    values: [200]
+    values: [110]
   num_workers:
     values: [2]
   prefetch_factor:
     values: [4]
   use_attention_pooling:
-    values: [False]  # Default setting
+    values: [False]
   use_mlp_downsampler:
-    values: [True]  # Default linear downsampler
+    values: [False]
+  cosine_lr:
+    values: [True]

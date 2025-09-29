@@ -82,38 +82,25 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
         optimizer.zero_grad()
         if scaler is not None: # Mixed precision training path (Default)
             with autocast(dtype=torch.bfloat16):
-                if hasattr(model, 'include_coords'): # For models with CLS
-                    predictions = model(batch_X, batch_coords).squeeze()
-                elif hasattr(model, 'optimize_encoder'): # For PLS and PCA encoder models
-                    predictions = model(batch_X, batch_idx).squeeze()
-                else:
-                    predictions = model(batch_X).squeeze()
+                predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
                 loss = criterion(predictions, batch_y)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
         else: # Regular training path
-            if hasattr(model, 'include_coords'): 
-                predictions = model(batch_X, batch_coords).squeeze()
-            elif hasattr(model, 'optimize_encoder'): 
-                predictions = model(batch_X, batch_idx).squeeze()
-            else:
-                predictions = model(batch_X).squeeze()
+            predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
             loss = criterion(predictions, batch_y)
             loss.backward()
             optimizer.step()
         
         if scheduler is not None: # for cosine warmup LR scheduler
             scheduler.step()
-            '''
-            # Print learning rate every 100 batches
-            if (len(train_loader) > 50) and (optimizer is not None):
-                current_step = epoch * len(train_loader) + batch_idx[0].item()  # or keep an explicit counter
-                if current_step % 50 == 0:
-                    current_lr = optimizer.param_groups[0]['lr']
-                    print(f"Step {current_step}: Current LR = {current_lr:.6f}")
-            '''
+            # Print learning rate every 10 epochs
+            if (epoch + 1) % 10 == 0 and optimizer is not None:
+                current_lr = optimizer.param_groups[0]['lr']
+                print(f"Epoch {epoch + 1}: Current LR = {current_lr:.6f}")
         total_train_loss += loss.item()
+    
     return total_train_loss / len(train_loader)
 
 def evaluate(model, val_loader, criterion, device, scheduler=None):
@@ -126,27 +113,13 @@ def evaluate(model, val_loader, criterion, device, scheduler=None):
         for batch_X, batch_y, batch_coords, batch_idx in val_loader:
             batch_X = batch_X.to(device)
             batch_y = batch_y.to(device)
+            
             batch_coords = batch_coords.to(device)
-
-            if hasattr(model, 'include_coords'):
-                predictions = model(batch_X, batch_coords).squeeze()
-            elif hasattr(model, 'optimize_encoder'):
-                predictions = model(batch_X, batch_idx).squeeze()
-            else:
-                predictions = model(batch_X).squeeze()
+            predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
             
             val_loss = criterion(predictions, batch_y)            
             total_val_loss += val_loss.item()
             
-            # if hasattr(model, 'binarize') and model.binarize: # integrate these eventually 
-            #     pred_labels = (torch.sigmoid(predictions) > 0.5).float()
-            # else:
-            #     pred_labels = predictions.round() 
-            
-            # total_correct += (pred_labels == batch_y).sum().item()
-            # total_samples += batch_y.size(0)
-    #accuracy = total_correct / total_samples
-    
     mean_val_loss = total_val_loss / len(val_loader)
 
     if scheduler is not None:

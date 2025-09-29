@@ -323,8 +323,7 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
     
     inner_fold_metrics = {'final_train_loss': [], 'final_val_loss': [], 
                           'final_train_pearson': [], 'final_val_pearson': []}
-
-    # Get the appropriate model class
+    
     if model_type not in model_classes:
         raise ValueError(f"Model type {model_type} not supported for W&B sweeps")
     
@@ -338,14 +337,7 @@ def train_sweep_torch(config, model_type, train_indices, feature_type, connectom
         gc.collect()
         torch.cuda.empty_cache()
 
-        # Randomly select one fold to evaluate from the total number of folds
-        '''
-        n_folds = cv_obj.get_n_splits()
-        fold_idx = np.random.randint(0, n_folds)
-        print(f'Randomly selected inner fold {fold_idx} out of {n_folds} folds')
-        '''
-
-        if fold_idx == 0:  # Only run CV on the first inner fold to test more parameters
+        if fold_idx == 0:  # Only run CV on the first inner fold to test more hyperparameters
             train_region_pairs = expand_X_symmetric(np.array(train_indices).reshape(-1, 1)).astype(int)
             test_region_pairs = expand_X_symmetric(np.array(test_indices).reshape(-1, 1)).astype(int)
             train_indices_expanded = np.array([dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_region_pairs])

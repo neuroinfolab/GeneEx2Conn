@@ -73,7 +73,7 @@ best_parameters:
   aug_prob:
     values: [0.3]
   epochs:
-    values: [100]
+    values: [10]
   num_workers:
     values: [2]
   prefetch_factor:

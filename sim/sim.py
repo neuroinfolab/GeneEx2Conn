@@ -301,7 +301,7 @@ class Simulation:
         # Initialize final model with best config
         ModelClass = MODEL_CLASSES[self.model_type]
         if 'pls' in self.model_type or 'pca' in self.model_type:
-            best_model = ModelClass(**best_config, train_indices=train_indices, test_indices=test_indices).to(device)   
+            best_model = ModelClass(**best_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=self.region_pair_dataset).to(device)   
         elif 'celltype' in self.model_type:
             best_model = ModelClass(**best_config, region_pair_dataset=self.region_pair_dataset).to(device)
         else:

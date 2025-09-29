@@ -84,7 +84,7 @@ class SharedSelfAttentionPCAModel(BaseTransformerModel):
 
         self._setup_optimizer_scheduler(learning_rate, weight_decay)
 
-    def forward(self, x, idx):
+    def forward(self, x, coords, idx):
         # PCA encode each half
         x_i, x_j = self.PCAencoder(x, idx)  # each: (B, n_components)
 
@@ -103,51 +103,6 @@ class SharedSelfAttentionPCAModel(BaseTransformerModel):
             return {"output": y_pred.squeeze(), "attn_beta_i": attn_beta_i, "attn_beta_j": attn_beta_j}
         
         return y_pred.squeeze()
-
-    def predict(self, loader, collect_attn=False, save_attn_path=None):
-        self.eval()
-        predictions = []
-        targets = []
-        
-        all_attn = []
-        total_batches = 0
-        
-        self.store_attn = collect_attn
-        if collect_attn and not getattr(self, 'use_attention_pooling', False):
-            collect_full_attention_heads(self.encoder.layers)
-        
-        with torch.no_grad():
-            for batch_X, batch_y, _, batch_idx in loader:
-                batch_X = batch_X.to(self.device)
-                
-                if collect_attn:
-                    out = self(batch_X, batch_idx)
-                    
-                    if getattr(self, 'use_attention_pooling', False):
-                        batch_preds = out["output"].cpu().numpy()
-                        attns = (out["attn_beta_i"], out["attn_beta_j"])
-                        all_attn.append(attns)
-                    else:
-                        batch_preds = out.cpu().numpy()
-                        accumulate_attention_weights(self.encoder.layers, is_first_batch=(total_batches == 0))
-                        total_batches += 1
-                else:
-                    batch_preds = self(batch_X, batch_idx).cpu().numpy()
-                
-                predictions.append(batch_preds)
-                targets.append(batch_y.numpy())
-        
-        predictions = np.concatenate(predictions)
-        targets = np.concatenate(targets)
-        
-        self.store_attn = False  # Disable attention collection to prevent memory leaks
-        if collect_attn:
-            if getattr(self, 'use_attention_pooling', False):
-                avg_attn_arr = collect_attention_pooling_weights(all_attn, save_attn_path)
-            else:
-                avg_attn = process_full_attention_heads(self.encoder.layers, total_batches, save_attn_path)
-        
-        return predictions, targets
 
 class SharedSelfAttentionPLSModel(BaseTransformerModel):
     def __init__(self, input_dim, train_indices, test_indices, region_pair_dataset,
@@ -192,7 +147,7 @@ class SharedSelfAttentionPLSModel(BaseTransformerModel):
 
         self._setup_optimizer_scheduler(learning_rate, weight_decay)
 
-    def forward(self, x, idx):
+    def forward(self, x, coords, idx):
         # PLS encode each half
         x_i, x_j = self.PLSencoder(x, idx)  # each: (B, n_components)
 
@@ -211,51 +166,6 @@ class SharedSelfAttentionPLSModel(BaseTransformerModel):
             return {"output": y_pred.squeeze(), "attn_beta_i": attn_beta_i, "attn_beta_j": attn_beta_j}
         
         return y_pred.squeeze()
-
-    def predict(self, loader, collect_attn=False, save_attn_path=None):
-        self.eval()
-        predictions = []
-        targets = []
-        
-        all_attn = []
-        total_batches = 0
-        
-        self.store_attn = collect_attn
-        if collect_attn and not getattr(self, 'use_attention_pooling', False):
-            collect_full_attention_heads(self.encoder.layers)
-        
-        with torch.no_grad():
-            for batch_X, batch_y, _, batch_idx in loader:
-                batch_X = batch_X.to(self.device)
-                
-                if collect_attn:
-                    out = self(batch_X, batch_idx)
-                    
-                    if getattr(self, 'use_attention_pooling', False):
-                        batch_preds = out["output"].cpu().numpy()
-                        attns = (out["attn_beta_i"], out["attn_beta_j"])
-                        all_attn.append(attns)
-                    else:
-                        batch_preds = out.cpu().numpy()
-                        accumulate_attention_weights(self.encoder.layers, is_first_batch=(total_batches == 0))
-                        total_batches += 1
-                else:
-                    batch_preds = self(batch_X, batch_idx).cpu().numpy()
-                
-                predictions.append(batch_preds)
-                targets.append(batch_y.numpy())
-        
-        predictions = np.concatenate(predictions)
-        targets = np.concatenate(targets)
-        
-        self.store_attn = False  # Disable attention collection to prevent memory leaks
-        if collect_attn:
-            if getattr(self, 'use_attention_pooling', False):
-                avg_attn_arr = collect_attention_pooling_weights(all_attn, save_attn_path)
-            else:
-                avg_attn = process_full_attention_heads(self.encoder.layers, total_batches, save_attn_path)
-        
-        return predictions, targets
 
 class GeneConvEncoder(nn.Module):
     def __init__(self, input_dim, d_model=64, num_tokens=128,
@@ -354,7 +264,7 @@ class SharedSelfAttentionConvModel(BaseTransformerModel):
 
         self._setup_optimizer_scheduler(learning_rate, weight_decay)
 
-    def forward(self, x):
+    def forward(self, x, coords=None, idx=None):
         # Split pairwise info
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
 
@@ -522,7 +432,7 @@ class SharedSelfAttentionAEModel(BaseTransformerModel):
 
         self._setup_optimizer_scheduler(learning_rate, weight_decay)
 
-    def forward(self, x):
+    def forward(self, x, coords=None, idx=None):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         
         # Encode through pretrained autoencoder
@@ -723,7 +633,7 @@ class SharedSelfAttentionCelltypeModel(BaseTransformerModel):
         
         return x_i_subset, x_j_subset
     
-    def forward(self, x):
+    def forward(self, x, coords=None, idx=None):
         # Subset gene expression to shared valid genes
         x_i, x_j = self._subset_gene_expression(x)
         
@@ -813,7 +723,7 @@ class SharedSelfAttentionGeneformerModel(BaseTransformerModel):
     def __init__(self, input_dim, token_encoder_dim=1, d_model=128, nhead=4, num_layers=4, deep_hidden_dims=[256, 128],
                  use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
                  batch_size=512, aug_prob=0.0, epochs=100, num_workers=2, prefetch_factor=2, 
-                 use_attention_pooling=False, use_mlp_downsampler=False):
+                 use_attention_pooling=False, use_mlp_downsampler=False, cosine_lr=False):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor, d_model, nhead, num_layers, deep_hidden_dims, aug_prob)
         
         self.input_dim = input_dim // 2  # Split for two regions
@@ -821,6 +731,7 @@ class SharedSelfAttentionGeneformerModel(BaseTransformerModel):
         self.use_alibi = use_alibi
         self.use_attention_pooling = use_attention_pooling
         self.use_mlp_downsampler = use_mlp_downsampler
+        self.cosine_lr = cosine_lr
         
         # Number of tokens (approximately 770)
         self.num_tokens = self.input_dim // self.token_encoder_dim
@@ -858,9 +769,9 @@ class SharedSelfAttentionGeneformerModel(BaseTransformerModel):
         print(f"Attention pooling: {self.use_attention_pooling}")
         print(f"MLP downsampler: {self.use_mlp_downsampler}")
         
-        self._setup_optimizer_scheduler(learning_rate, weight_decay) #, use_cosine=True)
+        self._setup_optimizer_scheduler(learning_rate, weight_decay, use_cosine=self.cosine_lr)
 
-    def forward(self, x):
+    def forward(self, x, coords=None, idx=None):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         
         if self.store_attn:
@@ -878,7 +789,6 @@ class SharedSelfAttentionGeneformerModel(BaseTransformerModel):
         
         return y_pred.squeeze()
 
-    '''
     def fit(self, dataset, train_indices, test_indices, save_model=None, verbose=True):
         """Shared fit function for all transformer models"""
         train_dataset = Subset(dataset, train_indices)
@@ -890,4 +800,3 @@ class SharedSelfAttentionGeneformerModel(BaseTransformerModel):
                                num_workers=self.num_workers, prefetch_factor=self.prefetch_factor)
         
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, scheduler = None, train_scheduler=self.scheduler, save_model=save_model, verbose=verbose, dataset=dataset)
-    '''

@@ -79,15 +79,13 @@ class BaseTransformerModel(nn.Module):
         
         with torch.no_grad():
             for batch_idx, batch_data in enumerate(loader):
-                batch_X, batch_y = batch_data[0], batch_data[1]
+                batch_X, batch_y, batch_coords, batch_expanded_idx = batch_data[0], batch_data[1], batch_data[2], batch_data[3]
                 batch_X = batch_X.to(self.device)
-
-                batch_coords = batch_data[2] if len(batch_data) > 2 else None
-                if batch_coords is not None:
-                    batch_coords = batch_coords.to(self.device)
+                batch_coords = batch_coords.to(self.device)
+                batch_expanded_idx = batch_expanded_idx.to(self.device)
                 
                 if collect_attn:
-                    out = self(batch_X, batch_coords) if batch_coords is not None else self(batch_X)    
+                    out = self(batch_X, batch_coords, batch_expanded_idx)
                     if getattr(self, 'use_attention_pooling', False): # defaults to False
                         batch_preds = out["output"].cpu().numpy()
                         attns = (out["attn_beta_i"], out["attn_beta_j"])
@@ -97,7 +95,7 @@ class BaseTransformerModel(nn.Module):
                         accumulate_attention_weights(self.encoder.layers, is_first_batch=(batch_idx == 0))
                         total_batches += 1
                 else:
-                    batch_preds = (self(batch_X, batch_coords) if batch_coords is not None else self(batch_X)).cpu().numpy()
+                    batch_preds = self(batch_X, batch_coords, batch_expanded_idx).cpu().numpy()
                 
                 predictions.append(batch_preds)
                 targets.append(batch_y.numpy())
@@ -207,7 +205,7 @@ class SharedSelfAttentionModel(BaseTransformerModel):
         
         self._setup_optimizer_scheduler(learning_rate, weight_decay)
 
-    def forward(self, x):
+    def forward(self, x, coords, idx):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         if self.store_attn:
             x_i, attn_beta_i = self.encoder(x_i, return_attn=True)
@@ -360,7 +358,7 @@ class SharedSelfAttentionCLSModel(BaseTransformerModel):
         print(f"Number of learnable parameters in SMT w/ CLS model: {num_params}")
         self._setup_optimizer_scheduler(learning_rate, weight_decay)
 
-    def forward(self, x, coords):
+    def forward(self, x, coords, idx):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         coords_i, coords_j = torch.chunk(coords, chunks=2, dim=1)
         x_i = self.encoder(x_i, coords_i)
@@ -406,7 +404,7 @@ class SharedSelfAttentionPoolingModel(BaseTransformerModel):
         
         self._setup_optimizer_scheduler(learning_rate, weight_decay)
 
-    def forward(self, x):
+    def forward(self, x, coords, idx):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         if self.store_attn:
             x_i, attn_beta_i = self.encoder(x_i, return_attn=True)
@@ -472,7 +470,7 @@ class SharedSelfAttentionCLSPoolingModel(BaseTransformerModel):
 
         self._setup_optimizer_scheduler(learning_rate, weight_decay)
 
-    def forward(self, x, coords):
+    def forward(self, x, coords, idx):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         coords_i, coords_j = torch.chunk(coords, chunks=2, dim=1)
         dists = torch.norm(coords_i - coords_j, dim=1, keepdim=True)  # (B, 1)
