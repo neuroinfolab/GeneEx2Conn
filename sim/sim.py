@@ -28,6 +28,7 @@ from models.smt_advanced import SharedSelfAttentionPCAModel, SharedSelfAttention
 from models.smt_advanced import SharedSelfAttentionAEModel
 from models.smt_advanced import SharedSelfAttentionCelltypeModel
 from models.smt_advanced import SharedSelfAttentionGeneformerModel
+from models.smt_advanced import SharedSelfAttentionGene2VecModel
 from models.smt_cross import CrossAttentionModel
 
 MODEL_CLASSES = {
@@ -53,6 +54,7 @@ MODEL_CLASSES = {
     'shared_transformer_ae': SharedSelfAttentionAEModel,
     'shared_transformer_celltype': SharedSelfAttentionCelltypeModel,
     'shared_transformer_geneformer': SharedSelfAttentionGeneformerModel,
+    'shared_transformer_gene2vec': SharedSelfAttentionGene2VecModel,
     'cross_attention': CrossAttentionModel
 }
 
@@ -302,7 +304,7 @@ class Simulation:
         ModelClass = MODEL_CLASSES[self.model_type]
         if 'pls' in self.model_type or 'pca' in self.model_type:
             best_model = ModelClass(**best_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=self.region_pair_dataset).to(device)   
-        elif 'celltype' in self.model_type:
+        elif 'celltype' in self.model_type or 'gene2vec' in self.model_type:
             best_model = ModelClass(**best_config, region_pair_dataset=self.region_pair_dataset).to(device)
         else:
             best_model = ModelClass(**best_config).to(device)

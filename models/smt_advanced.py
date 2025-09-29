@@ -454,7 +454,7 @@ class SharedSelfAttentionAEModel(BaseTransformerModel):
             return {"output": y_pred.squeeze(), "attn_beta_i": attn_beta_i, "attn_beta_j": attn_beta_j}
         
         return y_pred.squeeze()
-        
+
 # === CELLTYPE ENCODER CLASSES === #
 class CelltypeEncoder(nn.Module):
     def __init__(self, aux_feature_dim, d_model, nhead=4, num_layers=4, dropout=0.1, use_alibi=False, projection_layers=2, use_attention_pooling=True):
@@ -800,3 +800,205 @@ class SharedSelfAttentionGeneformerModel(BaseTransformerModel):
                                num_workers=self.num_workers, prefetch_factor=self.prefetch_factor)
         
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, scheduler = None, train_scheduler=self.scheduler, save_model=save_model, verbose=verbose, dataset=dataset)
+
+
+
+# === GENE2VEC ENCODER CLASSES === #
+class Gene2VecEncoder(nn.Module):
+    def __init__(self, valid_genes,
+                 d_model=128, nhead=4, num_layers=4, dropout=0.1, use_alibi=True, use_attention_pooling=True):
+        super().__init__()
+        self.d_model = d_model
+        self.use_attention_pooling = use_attention_pooling
+        self.valid_genes = valid_genes
+        self.gene2vec_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn/data/gene_emb/gene2vec_dim_200_iter_9.txt'
+        
+        # Load Gene2Vec embeddings and create lookup table
+        self._load_gene2vec_embeddings(self.gene2vec_path)
+        
+        # Linear projection from scalar gene expression to d_model space
+        self.expression_projection = nn.Linear(1, d_model)
+        
+        # Linear projection from Gene2Vec embedding (200D) to d_model space  
+        self.gene2vec_projection = nn.Linear(200, d_model)
+        
+        # Transformer layers for self-attention across genes
+        self.transformer_layers = nn.ModuleList([
+            FlashAttentionBlock(d_model, nhead, dropout, use_alibi=use_alibi)
+            for _ in range(num_layers)
+        ])
+        
+        # Choose pooling method
+        if use_attention_pooling:
+            self.pooling = AttentionPooling(d_model, hidden_dim=32)
+        else:
+            # Sophisticated MLP downsampler
+            self.downsampler = nn.Sequential(
+                nn.Linear(d_model, d_model * 2),
+                nn.LayerNorm(d_model * 2),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(d_model * 2, d_model),
+                nn.LayerNorm(d_model),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(d_model, 1)
+            )
+        
+    def _load_gene2vec_embeddings(self, gene2vec_path):
+        """Load Gene2Vec embeddings and create lookup table aligned with valid_genes"""
+        # Load Gene2Vec dataframe
+        gene2vec_df = pd.read_csv(gene2vec_path, sep='\s+', header=None, index_col=0)
+        
+        # Find intersection between Gene2Vec genes and valid genes
+        gene2vec_genes = set(gene2vec_df.index.tolist())
+        valid_genes_set = set(self.valid_genes)
+        shared_genes = list(gene2vec_genes.intersection(valid_genes_set))
+        
+        # Get indices of shared genes in the original valid_genes list
+        self.shared_gene_indices = [self.valid_genes.index(gene) for gene in shared_genes if gene in self.valid_genes]
+        self.shared_genes = [self.valid_genes[i] for i in self.shared_gene_indices]
+        
+        # Create Gene2Vec lookup matrix in the order of shared genes
+        gene2vec_matrix = np.zeros((len(self.shared_genes), 200))
+        for i, gene in enumerate(self.shared_genes):
+            if gene in gene2vec_df.index:
+                gene2vec_matrix[i] = gene2vec_df.loc[gene].values
+        
+        # Store as tensor
+        self.gene2vec_embeddings = torch.FloatTensor(gene2vec_matrix)
+        
+        print(f"Loaded Gene2Vec embeddings: {len(self.shared_genes)} genes with 200-dimensional embeddings")
+        print(f"Gene overlap: {len(self.shared_genes)}/{len(self.valid_genes)} valid genes have Gene2Vec embeddings")
+        
+    def forward(self, gene_expression, return_attn=False):
+        """
+        Args:
+            gene_expression: (B, num_genes) - gene expression values
+            return_attn: bool - whether to return attention weights
+        
+        Returns:
+            pooled representation: (B, d_model) if use_attention_pooling else (B, num_shared_genes)
+            optionally attention weights
+        """
+        B, num_genes = gene_expression.shape
+        
+        # Subset gene expression to shared genes only
+        gene_expression_subset = gene_expression[:, self.shared_gene_indices]  # (B, num_shared_genes)
+        num_shared_genes = len(self.shared_gene_indices)
+        
+        # Move Gene2Vec embeddings to same device as input
+        gene2vec_emb = self.gene2vec_embeddings.to(gene_expression.device)  # (num_shared_genes, 200)
+        
+        # Expand gene expression: (B, num_shared_genes, 1)
+        gene_expression_expanded = gene_expression_subset.unsqueeze(-1)
+        
+        # Project gene expression to d_model space: (B, num_shared_genes, d_model)
+        expression_projected = self.expression_projection(gene_expression_expanded)
+        
+        # Project Gene2Vec embeddings to d_model space: (num_shared_genes, d_model)
+        gene2vec_projected = self.gene2vec_projection(gene2vec_emb)  # (num_shared_genes, d_model)
+        
+        # Expand Gene2Vec projections to match batch size: (B, num_shared_genes, d_model)
+        gene2vec_expanded = gene2vec_projected.unsqueeze(0).expand(B, -1, -1)
+        
+        # Element-wise addition of projected expression and Gene2Vec embeddings
+        x = expression_projected + gene2vec_expanded  # (B, num_shared_genes, d_model)
+        
+        # Apply transformer layers
+        for layer in self.transformer_layers:
+            x = layer(x)
+        
+        # Pool output based on method
+        if self.use_attention_pooling:
+            if return_attn:
+                pooled, attn_weights = self.pooling(x, return_attn=True)
+                return pooled, attn_weights
+            else:
+                pooled = self.pooling(x)
+                return pooled
+        else:
+            # Apply sophisticated downsampler to each token: (B, num_shared_genes, d_model) -> (B, num_shared_genes, 1)
+            x = self.downsampler(x).squeeze(-1)  # (B, num_shared_genes)
+            if return_attn:
+                # Return dummy attention weights when not using attention pooling
+                return x, None
+            return x
+
+class SharedSelfAttentionGene2VecModel(BaseTransformerModel):
+    def __init__(self, input_dim, region_pair_dataset, 
+                 d_model=128, nhead=4, num_layers=4, deep_hidden_dims=[512, 256, 128],
+                 use_alibi=True, transformer_dropout=0.1, dropout_rate=0.1, use_attention_pooling=True,
+                 learning_rate=0.001, weight_decay=0.0, batch_size=512, epochs=100, 
+                 aug_prob=0.0, num_workers=2, prefetch_factor=2):
+        super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor, d_model, nhead, num_layers, deep_hidden_dims, aug_prob)
+
+        self.input_dim = input_dim // 2
+        self.aug_prob = aug_prob
+        self.use_attention_pooling = use_attention_pooling
+        self.valid_genes = region_pair_dataset.valid_genes
+
+        # Create Gene2Vec encoder
+        self.gene2vec_encoder = Gene2VecEncoder(
+            valid_genes=self.valid_genes,
+            d_model=d_model,
+            nhead=nhead,
+            num_layers=num_layers,
+            dropout=transformer_dropout,
+            use_alibi=use_alibi,
+            use_attention_pooling=use_attention_pooling
+        )
+        self.gene2vec_encoder = torch.compile(self.gene2vec_encoder)
+        
+        # MLP head for final prediction
+        if self.use_attention_pooling:
+            prev_dim = d_model * 2  # Concatenated embeddings from both regions
+        else:
+            prev_dim = len(self.gene2vec_encoder.shared_gene_indices) * 2  # Concatenated token projections from both regions
+        
+        self.deep_layers, self.output_layer = self._set_mlp_head(
+            prev_dim=prev_dim,
+            deep_hidden_dims=deep_hidden_dims,
+            dropout_rate=dropout_rate
+        )
+        
+        num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"Number of learnable parameters in Gene2Vec model: {num_params}")
+        print(f"Number of genes after Gene2Vec intersection: {len(self.gene2vec_encoder.shared_gene_indices)}")
+        
+        self._setup_optimizer_scheduler(learning_rate, weight_decay) #, use_cosine=True)
+    
+    def forward(self, x, coords=None, idx=None):
+        # Split gene expression for two regions
+        x_i, x_j = torch.chunk(x, chunks=2, dim=1)  # Each: (B, num_genes)
+        
+        # Encode both regions using Gene2Vec encoder
+        if self.store_attn:
+            x_i, attn_beta_i = self.gene2vec_encoder(x_i, return_attn=True)
+            x_j, attn_beta_j = self.gene2vec_encoder(x_j, return_attn=True)
+        else:
+            x_i = self.gene2vec_encoder(x_i)
+            x_j = self.gene2vec_encoder(x_j)
+        
+        # Concatenate region embeddings
+        x = torch.cat([x_i, x_j], dim=1)
+        
+        # Final prediction
+        y_pred = self.output_layer(self.deep_layers(x))
+        
+        if self.store_attn:
+            return {"output": y_pred.squeeze(), "attn_beta_i": attn_beta_i, "attn_beta_j": attn_beta_j}
+        
+        return y_pred.squeeze()
+
+    # def fit(self, dataset, train_indices, test_indices, save_model=None, verbose=True):
+    #     """Shared fit function for all transformer models"""
+    #     train_dataset = Subset(dataset, train_indices)
+    #     test_dataset = Subset(dataset, test_indices)
+        
+    #     train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True,
+    #                             num_workers=self.num_workers, prefetch_factor=self.prefetch_factor)
+    #     test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True,
+    #                            num_workers=self.num_workers, prefetch_factor=self.prefetch_factor)
+        
+    #     return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, scheduler=None, train_scheduler=self.scheduler, save_model=save_model, verbose=verbose, dataset=dataset)

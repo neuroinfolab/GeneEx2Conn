@@ -1,0 +1,75 @@
+name: shared_transformer_gene2vec
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+parameters:
+  input_dim:
+    value: !!int 0
+  d_model:                # Latent dimension for transformer
+    values: [64, 128, 256]
+  nhead:                  # Number of attention heads
+    values: [2, 4]
+  num_layers:            # Number of transformer layers
+    values: [2, 4]
+  deep_hidden_dims:      # MLP head dimensions
+    values:
+      - [512, 256, 128]
+  use_alibi:             # Use ALiBi positional encoding
+    values: [True]
+  transformer_dropout:   # Dropout in transformer blocks
+    values: [0.1, 0.2, 0.3]
+  dropout_rate:         # Dropout in MLP head
+    values: [0.1, 0.2, 0.3]
+  use_attention_pooling: # Whether to use attention pooling or MLP downsampler
+    values: [True, False]
+  learning_rate:
+    values: [0.0005, 0.0003, 0.0001, 0.00005]
+  weight_decay:
+    values: [.00001, 0.0001, .001, 0.0]
+  batch_size:
+    values: [512, 1024]
+  aug_prob:             # Data augmentation probability
+    values: [0.0, 0.3]
+  epochs:
+    values: [90, 110, 130] 
+  num_workers:
+    values: [2]
+  prefetch_factor:
+    values: [2]
+
+best_parameters:
+  input_dim:
+    value: !!int 0
+  d_model:
+    values: [128]
+  nhead:
+    values: [4]
+  num_layers:
+    values: [4]
+  deep_hidden_dims:
+    values:
+      - [512, 256, 128]
+  use_alibi:
+    values: [True]
+  transformer_dropout:
+    values: [0.1]
+  dropout_rate:
+    values: [0.1]
+  use_attention_pooling:
+    values: [False]
+  learning_rate:
+    values: [0.0001]
+  weight_decay:
+    values: [0.0001]
+  batch_size:
+    values: [512]
+  aug_prob:
+    values: [0.0]
+  epochs:
+    values: [120]
+  num_workers:
+    values: [2]
+  prefetch_factor:
+    values: [2]

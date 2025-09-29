@@ -93,12 +93,13 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
             loss.backward()
             optimizer.step()
         
-        if scheduler is not None: # for cosine warmup LR scheduler
-            scheduler.step()
-            # Print learning rate every 10 epochs
-            if (epoch + 1) % 10 == 0 and optimizer is not None:
-                current_lr = optimizer.param_groups[0]['lr']
-                print(f"Epoch {epoch + 1}: Current LR = {current_lr:.6f}")
+        # if scheduler is not None: # for cosine warmup LR scheduler
+        #     scheduler.step()
+        #     # Print learning rate every 10 epochs
+        #     if (epoch + 1) % 10 == 0 and optimizer is not None:
+        #         current_lr = optimizer.param_groups[0]['lr']
+        #         print(f"Epoch {epoch + 1}: Current LR = {current_lr:.6f}")
+        
         total_train_loss += loss.item()
     
     return total_train_loss / len(train_loader)
