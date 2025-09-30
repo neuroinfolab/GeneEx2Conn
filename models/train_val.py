@@ -70,8 +70,8 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
     for batch_X, batch_y, batch_coords, batch_idx in train_loader:
         if dataset is not None:
             # Target-side augmentation with given linear decaying or increasing Pr (only for transformer models)
-            # if np.random.random() < model.aug_prob*(1-epoch/model.epochs): # linear decay
-            if np.random.random() < model.aug_prob*(epoch/model.epochs): # linear increase
+            # if np.random.random() < model.aug_prob*(epoch/model.epochs): # linear increase
+            if np.random.random() < model.aug_prob*(1-epoch/model.epochs): # linear decay
                 # batch_X = augment_batch_X(batch_X) - if want parametrized input feature augmentation
                 batch_y = augment_batch_y(batch_idx, dataset, device)
         
