@@ -58,7 +58,7 @@ best_parameters:
   dropout_rate:
     values: [0.1]
   use_attention_pooling:
-    values: [False]
+    values: [True]
   learning_rate:
     values: [0.0001]
   weight_decay:

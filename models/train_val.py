@@ -70,9 +70,9 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
     for batch_X, batch_y, batch_coords, batch_idx in train_loader:
         if dataset is not None:
             # Target-side augmentation with given linear decaying or increasing Pr (only for transformer models)
-            #if np.random.random() < model.aug_prob*(1-epoch/model.epochs):
-            if np.random.random() < model.aug_prob*(epoch/model.epochs):
-                # batch_X = augment_batch_X(batch_X) - if want parametrized feature augmentation
+            # if np.random.random() < model.aug_prob*(1-epoch/model.epochs): # linear decay
+            if np.random.random() < model.aug_prob*(epoch/model.epochs): # linear increase
+                # batch_X = augment_batch_X(batch_X) - if want parametrized input feature augmentation
                 batch_y = augment_batch_y(batch_idx, dataset, device)
         
         batch_X = batch_X.to(device)
@@ -82,23 +82,22 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
         optimizer.zero_grad()
         if scaler is not None: # Mixed precision training path (Default)
             with autocast(dtype=torch.bfloat16):
-                predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
-                loss = criterion(predictions, batch_y)
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+                try: # smt
+                    predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
+                except:
+                    predictions = model(batch_X).squeeze()
+                loss = criterion(predictions, batch_y)    
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
         else: # Regular training path
-            predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
+            try:# smt
+                predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
+            except:
+                predictions = model(batch_X).squeeze()
             loss = criterion(predictions, batch_y)
             loss.backward()
             optimizer.step()
-        
-        # if scheduler is not None: # for cosine warmup LR scheduler
-        #     scheduler.step()
-        #     # Print learning rate every 10 epochs
-        #     if (epoch + 1) % 10 == 0 and optimizer is not None:
-        #         current_lr = optimizer.param_groups[0]['lr']
-        #         print(f"Epoch {epoch + 1}: Current LR = {current_lr:.6f}")
         
         total_train_loss += loss.item()
     
@@ -107,17 +106,16 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
 def evaluate(model, val_loader, criterion, device, scheduler=None):
     model.eval()
     total_val_loss = 0
-    total_correct = 0
-    total_samples = 0
-    
     with torch.no_grad():
         for batch_X, batch_y, batch_coords, batch_idx in val_loader:
             batch_X = batch_X.to(device)
             batch_y = batch_y.to(device)
-            
             batch_coords = batch_coords.to(device)
-            predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
-            
+        
+            try: # smt
+                predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
+            except:
+                predictions = model(batch_X).squeeze()
             val_loss = criterion(predictions, batch_y)            
             total_val_loss += val_loss.item()
             

@@ -94,7 +94,7 @@ class BilinearLowRank(nn.Module):
         test_dataset = Subset(dataset, test_indices)
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
-        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, verbose=verbose)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, save_model=save_model, verbose=verbose)
 
 class BilinearCM(nn.Module):
     def __init__(self, input_dim, binarize=None,learning_rate=0.01, epochs=100, 
