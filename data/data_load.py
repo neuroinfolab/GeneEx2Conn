@@ -171,6 +171,10 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             random_genes = np.random.permutation(valid_genes)
             genes_data = np.array(genes_data[random_genes])
             valid_genes = random_genes
+        elif 'kmeans' in sort_genes: # gene bin clusters based on contsrained k-means, options: 20bin_constrained_kmeans, 60bin_constrained_kmeans, 180bin_constrained_kmeans
+            genes_list = pd.read_csv(f'./data/enigma/gene_lists/{sort_genes}.txt', header=None)[0].tolist()
+            genes_data = np.array(genes_data[genes_list])
+            valid_genes = genes_list
         # Geneformer embeddings hack
         elif sort_genes == 'geneformer_raw':
             genes_data = pd.read_csv("./data/gene_emb/geneformer_raw/embeddings/ahba_embeddings.csv", index_col=0)
