@@ -46,13 +46,13 @@ best_parameters:
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [60]
+    values: [20]
   d_model:
     values: [128]
   encoder_output_dim:
     values: [10]
   use_alibi:
-    values: [True]
+    values: [False]
   nhead:
     values: [4]
   num_layers:
@@ -65,7 +65,7 @@ best_parameters:
   dropout_rate:
     values: [0.2]
   learning_rate:
-    values: [0.00009] # usually 0.0001 for 20? 
+    values: [0.0001] # usually 0.0001 for 20, .00009 for 60/180
   weight_decay:
     values: [0.0001]
   batch_size:

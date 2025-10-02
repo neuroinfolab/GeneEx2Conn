@@ -176,6 +176,8 @@ class Simulation:
         """
         if self.cv_type == 'random':
             self.cv_obj = RandomCVSplit(self.X, self.Y, num_splits=4, shuffled=True, use_random_state=True, random_seed=self.random_seed)
+        if self.cv_type == 'random_full':
+            self.cv_obj = RandomCVSplit(self.X, self.Y, num_splits=100, shuffled=True, use_random_state=True, random_seed=self.random_seed)
         elif self.cv_type == 'schaefer':
             self.cv_obj = SchaeferCVSplit(self.X, self.Y, self.network_labels)
         elif self.cv_type == 'community':

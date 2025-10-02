@@ -864,7 +864,7 @@ def plot_train_test_reordered_connectome(Y, train_indices, test_indices, measure
 # EMBEDDING VISUALIZATIONS
 def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, std_edge_threshold=None, edge_threshold=None,
                         title=None, n_neighbors=15, spread=2.0, min_dist=0.5,
-                        fontsize=30, axis_fontsize=26, scatter_alpha=0.8, scatter_size=15,
+                        fontsize=30, axis_fontsize=26, scatter_alpha=0.8, scatter_size=18,
                         edge_alpha=0.2, edge_width=0.5, omit_subcortical=False):
     """
     Plot UMAP visualization of embeddings colored by network labels, with optional FC edges.
@@ -913,8 +913,9 @@ def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, std_
     point_colors = np.array([network_to_color[label] for label in network_labels])
     
     # Create scatter plot
-    plt.figure(figsize=(10, 8))
-    
+    plt.figure(figsize=(10,8))
+    plt.gca().set_facecolor("#eaeaf2")  # Light bluish background for plot area only
+
     # If FC matrix provided and either threshold is set, draw edges first
     if conn_matrix is not None and (std_edge_threshold is not None or edge_threshold is not None):
         if std_edge_threshold is not None:
@@ -994,7 +995,7 @@ def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, std_
 
 # EMBEDDING VISUALIZATIONS
 def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, std_edge_threshold=None, edge_threshold=None,
-                    title=None, fontsize=30, axis_fontsize=26, scatter_alpha=0.8, scatter_size=15,
+                    title=None, fontsize=30, axis_fontsize=26, scatter_alpha=0.8, scatter_size=18,
                     edge_alpha=0.2, edge_width=0.5, omit_subcortical=False):
     """
     Plot 2D visualization of coordinates colored by network labels, with optional FC edges.
@@ -1036,7 +1037,8 @@ def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, std_e
     point_colors = np.array([network_to_color[label] for label in network_labels])
     
     # Create scatter plot
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(10,7))
+    plt.gca().set_facecolor("#eaeaf2")  # Light bluish background for plot area only
     
     # If FC matrix provided and either threshold is set, draw edges first
     if conn_matrix is not None and (std_edge_threshold is not None or edge_threshold is not None):

@@ -25,7 +25,7 @@ class BaseTransformerModel(nn.Module):
         self.optimizer = None
         self.aug_prob = aug_prob
         self.criterion = nn.MSELoss()
-        self.patience = 50
+        self.patience = 50 # default is 50
         self.scheduler = None
         
         # architecture
@@ -75,7 +75,7 @@ class BaseTransformerModel(nn.Module):
         
         self.store_attn = collect_attn
         if collect_attn and not getattr(self, 'use_attention_pooling', False):
-            collect_full_attention_heads(self.encoder.layers)
+            collect_full_attention_heads(self.encoder.transformer_layers)
         
         with torch.no_grad():
             for batch_idx, batch_data in enumerate(loader):
@@ -92,7 +92,7 @@ class BaseTransformerModel(nn.Module):
                         all_attn.append(attns)
                     else:
                         batch_preds = out.cpu().numpy()
-                        accumulate_attention_weights(self.encoder.layers, is_first_batch=(batch_idx == 0))
+                        accumulate_attention_weights(self.encoder.transformer_layers, is_first_batch=(batch_idx == 0))
                         total_batches += 1
                 else:
                     batch_preds = self(batch_X, batch_coords, batch_expanded_idx).cpu().numpy()
@@ -109,7 +109,7 @@ class BaseTransformerModel(nn.Module):
                 avg_attn_arr = collect_attention_pooling_weights(all_attn, save_attn_path)
                 return predictions, targets, avg_attn_arr, all_attn
             else:
-                avg_attn = process_full_attention_heads(self.encoder.layers, total_batches, save_attn_path)
+                avg_attn = process_full_attention_heads(self.encoder.transformer_layers, total_batches, save_attn_path)
                 return predictions, targets, avg_attn
         
         return predictions, targets
