@@ -35,6 +35,8 @@ parameters:
     values: [1024]
   aug_prob:
     values: [0, 0.3, 0.45]
+  aug_style:
+    values: ['linear_decay', 'constant', 'linear_increase', 'linear_peak', 'curriculum_swap_linear_increase', 'curriculum_swap_constant', 'curriculum_swap_linear_decay', 'none']
   epochs:
     values: [70, 90, 110]
   num_workers:
@@ -46,13 +48,13 @@ best_parameters:
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [20]
+    values: [60]
   d_model:
     values: [128]
   encoder_output_dim:
     values: [10]
   use_alibi:
-    values: [False]
+    values: [True]
   nhead:
     values: [4]
   num_layers:
@@ -65,13 +67,15 @@ best_parameters:
   dropout_rate:
     values: [0.2]
   learning_rate:
-    values: [0.0001] # usually 0.0001 for 20, .00009 for 60/180
+    values: [0.00009] # usually 0.0001 for 20, .00009 for 60/180
   weight_decay:
     values: [0.0001]
   batch_size:
-    values: [1024]
+    values: [512] # usually 1024 but 512 for swap 
   aug_prob:
     values: [0.3]
+  aug_style:
+    values: ['curriculum_swap_linear_decay']
   epochs:
     values: [110]
   num_workers:

@@ -343,6 +343,7 @@ def create_data_loader(X, y, batch_size, device, shuffle=True, weight=False):
     # For validation or non-binary cases, use regular DataLoader
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0)
 
+# TEMPORARY 
 from data.data_load import load_transcriptome
 # Load AHBA sample data
 AHBA_samples_df = pd.read_csv('/scratch/asr655/neuroinformatics/GeneEx2Conn_data/human_samples_files/AHBA_srs_samples.csv')
@@ -400,6 +401,53 @@ def augment_batch_y(batch_idx, dataset, device, verbose=False):
     
     # Return augmented target batch of shape (batch_size,)
     return batch_y
+
+def swap_batch_with_strong_edges(dataset, allowed_indices, batch_size, strong_thresh=0.3,
+                                 target_side_aug=False, device="cpu"):
+    """
+    Sample a batch of strong edges (|y| > threshold) from RegionPairDataset,
+    restricted to allowed_indices (e.g., train_indices) to prevent leakage.
+
+    Args:
+        dataset (RegionPairDataset): Full dataset (not a Subset).
+        allowed_indices (array-like): Indices in expanded dataset allowed for sampling (train indices only).
+        batch_size (int): Size of the batch to return.
+        strong_thresh (float): Threshold above which an edge is considered strong (positive or negative).
+        target_side_aug (bool): If True, replace targets with individual-level values.
+        device (str): Device to move tensors to.
+    
+    Returns:
+        batch_X, batch_y, batch_coords, batch_idx
+    """
+    # Ensure allowed_indices is a numpy array
+    allowed_indices = np.array(allowed_indices, dtype=np.int64)
+
+    # Identify strong edge indices in the full dataset
+    y_vals = dataset.Y_expanded.numpy()
+    strong_idx_all = np.where(np.abs(y_vals) > strong_thresh)[0]
+
+    # Intersect with allowed indices to avoid leakage
+    strong_idx = np.intersect1d(strong_idx_all, allowed_indices)
+
+    if len(strong_idx) < batch_size:
+        raise ValueError(f"Only {len(strong_idx)} eligible strong edges found; batch size is {batch_size}.")
+
+    # Sample random indices from eligible strong edges
+    sampled_idx = np.random.choice(strong_idx, size=batch_size, replace=False)
+    
+    # Fetch items from full dataset
+    batch = [dataset[idx] for idx in sampled_idx]
+    batch_X, batch_y, batch_coords, _ = zip(*batch)
+
+    batch_X = torch.stack(batch_X).to(device)
+    batch_y = torch.stack(batch_y).to(device)
+    batch_coords = torch.stack(batch_coords).to(device)
+    batch_idx = torch.tensor(sampled_idx, dtype=torch.long).to(device)
+    if target_side_aug:
+        # === Target-side augmentation ===
+        batch_y = augment_batch_y(batch_idx, dataset, device)
+
+    return batch_X, batch_y, batch_coords, batch_idx
 
 class RegionPairDataset(Dataset):
     def __init__(self, X, Y, coords, valid2true_mapping, dataset, parcellation, valid_genes):

@@ -1,7 +1,7 @@
 from env.imports import *
 import torch.backends.cudnn as cudnn
 from torch.cuda.amp import autocast, GradScaler
-from data.data_utils import augment_batch_y, augment_batch_X
+from data.data_utils import augment_batch_y, augment_batch_X, swap_batch_with_strong_edges
 torch.set_float32_matmul_precision('high')
 
 def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, train_scheduler=None, save_model=None, verbose=True, dataset=None):        
@@ -68,12 +68,37 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
     total_train_loss = 0
 
     for batch_X, batch_y, batch_coords, batch_idx in train_loader:
-        if dataset is not None:
-            # Target-side augmentation with given linear decaying or increasing Pr (only for transformer models)
-            # if np.random.random() < model.aug_prob*(epoch/model.epochs): # linear increase
-            if np.random.random() < model.aug_prob*(1-epoch/model.epochs): # linear decay
-                # batch_X = augment_batch_X(batch_X) - if want parametrized input feature augmentation
-                batch_y = augment_batch_y(batch_idx, dataset, device)
+        if dataset is not None and model.aug_style != 'none':
+            # Target-side augmentation with probability based on aug_style
+            aug_prob = model.aug_prob
+            if 'linear_decay' in model.aug_style:
+                aug_prob = model.aug_prob * (1 - epoch/model.epochs)
+            elif 'linear_increase' in model.aug_style:
+                aug_prob = model.aug_prob * (epoch/model.epochs)
+            elif 'linear_peak' in model.aug_style:
+                # Increase linearly to midpoint then decrease linearly
+                midpoint = model.epochs / 2
+                if epoch <= midpoint:
+                    aug_prob = model.aug_prob * (epoch/midpoint)
+                else:
+                    aug_prob = model.aug_prob * (1 - (epoch-midpoint)/midpoint)
+            elif 'constant' in model.aug_style or 'constant_feature_side' in model.aug_style:
+                aug_prob = model.aug_prob
+                
+            if np.random.random() < aug_prob:
+                if model.aug_style == 'constant_feature_side':
+                    batch_X = augment_batch_X(batch_X)
+                elif 'curriculum_swap' in model.aug_style:
+                    # full batch swap with strong edges + optional target-side augmentation
+                    batch_X, batch_y, batch_coords, batch_idx = swap_batch_with_strong_edges(
+                        dataset=dataset,
+                        allowed_indices=model.train_indices,   # <- train indices only
+                        batch_size=batch_X.shape[0],
+                        strong_thresh=0.3,
+                        target_side_aug=True,
+                        device=device)
+                else:
+                    batch_y = augment_batch_y(batch_idx, dataset, device)
         
         batch_X = batch_X.to(device)
         batch_y = batch_y.to(device)
@@ -91,7 +116,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
                 scaler.step(optimizer)
                 scaler.update()
         else: # Regular training path
-            try:# smt
+            try: # smt
                 predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
             except:
                 predictions = model(batch_X).squeeze()

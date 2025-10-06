@@ -37,7 +37,9 @@ parameters:
     values: [1024]
   aug_prob:
     values: [0, 0.3, 0.45]
-  epochs:
+  aug_style:
+    values: ['linear_decay', 'constant', 'linear_increase', 'linear_peak', 'curriculum_swap_linear_increase', 'curriculum_swap_constant', 'curriculum_swap_linear_decay', 'none']
+  epochs: 
     values: [70, 90, 110]
   num_workers:
     values: [2]
@@ -76,6 +78,8 @@ best_parameters:
     values: [1024]
   aug_prob:
     values: [0.3]
+  aug_style:
+    values: ['linear_decay']
   epochs:
     values: [110]
   num_workers:

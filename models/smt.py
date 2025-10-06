@@ -13,7 +13,7 @@ from torch.cuda.amp import autocast
 # === BASE TRANSFORMER MODEL CLASS === #
 class BaseTransformerModel(nn.Module):
     def __init__(self, input_dim, learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100, num_workers=2, prefetch_factor=4, 
-    d_model=128, nhead=4, num_layers=4, deep_hidden_dims=[512, 256, 128], aug_prob=0.0):
+    d_model=128, nhead=4, num_layers=4, token_encoder_dim=60, deep_hidden_dims=[512, 256, 128], aug_prob=0.0):
         super().__init__()
         # training
         self.input_dim = input_dim
@@ -34,6 +34,7 @@ class BaseTransformerModel(nn.Module):
         self.num_layers = num_layers
         self.deep_hidden_dims = deep_hidden_dims
         self.store_attn = False
+        self.token_encoder_dim = token_encoder_dim
         
     def _setup_optimizer_scheduler(self, learning_rate, weight_decay, patience=30, use_cosine=False):
         """Setup optimizer and scheduler - called by subclasses"""
@@ -75,6 +76,7 @@ class BaseTransformerModel(nn.Module):
         
         self.store_attn = collect_attn
         if collect_attn and not getattr(self, 'use_attention_pooling', False):
+            # 1. Set forward pass to collect weights instead of FlashAttention
             collect_full_attention_heads(self.encoder.transformer_layers)
         
         with torch.no_grad():
@@ -91,6 +93,7 @@ class BaseTransformerModel(nn.Module):
                         attns = (out["attn_beta_i"], out["attn_beta_j"])
                         all_attn.append(attns)
                     else:
+                        # 2. Compute batch-wise average attention weights from last layer of transformer
                         batch_preds = out.cpu().numpy()
                         accumulate_attention_weights(self.encoder.transformer_layers, is_first_batch=(batch_idx == 0))
                         total_batches += 1
@@ -109,15 +112,18 @@ class BaseTransformerModel(nn.Module):
                 avg_attn_arr = collect_attention_pooling_weights(all_attn, save_attn_path)
                 return predictions, targets, avg_attn_arr, all_attn
             else:
-                avg_attn = process_full_attention_heads(self.encoder.transformer_layers, total_batches, save_attn_path)
+                # 3. Compute overall average attention weights over all batches
+                avg_attn = process_full_attention_heads(self.encoder.transformer_layers, total_batches, save_attn_path, self.token_encoder_dim)
                 return predictions, targets, avg_attn
         
         return predictions, targets
 
     def fit(self, dataset, train_indices, test_indices, save_model=None, verbose=True):
         """Shared fit function for all transformer models"""
-        train_dataset = Subset(dataset, train_indices)
-        test_dataset = Subset(dataset, test_indices)
+        self.train_indices = train_indices
+        self.test_indices = test_indices
+        train_dataset = Subset(dataset, self.train_indices)
+        test_dataset = Subset(dataset, self.test_indices)
         
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True,
                                 num_workers=self.num_workers, prefetch_factor=self.prefetch_factor)
@@ -163,7 +169,7 @@ class FlashAttentionEncoder(nn.Module):
 class SharedSelfAttentionModel(BaseTransformerModel):
     def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=4, num_layers=4, deep_hidden_dims=[512, 256, 128],
                  use_alibi=True, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
-                 batch_size=512, aug_prob=0.0, epochs=100, num_workers=2, prefetch_factor=2):
+                 batch_size=512, aug_prob=0.0, aug_style='linear_decay', epochs=100, num_workers=2, prefetch_factor=2):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor,
                          d_model, nhead, num_layers, deep_hidden_dims, aug_prob)
         
@@ -173,6 +179,7 @@ class SharedSelfAttentionModel(BaseTransformerModel):
         self.use_alibi = use_alibi
         self.use_attention_pooling = False
         self.num_tokens = self.input_dim // self.token_encoder_dim
+        self.aug_style = aug_style
         
         self.encoder = FlashAttentionEncoder(
             token_encoder_dim=self.token_encoder_dim,
@@ -317,7 +324,7 @@ class SelfAttentionCLSEncoder(nn.Module):
 class SharedSelfAttentionCLSModel(BaseTransformerModel):
     def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
                  cls_init='spatial_learned', cls_in_seq=True, use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
-                 batch_size=128, epochs=100, aug_prob=0.0, num_workers=2, prefetch_factor=2):
+                 batch_size=128, epochs=100, aug_prob=0.0, aug_style='linear_decay', num_workers=2, prefetch_factor=2):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor,
                          d_model, nhead, num_layers, deep_hidden_dims, aug_prob)
         
@@ -328,6 +335,7 @@ class SharedSelfAttentionCLSModel(BaseTransformerModel):
         self.cls_init = cls_init
         self.cls_in_seq = cls_in_seq
         self.use_alibi = use_alibi
+        self.aug_style = aug_style
         self.transformer_dropout = transformer_dropout
         self.dropout_rate = dropout_rate
         self.use_attention_pooling = False
