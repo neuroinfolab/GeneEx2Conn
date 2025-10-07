@@ -13,7 +13,7 @@ from torch.cuda.amp import autocast
 # === BASE TRANSFORMER MODEL CLASS === #
 class BaseTransformerModel(nn.Module):
     def __init__(self, input_dim, learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100, num_workers=2, prefetch_factor=4, 
-    d_model=128, nhead=4, num_layers=4, token_encoder_dim=60, deep_hidden_dims=[512, 256, 128], aug_prob=0.0):
+    d_model=128, nhead=4, num_layers=4, token_encoder_dim=60, deep_hidden_dims=[512, 256, 128], aug_prob=0.0, aug_style='curriculum_swap_constant'):
         super().__init__()
         # training
         self.input_dim = input_dim
@@ -23,7 +23,8 @@ class BaseTransformerModel(nn.Module):
         self.prefetch_factor = prefetch_factor
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.optimizer = None
-        self.aug_prob = aug_prob
+        self.aug_prob = float(aug_prob)
+        self.aug_style = aug_style
         self.criterion = nn.MSELoss()
         self.patience = 50 # default is 50
         self.scheduler = None
@@ -171,7 +172,7 @@ class SharedSelfAttentionModel(BaseTransformerModel):
                  use_alibi=True, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0,
                  batch_size=512, aug_prob=0.0, aug_style='linear_decay', epochs=100, num_workers=2, prefetch_factor=2):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor,
-                         d_model, nhead, num_layers, deep_hidden_dims, aug_prob)
+                         d_model, nhead, num_layers, token_encoder_dim, deep_hidden_dims, aug_prob, aug_style)
         
         self.input_dim = input_dim // 2
         self.token_encoder_dim = token_encoder_dim
@@ -179,7 +180,6 @@ class SharedSelfAttentionModel(BaseTransformerModel):
         self.use_alibi = use_alibi
         self.use_attention_pooling = False
         self.num_tokens = self.input_dim // self.token_encoder_dim
-        self.aug_style = aug_style
         
         self.encoder = FlashAttentionEncoder(
             token_encoder_dim=self.token_encoder_dim,
@@ -326,7 +326,7 @@ class SharedSelfAttentionCLSModel(BaseTransformerModel):
                  cls_init='spatial_learned', cls_in_seq=True, use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
                  batch_size=128, epochs=100, aug_prob=0.0, aug_style='linear_decay', num_workers=2, prefetch_factor=2):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor,
-                         d_model, nhead, num_layers, deep_hidden_dims, aug_prob)
+                         d_model, nhead, num_layers, token_encoder_dim, deep_hidden_dims, aug_prob, aug_style)
         
         self.input_dim = input_dim // 2
         self.token_encoder_dim = token_encoder_dim 
@@ -335,7 +335,6 @@ class SharedSelfAttentionCLSModel(BaseTransformerModel):
         self.cls_init = cls_init
         self.cls_in_seq = cls_in_seq
         self.use_alibi = use_alibi
-        self.aug_style = aug_style
         self.transformer_dropout = transformer_dropout
         self.dropout_rate = dropout_rate
         self.use_attention_pooling = False

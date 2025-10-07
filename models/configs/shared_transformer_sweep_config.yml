@@ -30,13 +30,13 @@ parameters:
   learning_rate:
     values: [0.00009, 0.0001]
   weight_decay:
-    values: [0.0001, .001]
+    values: [0.0001, 0.001]
   batch_size:
     values: [1024]
   aug_prob:
-    values: [0, 0.3, 0.45]
+    values: [0.3]
   aug_style:
-    values: ['linear_decay', 'constant', 'linear_increase', 'linear_peak', 'curriculum_swap_linear_increase', 'curriculum_swap_constant', 'curriculum_swap_linear_decay', 'none']
+    values: ['constant', 'linear_increase', 'linear_peak', 'curriculum_swap_linear_increase', 'curriculum_swap_constant', 'curriculum_swap_linear_decay', 'none']
   epochs:
     values: [70, 90, 110]
   num_workers:
@@ -73,9 +73,9 @@ best_parameters:
   batch_size:
     values: [512] # usually 1024 but 512 for swap 
   aug_prob:
-    values: [0.3]
+    values: [0.1]
   aug_style:
-    values: ['curriculum_swap_linear_decay']
+    values: ['curriculum_swap_constant']
   epochs:
     values: [110]
   num_workers:
