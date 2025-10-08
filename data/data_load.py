@@ -87,12 +87,11 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
         np.ndarray: Processed gene expression data
     """
     if dataset == 'AHBA':
-        # Choose parcellation
+        # Load in global gene data for a given parcellation
         if parcellation == 'S100':
             region_labels = [label.replace('L', 'LH_', 1) if label.startswith('L') else label.replace('R', 'RH_', 1) if label.startswith('R') else label for label in pd.read_csv('./data/enigma/schaef114_regions.txt', header=None).values.flatten().tolist()]
             genes_data = pd.read_csv(f"./data/enigma/allgenes_stable_r1_schaefer_{parcellation[1:]}.csv") # from https://github.com/saratheriver/enigma-extra/tree/master/ahba
         elif parcellation == 'S456':
-            # True data
             AHBA_UKBB_path = absolute_data_path + '/Penn_UKBB_data/AHBA_population_MH/'
             if impute_strategy == 'mirror':
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean_mirror.csv'))
@@ -106,59 +105,51 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
                 genes_data = pd.read_csv(os.path.join(AHBA_UKBB_path, 'AHBA_schaefer456_mean.csv'))
             genes_data = genes_data.drop('label', axis=1)
             region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv('./data/UKBB/atlas-4S456Parcels_dseg_reformatted.csv').iterrows()]
-            
-        elif 'iPA' in parcellation:
-            # options are iPA_183, iPA_391, iPA_568. iPA_729
+        elif 'iPA' in parcellation: # options are iPA_183, iPA_391, iPA_568. iPA_729
             BHA2_path = absolute_data_path + '/BHA2/'
             genes_data = pd.read_csv(os.path.join(BHA2_path, parcellation, 'transcriptomics.csv'), index_col=0).T
             genes_list = genes_data.columns.tolist()
         
-        # Choose gene list
-        if 'iPA' in parcellation:
-            genes_list_abagen = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_400.txt", header=None)[0].tolist()
-            genes_list = list(set(genes_list).intersection(set(genes_list_abagen))) # drop last 3 genes to make token divisible
-        elif gene_list == '0.2' or gene_list == '1':
+        # Choose gene list for subsetting genes_data
+        if gene_list == '0.2' or gene_list == '1': # ~7.5k for 0.2, ~15k for 1
             if parcellation == 'S156':
                 genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_100.txt", header=None)[0].tolist()
             elif parcellation == 'S456':
                 genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_400.txt", header=None)[0].tolist()
             else:
                 genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_{parcellation[1:]}.txt", header=None)[0].tolist()
+        elif 'iPA' in parcellation:
+            genes_list_abagen = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_400.txt", header=None)[0].tolist() # broadest gene list
+            genes_list = list(set(genes_list).intersection(set(genes_list_abagen))) # drop last 3 genes to make token divisible
+        elif gene_list == 'richiardi2015': # 136 genes usually subset to ~105
+            genes_list = pd.read_csv('./data/enigma/gene_lists/richiardi2015.txt', header=None)[0].tolist()
+        elif gene_list == 'syngo': # ~1.5k genes
+            genes_list = pd.read_csv('./data/enigma/gene_lists/syngo.txt', header=None)[0].tolist()
         elif gene_list in ['brain', 'neuron', 'oligodendrocyte', 'synaptome', 'layers']:
             genes_list = abagen.fetch_gene_group(gene_list)
-        elif gene_list == 'richiardi2015':
-            genes_list = pd.read_csv('./data/enigma/gene_lists/richiardi2015.txt', header=None)[0].tolist()
-        elif gene_list == 'syngo':
-            genes_list = pd.read_csv('./data/enigma/gene_lists/syngo.txt', header=None)[0].tolist()
-        elif gene_list == 'all_abagen':  
+        elif gene_list == 'all_abagen':  # ~5.4k genes defined by Burt, Nat. Neuro. (2018)
             genes_list = set.union(
-                        set(abagen.fetch_gene_group('brain')),
-                        set(abagen.fetch_gene_group('neuron')), 
-                        set(abagen.fetch_gene_group('oligodendrocyte')),
-                        set(abagen.fetch_gene_group('synaptome')),
-                        set(abagen.fetch_gene_group('layers')))
-        elif gene_list == 'lake_shared':
+                        set(abagen.fetch_gene_group('brain')), # ~1.8k genes
+                        set(abagen.fetch_gene_group('neuron')), # ~2.3k genes
+                        set(abagen.fetch_gene_group('oligodendrocyte')), # 1.6k genes
+                        set(abagen.fetch_gene_group('synaptome')), # 1.7k genes
+                        set(abagen.fetch_gene_group('layers'))) # 45 genes
+        elif gene_list == 'lake_shared': # ~500 genes
             genes_list = pd.read_csv('./data/enigma/gene_lists/lake_shared.txt', header=None)[0].tolist()
-        
-
-        # Temporarily subset all sorting methods to ref genome for experiments
-        if gene_list != '1':
-            human_refgenome = pd.read_csv(absolute_data_path + '/human_refgenome/human_refgenome_ordered.csv')
-            ordered_genes = human_refgenome['gene_id'].tolist()
-            gene_order_dict = {gene: idx for idx, gene in enumerate(ordered_genes)}
-            valid_genes = [gene for gene in genes_list if gene in gene_order_dict and gene in genes_data.columns]
-        else: # Specifically for autoencoder style model
+    
+        # Default subset genes to reference genome or keep all
+        if gene_list == '1': # specifically for autoencoder style model
             if return_valid_genes:
                 return np.array(genes_data), genes_list
-            return np.array(genes_data)
-
-
-        if sort_genes == 'refgenome': # this may drop some genes if the gene list symbol does not directly match to the gene_id of the reference genome (ususally drops <5% of genes)
+            return np.array(genes_data)            
+        else:
             human_refgenome = pd.read_csv(absolute_data_path + '/human_refgenome/human_refgenome_ordered.csv')
             ordered_genes = human_refgenome['gene_id'].tolist()
             gene_order_dict = {gene: idx for idx, gene in enumerate(ordered_genes)}
-            # Filter and sort genes based on reference genome order
             valid_genes = [gene for gene in genes_list if gene in gene_order_dict and gene in genes_data.columns]
+
+        if sort_genes == 'refgenome':
+            # Resort genes data based on reference genome order
             valid_genes.sort(key=lambda x: gene_order_dict[x])
             genes_data = np.array(genes_data[valid_genes])
         elif sort_genes == 'expression':
@@ -171,7 +162,8 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             random_genes = np.random.permutation(valid_genes)
             genes_data = np.array(genes_data[random_genes])
             valid_genes = random_genes
-        elif 'kmeans' in sort_genes: # gene bin clusters based on contsrained k-means, options: 20bin_constrained_kmeans, 60bin_constrained_kmeans, 180bin_constrained_kmeans
+        elif 'kmeans' in sort_genes: 
+            # gene bin clusters based on contsrained k-means, options: 20bin_constrained_kmeans, 60bin_constrained_kmeans, 180bin_constrained_kmeans
             genes_list = pd.read_csv(f'./data/enigma/gene_lists/{sort_genes}.txt', header=None)[0].tolist()
             genes_data = np.array(genes_data[genes_list])
             valid_genes = genes_list
@@ -269,7 +261,7 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             else:
                 genes_data = np.vstack([genes_data[cortical_spin_idx], genes_data[subcortical_spin_idx+400]])
         elif null_model == 'random':
-            print('permuting gene expression')
+            print('Randomly permuting regional gene expression')
             rng = np.random.default_rng(random_seed)
             genes_data = rng.permutation(genes_data)
         
