@@ -449,6 +449,7 @@ def swap_batch_with_strong_edges(dataset, allowed_indices, batch_size, strong_th
 
     return batch_X, batch_y, batch_coords, batch_idx
 
+
 class RegionPairDataset(Dataset):
     def __init__(self, X, Y, coords, valid2true_mapping, dataset, parcellation, valid_genes):
         self.X = torch.tensor(X, dtype=torch.float32)

@@ -111,7 +111,13 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
                     predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
                 except:
                     predictions = model(batch_X).squeeze()
-                loss = criterion(predictions, batch_y)    
+                
+                # Try to pass additional args for SymmetricLoss, fallback to standard loss
+                try:
+                    loss = criterion(predictions, batch_y, model, batch_X, batch_coords, batch_idx)
+                except TypeError:
+                    loss = criterion(predictions, batch_y)
+                    
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
@@ -120,7 +126,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
                 predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
             except:
                 predictions = model(batch_X).squeeze()
-            loss = criterion(predictions, batch_y)
+            loss = criterion(predictions, batch_y)   
             loss.backward()
             optimizer.step()
         
