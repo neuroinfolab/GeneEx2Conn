@@ -145,6 +145,76 @@ class FlashAttentionBlock(nn.Module):
             x = self.ffn_norm(residual + x)
             return x
 
+
+class SymmetricLoss(nn.Module):
+    """
+    Loss function with symmetry regularization.
+    Encourages model predictions for (i,j) to be close to predictions for (j,i).
+    
+    Args:
+        base_criterion: Base loss function (e.g., nn.MSELoss())
+        lambda_sym: Weight for symmetry regularization term (default: 0.1)
+        
+    Example usage:
+        criterion = SymmetricLoss(nn.MSELoss(), lambda_sym=0.1)
+        loss = criterion(predictions, targets, model, batch_X, batch_coords, batch_idx)
+    """
+    def __init__(self, base_criterion, lambda_sym=0.1):
+        super().__init__()
+        self.base_criterion = base_criterion
+        self.lambda_sym = lambda_sym
+        
+    def forward(self, predictions, targets, model=None, batch_X=None, batch_coords=None, batch_idx=None, dataset=None):
+        """
+        Compute loss with optional symmetry regularization.
+        
+        Args:
+            predictions: Model predictions for current batch
+            targets: Ground truth targets
+            model: Model instance (required for symmetry loss)
+            batch_X: Input features (required for symmetry loss)
+            batch_coords: Coordinate features (required for symmetry loss)  
+            batch_idx: Batch indices (required for symmetry loss)
+            dataset: Dataset instance (required for computing symmetric index)
+        Returns:
+            Total loss (base loss + symmetry regularization)
+        """
+        # Base loss
+        base_loss = self.base_criterion(predictions, targets)
+        
+        # If no model or lambda is 0, return base loss only
+        if model is None or self.lambda_sym == 0 or batch_X is None:
+            return base_loss
+        
+        # Switch gene expression
+        num_genes = batch_X.shape[1] // 2
+        X_i, X_j = batch_X[:, :num_genes], batch_X[:, num_genes:]
+        symmetric_X = torch.cat([X_j, X_i], dim=1)
+        
+        # Switch coords
+        if batch_coords is not None:
+            coords_i, coords_j = batch_coords[:, :3], batch_coords[:, 3:]
+            symmetric_coords = torch.cat([coords_j, coords_i], dim=1)
+        else:
+            symmetric_coords = None
+        
+        # Symmetric indices
+        if batch_idx is not None:
+            symmetric_idx = batch_idx ^ 1 # see data_utils.expand_X_symmetric logic
+        else:
+            symmetric_idx = None
+        
+        if symmetric_coords is not None and symmetric_idx is not None:
+            symmetric_predictions = model(symmetric_X, symmetric_coords, symmetric_idx).squeeze()
+        else: # this case is for non-SMT models
+            symmetric_predictions = model(symmetric_X).squeeze()
+        
+        # Compute symmetry loss: penalize difference between pred(i,j) and pred(j,i)
+        symmetry_loss = torch.mean((predictions - symmetric_predictions) ** 2)
+        total_loss = base_loss + self.lambda_sym * symmetry_loss
+        
+        return total_loss
+
 # === CORE TRANSFORMER HELPER FUNCS === #
 def scaled_dot_product_attention_with_weights(query, key, value, dropout_p=0.0, is_causal=False, scale=None, apply_dropout=False):
     """Helper function to compute attention output and weights at inference"""

@@ -114,7 +114,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
                 
                 # Try to pass additional args for SymmetricLoss, fallback to standard loss
                 try:
-                    loss = criterion(predictions, batch_y, model, batch_X, batch_coords, batch_idx)
+                    loss = criterion(predictions, batch_y, model, batch_X, batch_coords, batch_idx, dataset)
                 except TypeError:
                     loss = criterion(predictions, batch_y)
                     

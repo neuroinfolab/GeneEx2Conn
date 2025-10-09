@@ -67,7 +67,7 @@ def make_symmetric(matrix):
     """
     return (matrix + matrix.T) / 2
 
-# DATA PREPROC
+# DATA PREPROCESSING
 def expand_X_symmetric(X):
     """
     Expands the X matrix symmetrically by combining features from pairs of regions.

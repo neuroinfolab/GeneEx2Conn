@@ -136,6 +136,9 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
                         set(abagen.fetch_gene_group('layers'))) # 45 genes
         elif gene_list == 'lake_shared': # ~500 genes
             genes_list = pd.read_csv('./data/enigma/gene_lists/lake_shared.txt', header=None)[0].tolist()
+        elif 'var' in gene_list: # ~250 most variable genes of 0.2 across brain
+            var_num = gene_list.split('_')[0]
+            genes_list = pd.read_csv(f'./data/enigma/gene_lists/{var_num}_var_genes.txt', header=None)[0].tolist()
     
         # Default subset genes to reference genome or keep all
         if gene_list == '1': # specifically for autoencoder style model

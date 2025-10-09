@@ -1,44 +1,3 @@
-"""
-Bidirectional Cross-Attention Gene2Vec Model for Symmetric Edge Prediction
-
-This module implements a single-gene resolution model that uses:
-1. Gene2Vec embeddings (200D) for semantic gene representations
-2. Expression value binning to discretize expression levels
-3. Bidirectional cross-attention mechanism for symmetric connectivity prediction
-4. FlashAttention for efficient computation with asymmetric value dimensions
-
-Architecture:
------------
-This model represents each ROI as a sequence of gene tokens, with each token 
-constructed from Gene2Vec embeddings and expression-based binning. To predict 
-the symmetric connectivity between a pair of regions, the model applies 
-cross-attention in both directions:
-
-For each region pair (i, j):
-    1. Each gene's expression value is binned (default: 5 bins in [0,1])
-    2. Bin index is one-hot encoded and projected to 200D
-    3. Projected bin embedding + Gene2Vec embedding (element-wise addition)
-    4. Combined embeddings projected to d_model space (default: 128D)
-    
-    5. First pass: Region i attends to region j
-       - Uses independently learned W_q, W_k, W_v projections
-       - Value dimension is 2*d_model (double the query/key dimension)
-       - Applied over multiple layers
-       
-    6. Second pass: Region j attends to region i
-       - Uses separate independently learned W_q', W_k', W_v' projections
-       - Value dimension is 2*d_model (double the query/key dimension)
-       - Applied over multiple layers (separate from first direction)
-       
-    7. Pool outputs from both directions (mean/attention/cls pooling)
-    8. Concatenate pooled representations to form joint edge embedding (2*d_model)
-    9. Pass concatenated embedding through MLP to predict single scalar connectivity
-
-This architecture balances directional expressivity in attention while maintaining 
-symmetric behavior at the prediction level, enabling the model to learn fine-grained 
-gene-wise interactions between ROIs.
-"""
-
 from env.imports import *
 from models.train_val import train_model
 from models.smt_utils import *
@@ -53,94 +12,12 @@ from torch.cuda.amp import autocast
 from transformers import get_cosine_schedule_with_warmup
 from torch.utils.data import DataLoader, Subset
 
-
-class SymmetricLoss(nn.Module):
+class CrossAttentionBlock(nn.Module):
     """
-    Loss function with symmetry regularization.
-    
-    Encourages model predictions for (i,j) to be close to predictions for (j,i).
-    Leverages the fact that swapping region i and j features gives the symmetric pair.
-    
-    Args:
-        base_criterion: Base loss function (e.g., nn.MSELoss())
-        lambda_sym: Weight for symmetry regularization term (default: 0.1)
-        
-    Example usage:
-        criterion = SymmetricLoss(nn.MSELoss(), lambda_sym=0.1)
-        loss = criterion(predictions, targets, model, batch_X, batch_coords, batch_idx)
-    """
-    def __init__(self, base_criterion, lambda_sym=0.1):
-        super().__init__()
-        self.base_criterion = base_criterion
-        self.lambda_sym = lambda_sym
-        
-    def forward(self, predictions, targets, model=None, batch_X=None, batch_coords=None, batch_idx=None):
-        """
-        Compute loss with optional symmetry regularization.
-        
-        Args:
-            predictions: Model predictions for current batch
-            targets: Ground truth targets
-            model: Model instance (required for symmetry loss)
-            batch_X: Input features (required for symmetry loss)
-            batch_coords: Coordinate features (required for symmetry loss)  
-            batch_idx: Batch indices (required for symmetry loss)
-            
-        Returns:
-            Total loss (base loss + symmetry regularization)
-        """
-        # Base loss
-        base_loss = self.base_criterion(predictions, targets)
-        
-        # If no model or lambda is 0, return base loss only
-        if model is None or self.lambda_sym == 0 or batch_X is None:
-            return base_loss
-        
-        # Leverage the fact that (i,j) and (j,i) differ only by swapped features
-        # Split batch_X into two halves and swap them to get symmetric pairs
-        num_genes = batch_X.shape[1] // 2
-        X_i, X_j = batch_X[:, :num_genes], batch_X[:, num_genes:]
-        symmetric_X = torch.cat([X_j, X_i], dim=1)
-        
-        # Same for coordinates if provided
-        if batch_coords is not None:
-            coords_i, coords_j = batch_coords[:, :3], batch_coords[:, 3:]
-            symmetric_coords = torch.cat([coords_j, coords_i], dim=1)
-        else:
-            symmetric_coords = None
-        
-        # Get symmetric indices (flip even/odd: idx XOR 1)
-        if batch_idx is not None:
-            symmetric_idx = batch_idx ^ 1
-        else:
-            symmetric_idx = None
-        
-        # Forward pass for symmetric pairs (with gradients)
-        try:
-            if symmetric_coords is not None and symmetric_idx is not None:
-                symmetric_predictions = model(symmetric_X, symmetric_coords, symmetric_idx).squeeze()
-            else:
-                symmetric_predictions = model(symmetric_X).squeeze()
-        except:
-            # Fallback for models without coords/idx
-            symmetric_predictions = model(symmetric_X).squeeze()
-        
-        # Compute symmetry loss: penalize difference between pred(i,j) and pred(j,i)
-        symmetry_loss = torch.mean((predictions - symmetric_predictions) ** 2)
-        
-        # Total loss
-        total_loss = base_loss + self.lambda_sym * symmetry_loss
-        
-        return total_loss
-
-class BidirectionalCrossAttentionBlock(nn.Module):
-    """
-    Bidirectional Cross-Attention block using FlashAttention.
+    Cross-Attention block using FlashAttention.
     
     This block performs cross-attention with standard dimensions:
-    - Query, Key and Value projections all map to d_model
-    
-    Uses FlashAttention for efficient attention computation.
+    - Queries, Keys, Values map to d_model
     """
     def __init__(self, d_model, nhead, dropout=0.1, use_alibi=False):
         super().__init__()
@@ -148,22 +25,17 @@ class BidirectionalCrossAttentionBlock(nn.Module):
         self.head_dim = d_model // nhead
         self.d_model = d_model
         
-        # Projections for queries, keys, values (all d_model)
         self.q_proj = nn.Linear(d_model, d_model)
         self.k_proj = nn.Linear(d_model, d_model)
         self.v_proj = nn.Linear(d_model, d_model)
         
-        # Output projection 
-        self.o_proj = nn.Linear(d_model, d_model)
-        
         self.attn_dropout = nn.Dropout(dropout)
         self.attn_norm = nn.LayerNorm(d_model)
-        
-        # Feed-forward network
+    
         self.ffn = nn.Sequential(
-            nn.Linear(d_model, 4 * d_model),
+            nn.Linear(d_model, 2 * d_model),
             nn.ReLU(),
-            nn.Linear(4 * d_model, d_model),
+            nn.Linear(2 * d_model, d_model),
             nn.Dropout(dropout)
         )
         self.ffn_norm = nn.LayerNorm(d_model)
@@ -177,11 +49,12 @@ class BidirectionalCrossAttentionBlock(nn.Module):
         """Split heads for queries, keys and values"""
         return x.view(x.size(0), x.size(1), self.nhead, self.head_dim)
     
-    def forward(self, queries, keys_values):
+    def forward(self, queries, keys, values):
         """
         Args:
             queries: (B, seq_len_q, d_model) - query tokens
-            keys_values: (B, seq_len_kv, d_model) - key/value tokens
+            keys: (B, seq_len_kv, d_model) - key tokens
+            values: (B, seq_len_kv, d_model) - value tokens
         
         Returns:
             output: (B, seq_len_q, d_model) - attended output
@@ -191,14 +64,14 @@ class BidirectionalCrossAttentionBlock(nn.Module):
             
             # Project queries, keys, and values
             q = self.q_proj(queries)  # (B, seq_len_q, d_model)
-            k = self.k_proj(keys_values)  # (B, seq_len_kv, d_model)
-            v = self.v_proj(keys_values)  # (B, seq_len_kv, d_model)
+            k = self.k_proj(keys)  # (B, seq_len_kv, d_model)
+            v = self.v_proj(values)  # (B, seq_len_kv, d_model*2)
             
             # Reshape for multi-head attention
             # flash_attn_func expects (B, seqlen, nhead, head_dim) format
             q = self.split_heads(q)  # (B, seq_len_q, nhead, head_dim)
             k = self.split_heads(k)  # (B, seq_len_kv, nhead, head_dim)
-            v = self.split_heads(v)  # (B, seq_len_kv, nhead, head_dim)
+            v = self.split_heads(v)  # (B, seq_len_kv, nhead, head_dim*2)
             
             # Flash attention (cross-attention)
             attn_output = flash_attn_func(
@@ -207,12 +80,8 @@ class BidirectionalCrossAttentionBlock(nn.Module):
                 causal=False,
             )  # (B, seq_len_q, nhead, head_dim)
             
-            # Reshape back: (B, seq_len_q, d_model)
-            attn_output = attn_output.reshape(attn_output.size(0), attn_output.size(1), self.d_model)
-            
-            # Project output
-            attn_output = self.o_proj(attn_output)  # (B, seq_len_q, d_model)
-            
+            # Reshape back: (B, seq_len_q, d_model*2)
+            attn_output = attn_output.reshape(attn_output.size(0), attn_output.size(1), self.d_model)        
             # Apply dropout and residual
             attn_output = self.attn_dropout(attn_output)
             x = self.attn_norm(residual + attn_output)
@@ -224,24 +93,15 @@ class BidirectionalCrossAttentionBlock(nn.Module):
             
             return x
 
-class CrossAttentionGene2VecEncoder(nn.Module):
+class CrossAttentionGeneVecEncoder(nn.Module):
     """
-    Bidirectional Cross-Attention encoder with Gene2Vec embeddings and value binning.
+    Cross-Attention encoder with gene vector lookup and value binning.
     
     Each gene is treated as a token with:
-    - Gene2Vec semantic embedding (200D)
+    - Gene vector lookup (gene2vec or coexpression vector) ~200D
     - Expression bin embedding (learned projection from one-hot bin)
     - Combined via element-wise addition
-    
-    Architecture:
-    - Single shared cross-attention encoder with q, k, v learned separately
-    - Value dimension is 2*d_model (double the query/key dimension)
-    - Apply encoder in both directions:
-      * Region i attends to region j (first pass)
-      * Region j attends to region i (second pass, same weights)
-    - Pool outputs from both directions
-    - Concatenate pooled representations to form joint edge embedding (2*d_model)
-    
+
     Args:
         valid_genes: List of valid gene names
         expression_bins: Number of discrete expression bins (default: 5)
@@ -255,130 +115,137 @@ class CrossAttentionGene2VecEncoder(nn.Module):
         device: Device to place model on
     """
     def __init__(self, valid_genes, expression_bins=5, d_model=128, nhead=4, num_layers=4, 
-                 dropout=0.1, use_alibi=False, cls_init='random', pooling_mode='mean', device=None):
+                 dropout=0.1, use_alibi=False, cls_init='random', pooling_mode='mean', genevec_type='gene2vec', device=None):
         super().__init__()
         self.d_model = d_model
         self.valid_genes = valid_genes
         self.expression_bins = expression_bins
         self.cls_init = cls_init
         self.pooling_mode = pooling_mode
+        self.genevec_type = genevec_type
         self.device = device
-        self.gene2vec_dim = 200
         
-        # Load Gene2Vec embeddings
-        self.gene2vec_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn/data/gene_emb/gene2vec_dim_200_iter_9.txt'
-        self._load_gene2vec_embeddings()
+        self._load_genevec_embeddings(genevec_type)
         
-        # Expression bin embedding: project one-hot bin to gene2vec_dim (200)
-        self.bin_projection = nn.Linear(expression_bins, self.gene2vec_dim)
+        # project genevec to d_model
+        self.genevec_projection = nn.Linear(self.genevec_dim, d_model)
         
-        # Project combined embedding (gene2vec + bin) to d_model
-        self.to_d_model = nn.Linear(self.gene2vec_dim, d_model)
-        
-        # CLS token initialization (optional, for pooling_mode='cls')
+        # project one-hot bin to d_model
+        # learnable embedding for discrete expression bins - more canonical approach
+        self.bin_embedding = nn.Embedding(expression_bins, d_model)
+        #self.bin_projection = nn.Linear(expression_bins, d_model)
+            
         if cls_init == 'random':
             # Random initialization with 6 values, then project to d_model
             self.cls_token_proj = nn.Linear(6, d_model)
-            # Initialize with normal distribution
             self.cls_token_init = nn.Parameter(torch.randn(6))
             nn.init.normal_(self.cls_token_init, mean=0.0, std=0.02)
         elif cls_init == 'spatial':
-            # Coordinate-based: 3 coords from each region (6 total)
-            self.cls_token_proj = nn.Linear(6, d_model)
-        else:
-            raise ValueError(f"Unknown cls_init: {cls_init}")
-        
-        # Shared cross-attention layers (used for both directions)
+            self.cls_token_proj = nn.Linear(6, d_model)        
+    
         self.cross_attn_layers = nn.ModuleList([
-            BidirectionalCrossAttentionBlock(d_model, nhead, dropout, use_alibi=use_alibi)
+            CrossAttentionBlock(d_model, nhead, dropout, use_alibi=use_alibi)
             for _ in range(num_layers)
         ])
         
-        # Pooling layers (if attention pooling is used)
         if self.pooling_mode == 'attention':
             self.attention_pooling = AttentionPooling(d_model, hidden_dim=32)
-        elif self.pooling_mode == 'linear': # simple linear combination of all tokens to d_model 
-            self.linear_proj = nn.Linear(len(self.shared_genes), d_model)
         
-    def _load_gene2vec_embeddings(self):
-        """Load Gene2Vec embeddings and create lookup table aligned with valid_genes"""
-        # Load Gene2Vec dataframe
-        gene2vec_df = pd.read_csv(self.gene2vec_path, sep='\s+', header=None, index_col=0)
+    def _load_genevec_embeddings(self, genevec_type='gene2vec'):
+        """Load gene vector embeddings and create lookup table aligned with valid_genes
+        Args:
+            type: 'gene2vec' or 'coexpression'
+        """
+        if genevec_type == 'gene2vec':
+            # Load Gene2Vec dataframe
+            self.gene2vec_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn/data/gene_emb/gene2vec_dim_200_iter_9.txt'
+            gene2vec_df = pd.read_csv(self.gene2vec_path, sep='\s+', header=None, index_col=0)
+            
+            # Find intersection between Gene2Vec genes and valid genes
+            gene2vec_genes = set(gene2vec_df.index.tolist())
+            valid_genes_set = set(self.valid_genes)
+            shared_genes = list(gene2vec_genes.intersection(valid_genes_set))
         
-        # Find intersection between Gene2Vec genes and valid genes
-        gene2vec_genes = set(gene2vec_df.index.tolist())
-        valid_genes_set = set(self.valid_genes)
-        shared_genes = list(gene2vec_genes.intersection(valid_genes_set))
-        
-        # Get indices of shared genes in the original valid_genes list
-        self.shared_gene_indices = [self.valid_genes.index(gene) for gene in shared_genes if gene in self.valid_genes]
-        self.shared_genes = [self.valid_genes[i] for i in self.shared_gene_indices]
-        
-        # Create Gene2Vec lookup matrix in the order of shared genes
-        gene2vec_matrix = np.zeros((len(self.shared_genes), 200))
-        for i, gene in enumerate(self.shared_genes):
-            if gene in gene2vec_df.index:
-                gene2vec_matrix[i] = gene2vec_df.loc[gene].values
+            # Get indices of shared genes in the original valid_genes list
+            # indices of valid_genes that can be kept
+            self.shared_gene_indices = [self.valid_genes.index(gene) for gene in shared_genes if gene in self.valid_genes]
+            # list of shared genes to use to create the lookup matrix
+            self.shared_genes = [self.valid_genes[i] for i in self.shared_gene_indices]
+            
+            # Create Gene2Vec lookup matrix in the order of shared genes
+            gene2vec_matrix = np.zeros((len(self.shared_genes), 200))
+            for i, gene in enumerate(self.shared_genes):
+                if gene in gene2vec_df.index: # use the gene name from shared genes to create the lookup matrix
+                    gene2vec_matrix[i] = gene2vec_df.loc[gene].values
+            print(f"Loaded Gene2Vec embeddings: {len(self.shared_genes)} genes with 200-dimensional embeddings")
+            print(f"Gene overlap: {len(self.shared_genes)}/{len(self.valid_genes)} valid genes have Gene2Vec embeddings")
+            
+            genevec_matrix = gene2vec_matrix
+            self.genevec_dim = genevec_matrix.shape[1]
+        elif genevec_type == 'one_hot':
+            # Create one-hot encoding matrix for valid genes
+            num_genes = len(self.valid_genes)
+            one_hot_matrix = np.eye(num_genes)
+            
+            # Use all valid genes since no external embedding lookup needed
+            self.shared_genes = self.valid_genes
+            self.shared_gene_indices = list(range(num_genes))
+            
+            genevec_matrix = one_hot_matrix
+            self.genevec_dim = num_genes
+            
+            print(f"Created one-hot embeddings: {num_genes} genes with {num_genes}-dimensional embeddings")
+            print("Using all valid genes for one-hot encoding")
+        elif genevec_type == 'coexpression':
+            # Load coexpression vector dataframe
+            # can toggle between cov and corr in the path
+            self.coexpression_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn/data/gene_emb/genevec_cov.txt'
+            coexpression_df = pd.read_csv(self.coexpression_path, sep=' ', skiprows=1, index_col=0)
+            
+            # Use all valid genes since coexpression matrix contains all genes
+            self.shared_genes = self.valid_genes
+            self.shared_gene_indices = list(range(len(self.valid_genes)))
+            
+            # Create coexpression lookup matrix in order of valid genes
+            # Each gene has correlation vector of length 7380 (from 0.2 gene list)
+            coexpression_matrix = np.zeros((len(self.valid_genes), 7380))
+            for i, gene in enumerate(self.valid_genes):
+                if gene in coexpression_df.index:
+                    coexpression_matrix[i] = coexpression_df.loc[gene].values
+                    
+            genevec_matrix = coexpression_matrix
+            self.genevec_dim = 7380  # Fixed dimension for coexpression vectors
+            
+            print(f"Loaded coexpression embeddings: {len(self.valid_genes)} genes with 7380-dimensional embeddings")
+            print("Using all valid genes for coexpression embeddings")
         
         # Store as buffer (not trainable)
-        self.register_buffer('gene2vec_embeddings', torch.FloatTensor(gene2vec_matrix))
-        
-        print(f"Loaded Gene2Vec embeddings: {len(self.shared_genes)} genes with 200-dimensional embeddings")
-        print(f"Gene overlap: {len(self.shared_genes)}/{len(self.valid_genes)} valid genes have Gene2Vec embeddings")
-    
-    def bin_expression(self, expression):
-        """
-        Bin expression values into discrete bins and return one-hot encoding
-        
-        Args:
-            expression: (B, num_shared_genes) - expression values
-        
-        Returns:
-            one_hot: (B, num_shared_genes, expression_bins) - one-hot encoded bins
-        """
-        # Assume expression is normalized to [0, 1]
-        # Clamp to ensure within range
-        expression = torch.clamp(expression, 0.0, 1.0)
-        
-        # Determine bin indices (0 to expression_bins-1)
-        bin_indices = (expression * self.expression_bins).long()
-        bin_indices = torch.clamp(bin_indices, 0, self.expression_bins - 1)
-        
-        # One-hot encode
-        one_hot = F.one_hot(bin_indices, num_classes=self.expression_bins).float()
-        
-        return one_hot
-    
+        self.register_buffer('genevec_embeddings', torch.FloatTensor(genevec_matrix))
+
     def encode_region(self, gene_expression):
         """
         Encode a single region's gene expression
-        
-        Args:
-            gene_expression: (B, num_genes) - gene expression values
-        
-        Returns:
-            embeddings: (B, num_shared_genes, d_model) - encoded gene tokens
         """
         B, num_genes = gene_expression.shape
         
-        # Subset to shared genes
+        # Subset to genes with genevec embeddings
         gene_expression_subset = gene_expression[:, self.shared_gene_indices]  # (B, num_shared_genes)
         
+        # Get genevec embeddings, expand to batch, and project to d_model
+        genevec_emb = self.genevec_embeddings.unsqueeze(0).expand(B, -1, -1)
+        genevec_emb = self.genevec_projection(genevec_emb)  # (B, num_shared_genes, d_model)
+        
         # Bin expression values
-        binned_expr = self.bin_expression(gene_expression_subset)  # (B, num_shared_genes, expression_bins)
+        # binned_expr = self.bin_expression(gene_expression_subset)  # (B, num_shared_genes, expression_bins)
+        # bin_emb = self.bin_projection(binned_expr)  # (B, num_shared_genes, d_model)
         
-        # Project bins to gene2vec_dim
-        bin_embeddings = self.bin_projection(binned_expr)  # (B, num_shared_genes, 200)
-        
-        # Get gene2vec embeddings and expand to batch
-        gene2vec_emb = self.gene2vec_embeddings.unsqueeze(0).expand(B, -1, -1)  # (B, num_shared_genes, 200)
+        bin_indices = (gene_expression_subset * self.expression_bins).long()
+        bin_indices = torch.clamp(bin_indices, 0, self.expression_bins - 1)
+        bin_emb = self.bin_embedding(bin_indices)
         
         # Element-wise addition
-        combined_emb = bin_embeddings + gene2vec_emb  # (B, num_shared_genes, 200)
-        
-        # Project to d_model
-        embeddings = self.to_d_model(combined_emb)  # (B, num_shared_genes, d_model)
-        
+        embeddings = genevec_emb + bin_emb  # (B, num_shared_genes, d_model)
+    
         return embeddings
     
     def create_cls_token(self, coords_i, coords_j, batch_size):
@@ -394,11 +261,9 @@ class CrossAttentionGene2VecEncoder(nn.Module):
             cls_token: (B, 1, d_model)
         """
         if self.cls_init == 'random':
-            # Use random initialization, broadcast to batch
             cls_init = self.cls_token_init.unsqueeze(0).expand(batch_size, -1)  # (B, 6)
             cls_token = self.cls_token_proj(cls_init).unsqueeze(1)  # (B, 1, d_model)
         elif self.cls_init == 'spatial':
-            # Concatenate coordinates
             coords_combined = torch.cat([coords_i, coords_j], dim=-1)  # (B, 6)
             # Scale coordinates to match random init range (normalize then scale to 0.02 std)
             coords_mean = coords_combined.mean(dim=0, keepdim=True)
@@ -406,18 +271,11 @@ class CrossAttentionGene2VecEncoder(nn.Module):
             coords_normalized = (coords_combined - coords_mean) / coords_std
             coords_scaled = coords_normalized * 0.02
             cls_token = self.cls_token_proj(coords_scaled).unsqueeze(1)  # (B, 1, d_model)
-        
         return cls_token
     
     def forward(self, gene_expr_i, gene_expr_j, coords_i, coords_j):
         """
-        Forward pass with bidirectional cross-attention.
-        
-        Performs two passes using the same shared cross-attention encoder:
-        1. Region i attends to region j
-        2. Region j attends to region i
-        
-        Then pools and concatenates the outputs from both directions.
+        Forward pass with cross-attention.
         
         Args:
             gene_expr_i: (B, num_genes) - region i expression
@@ -426,7 +284,7 @@ class CrossAttentionGene2VecEncoder(nn.Module):
             coords_j: (B, 3) - region j coordinates
         
         Returns:
-            output: (B, 2*d_model) - Concatenated pooled representations from both directions
+            output: (B, d_model) - pooled representation
         """
         B = gene_expr_i.size(0)
         
@@ -438,86 +296,26 @@ class CrossAttentionGene2VecEncoder(nn.Module):
         if self.pooling_mode == 'cls':
             cls_token = self.create_cls_token(coords_i, coords_j, B)  # (B, 1, d_model)
             # Concatenate CLS with embeddings
-            embeddings_i_with_cls = torch.cat([cls_token, embeddings_i], dim=1)  # (B, num_shared_genes + 1, d_model)
-            embeddings_j_with_cls = torch.cat([cls_token, embeddings_j], dim=1)  # (B, num_shared_genes + 1, d_model)
-        else:
-            # No CLS token needed for mean/attention pooling
-            embeddings_i_with_cls = embeddings_i  # (B, num_shared_genes, d_model)
-            embeddings_j_with_cls = embeddings_j  # (B, num_shared_genes, d_model)
+            embeddings_i = torch.cat([cls_token, embeddings_i], dim=1)  # (B, num_shared_genes + 1, d_model)
+            embeddings_j = torch.cat([cls_token, embeddings_j], dim=1)  # (B, num_shared_genes + 1, d_model)
         
-        # First direction: Region i attends to region j
-        # Pass region i embeddings as queries, region j embeddings as keys/values
-        attn_output_i = embeddings_i_with_cls
         for layer in self.cross_attn_layers:
-            attn_output_i = layer(attn_output_i, embeddings_j)  # (B, seq_len, d_model)
+            # Q, K, V
+            attn_output = layer(embeddings_i, embeddings_j, embeddings_j)  # (B, seq_len, d_model)
         
-        # Second direction: Region j attends to region i
-        # Pass region j embeddings as queries, region i embeddings as keys/values
-        attn_output_j = embeddings_j_with_cls
-        for layer in self.cross_attn_layers:
-            attn_output_j = layer(attn_output_j, embeddings_i)  # (B, seq_len, d_model)
-        
-        # Pool the outputs from both directions
-        if self.pooling_mode == 'cls':
-            # Use only CLS token (first position)
-            pooled_i = attn_output_i[:, 0, :]  # (B, d_model)
-            pooled_j = attn_output_j[:, 0, :]  # (B, d_model)
-        elif self.pooling_mode == 'mean':
-            # Mean pool over all tokens
-            pooled_i = attn_output_i.mean(dim=1)  # (B, d_model)
-            pooled_j = attn_output_j.mean(dim=1)  # (B, d_model)
-        elif self.pooling_mode == 'attention':
-            # Attention pooling over all tokens
-            pooled_i = self.attention_pooling(attn_output_i)  # (B, d_model)
-            pooled_j = self.attention_pooling(attn_output_j)  # (B, d_model)
-        elif self.pooling_mode == 'linear':
-            # Linear pooling over all tokens
-            pooled_i = self.linear_proj(attn_output_i.transpose(1, 2))  # (B, d_model)
-            pooled_j = self.linear_proj(attn_output_j.transpose(1, 2))  # (B, d_model)
-        else:
-            raise ValueError(f"Unknown pooling_mode: {self.pooling_mode}")
-        
-        # Concatenate both directions to form joint edge representation
-        output = torch.cat([pooled_i, pooled_j], dim=-1)  # (B, 2*d_model)
-        
-        return output
+        # Pool the output
+        if self.pooling_mode == 'cls': # Use only CLS token (first position
+            # this technically only captures information about how CLS from region i attends to region j
+            pooled = attn_output[:, 0, :]  # (B, d_model)
+        elif self.pooling_mode == 'mean': # Mean pool over all attn_output tokens
+            pooled = attn_output.mean(dim=1)  # (B, d_model)
+        elif self.pooling_mode == 'attention': # Attention pooling over all attn_output tokens
+            pooled = self.attention_pooling(attn_output)  # (B, d_model)
+        return pooled
 
-class CrossAttentionGene2VecModel(BaseTransformerModel):
+class CrossAttentionGeneVecModel(BaseTransformerModel):
     """
-    Bidirectional Cross-Attention Gene2Vec Model for symmetric edge prediction.
-    
-    Uses single-gene resolution with Gene2Vec embeddings, value binning, and 
-    bidirectional cross-attention where:
-    - Region i attends to region j (first pass)
-    - Region j attends to region i (second pass, same weights)
-    
-    The outputs from both directions are pooled and concatenated to form a joint
-    edge-level embedding (2*d_model), which is then passed to an MLP for prediction.
-    
-    Value embeddings have 2*d_model dimension while queries and keys use d_model.
-    
-    Args:
-        input_dim: Total input dimension (2 * num_genes)
-        region_pair_dataset: Dataset containing gene information
-        expression_bins: Number of discrete expression bins (default: 5)
-        d_model: Transformer embedding dimension (default: 128)
-        nhead: Number of attention heads (default: 4)
-        num_layers: Number of cross-attention layers (default: 4)
-        deep_hidden_dims: MLP head hidden dimensions (default: [512, 256, 128])
-        cls_init: CLS token initialization - 'random' or 'spatial' (default: 'random')
-        pooling_mode: Pooling method - 'mean', 'attention', or 'cls' (default: 'mean')
-        use_alibi: Use ALiBi positional biases (default: False)
-        transformer_dropout: Dropout in attention blocks (default: 0.1)
-        dropout_rate: Dropout in MLP head (default: 0.1)
-        learning_rate: Learning rate (default: 0.001)
-        weight_decay: Weight decay (default: 0.0)
-        batch_size: Training batch size (default: 512)
-        epochs: Number of training epochs (default: 100)
-        aug_prob: Data augmentation probability (default: 0.0)
-        num_workers: DataLoader workers (default: 2)
-        prefetch_factor: DataLoader prefetch factor (default: 2)
-        cosine_lr: Use cosine learning rate schedule (default: False)
-        lambda_sym: Weight for symmetry regularization (default: 0.1)
+    Cross-Attention GeneVec Model for symmetric edge prediction.
     """
     def __init__(self, input_dim, region_pair_dataset, 
                  expression_bins=5, d_model=128, nhead=4, num_layers=4, 
@@ -525,7 +323,7 @@ class CrossAttentionGene2VecModel(BaseTransformerModel):
                  use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, 
                  learning_rate=0.001, weight_decay=0.0, batch_size=512, epochs=100, 
                  aug_prob=0.0, num_workers=2, prefetch_factor=2, cosine_lr=False, aug_style='linear_decay',
-                 lambda_sym=0.1):
+                 lambda_sym=0.1, genevec_type='gene2vec'):
         
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, 
                         num_workers, prefetch_factor, d_model, nhead, num_layers, 
@@ -539,7 +337,7 @@ class CrossAttentionGene2VecModel(BaseTransformerModel):
         self.cosine_lr = cosine_lr
         self.valid_genes = region_pair_dataset.valid_genes
         self.lambda_sym = lambda_sym
-        # self.include_coords = True
+        self.patience = 50
 
         # Setup symmetric loss if lambda_sym > 0
         if self.lambda_sym > 0:
@@ -547,7 +345,7 @@ class CrossAttentionGene2VecModel(BaseTransformerModel):
             print(f"Using SymmetricLoss with lambda_sym={self.lambda_sym}")
         
         # Bidirectional cross-attention encoder
-        self.encoder = CrossAttentionGene2VecEncoder(
+        self.encoder = CrossAttentionGeneVecEncoder(
             valid_genes=self.valid_genes,
             expression_bins=expression_bins,
             d_model=d_model,
@@ -557,26 +355,22 @@ class CrossAttentionGene2VecModel(BaseTransformerModel):
             use_alibi=use_alibi,
             cls_init=cls_init,
             pooling_mode=pooling_mode,
+            genevec_type=genevec_type,
             device=self.device
         )
         self.encoder = torch.compile(self.encoder)
         
         # MLP prediction head
-        # NOTE: Input dimension is 2*d_model because we concatenate both directions
-        prev_dim = 2 * d_model
+        prev_dim = d_model
         self.deep_layers, self.output_layer = self._set_mlp_head(
             prev_dim=prev_dim,
             deep_hidden_dims=deep_hidden_dims,
-            dropout_rate=dropout_rate
-        )
+            dropout_rate=dropout_rate)
         
         num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
-        print(f"Number of learnable parameters in Bidirectional CrossAttentionGene2Vec model: {num_params}")
-        print(f"Number of genes after Gene2Vec intersection: {len(self.encoder.shared_gene_indices)}")
+        print(f"Number of learnable parameters in CrossAttentionGeneVec model: {num_params}")
         print(f"Expression bins: {expression_bins}")
         print(f"CLS token initialization: {cls_init}")
-        print(f"Pooling mode: {pooling_mode}")
-        print(f"Value dimension: {2 * d_model} (2x query/key d_model={d_model})")
         
         self._setup_optimizer_scheduler(learning_rate, weight_decay, use_cosine=cosine_lr)
     
@@ -585,8 +379,8 @@ class CrossAttentionGene2VecModel(BaseTransformerModel):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)  # Each: (B, num_genes)
         coords_i, coords_j = torch.chunk(coords, chunks=2, dim=1)  # Each: (B, 3)
         
-        # Encode with bidirectional cross-attention
-        pooled_output = self.encoder(x_i, x_j, coords_i, coords_j)  # (B, 2*d_model)
+        # Encode with cross-attention
+        pooled_output = self.encoder(x_i, x_j, coords_i, coords_j)  # (B, d_model)
         
         # Predict connectivity via MLP head
         y_pred = self.output_layer(self.deep_layers(pooled_output))
@@ -604,7 +398,6 @@ class CrossAttentionGene2VecModel(BaseTransformerModel):
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, 
                                 pin_memory=True, num_workers=self.num_workers, 
                                 prefetch_factor=self.prefetch_factor)
-        self.patience = 50
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, 
                           self.optimizer, self.patience, scheduler=None, 
                           train_scheduler=self.scheduler if self.cosine_lr else None, 

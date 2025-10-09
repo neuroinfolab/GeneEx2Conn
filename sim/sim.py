@@ -29,7 +29,7 @@ from models.smt_advanced import SharedSelfAttentionAEModel
 from models.smt_advanced import SharedSelfAttentionCelltypeModel
 from models.smt_advanced import SharedSelfAttentionGeneformerModel
 from models.smt_advanced import SharedSelfAttentionGene2VecModel
-from models.smt_cross import CrossAttentionGene2VecModel #, CrossAttentionModel
+from models.smt_cross import CrossAttentionGeneVecModel #, CrossAttentionModel
 
 MODEL_CLASSES = {
     'cge': CGEModel,
@@ -56,7 +56,7 @@ MODEL_CLASSES = {
     'shared_transformer_geneformer': SharedSelfAttentionGeneformerModel,
     'shared_transformer_gene2vec': SharedSelfAttentionGene2VecModel,
     #'cross_attention': CrossAttentionModel,
-    'cross_attention_gene2vec': CrossAttentionGene2VecModel
+    'cross_attention_genevec': CrossAttentionGeneVecModel
 }
 
 from models.metrics.eval import (
@@ -307,7 +307,7 @@ class Simulation:
         ModelClass = MODEL_CLASSES[self.model_type]
         if 'pls' in self.model_type or 'pca' in self.model_type:
             best_model = ModelClass(**best_config, train_indices=train_indices, test_indices=test_indices, region_pair_dataset=self.region_pair_dataset).to(device)   
-        elif 'celltype' in self.model_type or 'gene2vec' in self.model_type:
+        elif 'celltype' in self.model_type or 'genevec' in self.model_type:
             best_model = ModelClass(**best_config, region_pair_dataset=self.region_pair_dataset).to(device)
         else:
             best_model = ModelClass(**best_config).to(device)
