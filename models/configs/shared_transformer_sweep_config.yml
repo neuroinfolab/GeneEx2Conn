@@ -12,7 +12,7 @@ parameters:
   d_model:
     values: [64, 128]
   encoder_output_dim:
-    values: [10]
+    values: [10, 8, 5, 3, 1]
   use_alibi:
     values: [True, False]
   nhead:
@@ -52,7 +52,7 @@ best_parameters:
   d_model:
     values: [128]
   encoder_output_dim:
-    values: [10]
+    values: [1]
   use_alibi:
     values: [True]
   nhead:
@@ -73,7 +73,7 @@ best_parameters:
   batch_size:
     values: [512] # usually 1024 but 512 for swap 
   aug_prob:
-    values: [0.1]
+    values: [0.3]
   aug_style:
     values: ['curriculum_swap_constant']
   epochs:

@@ -50,7 +50,7 @@ best_parameters:
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [60]
+    values: [20]
   d_model:
     values: [128]
   encoder_output_dim:
@@ -71,7 +71,7 @@ best_parameters:
   dropout_rate:
     values: [0.2]
   learning_rate:
-    values: [0.00009]
+    values: [0.0001]
   weight_decay:
     values: [0.0001]
   batch_size:
@@ -79,7 +79,7 @@ best_parameters:
   aug_prob:
     values: [0.3]
   aug_style:
-    values: ['linear_decay']
+    values: ['curriculum_swap_constant']
   epochs:
     values: [110]
   num_workers:

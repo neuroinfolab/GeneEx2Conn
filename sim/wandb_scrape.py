@@ -98,7 +98,7 @@ def weighted_mean_and_se(values, weights):
     
     return weighted_mean, weighted_se
 
-def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='transcriptome', target='FC', within_last=60, before_last=0, use_weighted=False, exclude='HCP', return_history=False):
+def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='transcriptome', target='FC', gene_list='0.2', within_last=60, before_last=0, use_weighted=False, exclude='HCP', return_history=False):
     """
     Fetches wandb runs matching specific tags and summarizes their final train/test metrics.
     Handles different CV types with their expected number of runs:
@@ -143,6 +143,7 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
                 f"model_{model}",
                 f"target_{target}",
                 f"cv_type_{cv_type}",
+                f"gene_list_{gene_list}",
                 f"null_model_{null_model}",
                 f"feature_type_{feature_type}"
             ],

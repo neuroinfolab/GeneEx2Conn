@@ -1,26 +1,42 @@
 """
-Cross-Attention Gene2Vec Model for Region-Pair Connectivity Prediction
+Bidirectional Cross-Attention Gene2Vec Model for Symmetric Edge Prediction
 
 This module implements a single-gene resolution model that uses:
 1. Gene2Vec embeddings (200D) for semantic gene representations
 2. Expression value binning to discretize expression levels
-3. Cross-attention mechanism where CLS + region i genes (queries) attend to region j genes (keys/values)
-4. FlashAttention for efficient computation
+3. Bidirectional cross-attention mechanism for symmetric connectivity prediction
+4. FlashAttention for efficient computation with asymmetric value dimensions
 
 Architecture:
 -----------
+This model represents each ROI as a sequence of gene tokens, with each token 
+constructed from Gene2Vec embeddings and expression-based binning. To predict 
+the symmetric connectivity between a pair of regions, the model applies 
+cross-attention in both directions:
+
 For each region pair (i, j):
     1. Each gene's expression value is binned (default: 5 bins in [0,1])
     2. Bin index is one-hot encoded and projected to 200D
     3. Projected bin embedding + Gene2Vec embedding (element-wise addition)
     4. Combined embeddings projected to d_model space (default: 128D)
-    5. CLS token created (random or coordinate-based initialization)
-    6. CLS token concatenated with region i gene embeddings to form queries
-    7. Region j gene embeddings serve as keys/values
-    8. Cross-attention: queries (CLS + region i) attend to keys/values (region j)
-    9. Cross-attention applied over multiple layers
-    10. Pool transformer output (mean/attention/cls) to create final representation
-    11. Pooled representation passed through MLP to predict connectivity
+    
+    5. First pass: Region i attends to region j
+       - Uses independently learned W_q, W_k, W_v projections
+       - Value dimension is 2*d_model (double the query/key dimension)
+       - Applied over multiple layers
+       
+    6. Second pass: Region j attends to region i
+       - Uses separate independently learned W_q', W_k', W_v' projections
+       - Value dimension is 2*d_model (double the query/key dimension)
+       - Applied over multiple layers (separate from first direction)
+       
+    7. Pool outputs from both directions (mean/attention/cls pooling)
+    8. Concatenate pooled representations to form joint edge embedding (2*d_model)
+    9. Pass concatenated embedding through MLP to predict single scalar connectivity
+
+This architecture balances directional expressivity in attention while maintaining 
+symmetric behavior at the prediction level, enabling the model to learn fine-grained 
+gene-wise interactions between ROIs.
 """
 
 from env.imports import *
@@ -117,17 +133,28 @@ class SymmetricLoss(nn.Module):
         
         return total_loss
 
-class CrossAttentionBlock(nn.Module):
-    """Cross-attention block using FlashAttention"""
+class BidirectionalCrossAttentionBlock(nn.Module):
+    """
+    Bidirectional Cross-Attention block using FlashAttention.
+    
+    This block performs cross-attention with standard dimensions:
+    - Query, Key and Value projections all map to d_model
+    
+    Uses FlashAttention for efficient attention computation.
+    """
     def __init__(self, d_model, nhead, dropout=0.1, use_alibi=False):
         super().__init__()
         self.nhead = nhead
         self.head_dim = d_model // nhead
         self.d_model = d_model
         
-        # Separate projections for queries (from region i) and keys/values (from region j)
+        # Projections for queries, keys, values (all d_model)
         self.q_proj = nn.Linear(d_model, d_model)
-        self.kv_proj = nn.Linear(d_model, d_model * 2)
+        self.k_proj = nn.Linear(d_model, d_model)
+        self.v_proj = nn.Linear(d_model, d_model)
+        
+        # Output projection 
+        self.o_proj = nn.Linear(d_model, d_model)
         
         self.attn_dropout = nn.Dropout(dropout)
         self.attn_norm = nn.LayerNorm(d_model)
@@ -147,47 +174,44 @@ class CrossAttentionBlock(nn.Module):
             self.register_buffer("alibi_slopes", slopes)
     
     def split_heads(self, x):
-        return x.view(x.size(0), x.size(1), self.nhead, self.head_dim).transpose(1, 2)
-    
-    def merge_heads(self, x):
-        return x.transpose(1, 2).reshape(x.size(0), x.size(2), -1)
+        """Split heads for queries, keys and values"""
+        return x.view(x.size(0), x.size(1), self.nhead, self.head_dim)
     
     def forward(self, queries, keys_values):
         """
         Args:
-            queries: (B, seq_len_q, d_model) - query tokens (could be CLS or genes)
-            keys_values: (B, seq_len_kv, d_model) - key/value tokens (both regions)
+            queries: (B, seq_len_q, d_model) - query tokens
+            keys_values: (B, seq_len_kv, d_model) - key/value tokens
+        
+        Returns:
+            output: (B, seq_len_q, d_model) - attended output
         """
         with autocast(dtype=torch.bfloat16):
             residual = queries
             
-            # Project queries
+            # Project queries, keys, and values
             q = self.q_proj(queries)  # (B, seq_len_q, d_model)
-            
-            # Project keys and values
-            kv = self.kv_proj(keys_values)  # (B, seq_len_kv, 2*d_model)
-            k, v = kv.chunk(2, dim=-1)  # Each: (B, seq_len_kv, d_model)
+            k = self.k_proj(keys_values)  # (B, seq_len_kv, d_model)
+            v = self.v_proj(keys_values)  # (B, seq_len_kv, d_model)
             
             # Reshape for multi-head attention
-            q = self.split_heads(q)  # (B, nhead, seq_len_q, head_dim)
-            k = self.split_heads(k)  # (B, nhead, seq_len_kv, head_dim)
-            v = self.split_heads(v)  # (B, nhead, seq_len_kv, head_dim)
+            # flash_attn_func expects (B, seqlen, nhead, head_dim) format
+            q = self.split_heads(q)  # (B, seq_len_q, nhead, head_dim)
+            k = self.split_heads(k)  # (B, seq_len_kv, nhead, head_dim)
+            v = self.split_heads(v)  # (B, seq_len_kv, nhead, head_dim)
             
             # Flash attention (cross-attention)
-            # Note: flash_attn_func expects (B, seqlen, nhead, head_dim) format
-            q = q.transpose(1, 2)  # (B, seq_len_q, nhead, head_dim)
-            k = k.transpose(1, 2)  # (B, seq_len_kv, nhead, head_dim)
-            v = v.transpose(1, 2)  # (B, seq_len_kv, nhead, head_dim)
-            
             attn_output = flash_attn_func(
                 q, k, v,
                 dropout_p=0.0,
                 causal=False,
-                # alibi_slopes=self.alibi_slopes if self.use_alibi else None  # Uncomment if FlashAttn supports cross-attn alibi
-            )
+            )  # (B, seq_len_q, nhead, head_dim)
             
-            # Reshape back
-            attn_output = attn_output.view(attn_output.size(0), attn_output.size(1), -1)
+            # Reshape back: (B, seq_len_q, d_model)
+            attn_output = attn_output.reshape(attn_output.size(0), attn_output.size(1), self.d_model)
+            
+            # Project output
+            attn_output = self.o_proj(attn_output)  # (B, seq_len_q, d_model)
             
             # Apply dropout and residual
             attn_output = self.attn_dropout(attn_output)
@@ -202,7 +226,7 @@ class CrossAttentionBlock(nn.Module):
 
 class CrossAttentionGene2VecEncoder(nn.Module):
     """
-    Cross-attention encoder with Gene2Vec embeddings and value binning.
+    Bidirectional Cross-Attention encoder with Gene2Vec embeddings and value binning.
     
     Each gene is treated as a token with:
     - Gene2Vec semantic embedding (200D)
@@ -210,9 +234,13 @@ class CrossAttentionGene2VecEncoder(nn.Module):
     - Combined via element-wise addition
     
     Architecture:
-    - CLS token + region i genes form the query sequence
-    - Region j genes form the key/value sequence
-    - After cross-attention, pool to create final edge representation
+    - Single shared cross-attention encoder with q, k, v learned separately
+    - Value dimension is 2*d_model (double the query/key dimension)
+    - Apply encoder in both directions:
+      * Region i attends to region j (first pass)
+      * Region j attends to region i (second pass, same weights)
+    - Pool outputs from both directions
+    - Concatenate pooled representations to form joint edge embedding (2*d_model)
     
     Args:
         valid_genes: List of valid gene names
@@ -247,7 +275,7 @@ class CrossAttentionGene2VecEncoder(nn.Module):
         # Project combined embedding (gene2vec + bin) to d_model
         self.to_d_model = nn.Linear(self.gene2vec_dim, d_model)
         
-        # CLS token initialization
+        # CLS token initialization (optional, for pooling_mode='cls')
         if cls_init == 'random':
             # Random initialization with 6 values, then project to d_model
             self.cls_token_proj = nn.Linear(6, d_model)
@@ -260,13 +288,13 @@ class CrossAttentionGene2VecEncoder(nn.Module):
         else:
             raise ValueError(f"Unknown cls_init: {cls_init}")
         
-        # Cross-attention layers
+        # Shared cross-attention layers (used for both directions)
         self.cross_attn_layers = nn.ModuleList([
-            CrossAttentionBlock(d_model, nhead, dropout, use_alibi=use_alibi)
+            BidirectionalCrossAttentionBlock(d_model, nhead, dropout, use_alibi=use_alibi)
             for _ in range(num_layers)
         ])
         
-        # Pooling layer (if attention pooling is used)
+        # Pooling layers (if attention pooling is used)
         if self.pooling_mode == 'attention':
             self.attention_pooling = AttentionPooling(d_model, hidden_dim=32)
         elif self.pooling_mode == 'linear': # simple linear combination of all tokens to d_model 
@@ -383,7 +411,13 @@ class CrossAttentionGene2VecEncoder(nn.Module):
     
     def forward(self, gene_expr_i, gene_expr_j, coords_i, coords_j):
         """
-        Forward pass with cross-attention
+        Forward pass with bidirectional cross-attention.
+        
+        Performs two passes using the same shared cross-attention encoder:
+        1. Region i attends to region j
+        2. Region j attends to region i
+        
+        Then pools and concatenates the outputs from both directions.
         
         Args:
             gene_expr_i: (B, num_genes) - region i expression
@@ -392,54 +426,75 @@ class CrossAttentionGene2VecEncoder(nn.Module):
             coords_j: (B, 3) - region j coordinates
         
         Returns:
-            output: (B, d_model) - Pooled representation after cross-attention
+            output: (B, 2*d_model) - Concatenated pooled representations from both directions
         """
         B = gene_expr_i.size(0)
         
-        # Encode both regions
+        # Encode both regions to gene token sequences
         embeddings_i = self.encode_region(gene_expr_i)  # (B, num_shared_genes, d_model)
         embeddings_j = self.encode_region(gene_expr_j)  # (B, num_shared_genes, d_model)
         
-        # Create CLS token
-        cls_token = self.create_cls_token(coords_i, coords_j, B)  # (B, 1, d_model)
+        # Optional: Create CLS token (only used if pooling_mode='cls')
+        if self.pooling_mode == 'cls':
+            cls_token = self.create_cls_token(coords_i, coords_j, B)  # (B, 1, d_model)
+            # Concatenate CLS with embeddings
+            embeddings_i_with_cls = torch.cat([cls_token, embeddings_i], dim=1)  # (B, num_shared_genes + 1, d_model)
+            embeddings_j_with_cls = torch.cat([cls_token, embeddings_j], dim=1)  # (B, num_shared_genes + 1, d_model)
+        else:
+            # No CLS token needed for mean/attention pooling
+            embeddings_i_with_cls = embeddings_i  # (B, num_shared_genes, d_model)
+            embeddings_j_with_cls = embeddings_j  # (B, num_shared_genes, d_model)
         
-        # Concatenate CLS token with region i genes as queries
-        #queries = torch.cat([cls_token, embeddings_i], dim=1)  # (B, num_shared_genes + 1, d_model)
-
-        # temporarily omit CLS token entirely
-        queries = torch.cat([embeddings_i], dim=1)  # (B, num_shared_genes + 1, d_model)
-        
-        # Region j genes as keys/values
-        keys_values = embeddings_j  # (B, num_shared_genes, d_model)
-        
-        # Apply cross-attention layers - queries (CLS + region i) attend to keys/values (region j)
+        # First direction: Region i attends to region j
+        # Pass region i embeddings as queries, region j embeddings as keys/values
+        attn_output_i = embeddings_i_with_cls
         for layer in self.cross_attn_layers:
-            queries_out = layer(queries, keys_values)  # (B, num_shared_genes + 1, d_model)
+            attn_output_i = layer(attn_output_i, embeddings_j)  # (B, seq_len, d_model)
         
-        # Pool the output based on pooling_mode
+        # Second direction: Region j attends to region i
+        # Pass region j embeddings as queries, region i embeddings as keys/values
+        attn_output_j = embeddings_j_with_cls
+        for layer in self.cross_attn_layers:
+            attn_output_j = layer(attn_output_j, embeddings_i)  # (B, seq_len, d_model)
+        
+        # Pool the outputs from both directions
         if self.pooling_mode == 'cls':
             # Use only CLS token (first position)
-            output = queries_out[:, 0, :]  # (B, d_model)
+            pooled_i = attn_output_i[:, 0, :]  # (B, d_model)
+            pooled_j = attn_output_j[:, 0, :]  # (B, d_model)
         elif self.pooling_mode == 'mean':
-            # Mean pool over all tokens (CLS + genes)
-            output = queries_out.mean(dim=1)  # (B, d_model)
+            # Mean pool over all tokens
+            pooled_i = attn_output_i.mean(dim=1)  # (B, d_model)
+            pooled_j = attn_output_j.mean(dim=1)  # (B, d_model)
         elif self.pooling_mode == 'attention':
             # Attention pooling over all tokens
-            output = self.attention_pooling(queries_out)  # (B, d_model)
+            pooled_i = self.attention_pooling(attn_output_i)  # (B, d_model)
+            pooled_j = self.attention_pooling(attn_output_j)  # (B, d_model)
         elif self.pooling_mode == 'linear':
             # Linear pooling over all tokens
-            output = self.linear_proj(queries_out.transpose(1, 2))  # (B, d_model)
+            pooled_i = self.linear_proj(attn_output_i.transpose(1, 2))  # (B, d_model)
+            pooled_j = self.linear_proj(attn_output_j.transpose(1, 2))  # (B, d_model)
         else:
             raise ValueError(f"Unknown pooling_mode: {self.pooling_mode}")
+        
+        # Concatenate both directions to form joint edge representation
+        output = torch.cat([pooled_i, pooled_j], dim=-1)  # (B, 2*d_model)
         
         return output
 
 class CrossAttentionGene2VecModel(BaseTransformerModel):
     """
-    Cross-Attention Gene2Vec Model for predicting region-pair connectivity.
+    Bidirectional Cross-Attention Gene2Vec Model for symmetric edge prediction.
     
     Uses single-gene resolution with Gene2Vec embeddings, value binning, and 
-    cross-attention where CLS + region i genes attend to region j genes.
+    bidirectional cross-attention where:
+    - Region i attends to region j (first pass)
+    - Region j attends to region i (second pass, same weights)
+    
+    The outputs from both directions are pooled and concatenated to form a joint
+    edge-level embedding (2*d_model), which is then passed to an MLP for prediction.
+    
+    Value embeddings have 2*d_model dimension while queries and keys use d_model.
     
     Args:
         input_dim: Total input dimension (2 * num_genes)
@@ -491,7 +546,7 @@ class CrossAttentionGene2VecModel(BaseTransformerModel):
             self.criterion = SymmetricLoss(nn.MSELoss(), lambda_sym=self.lambda_sym)
             print(f"Using SymmetricLoss with lambda_sym={self.lambda_sym}")
         
-        # Cross-attention encoder
+        # Bidirectional cross-attention encoder
         self.encoder = CrossAttentionGene2VecEncoder(
             valid_genes=self.valid_genes,
             expression_bins=expression_bins,
@@ -507,7 +562,8 @@ class CrossAttentionGene2VecModel(BaseTransformerModel):
         self.encoder = torch.compile(self.encoder)
         
         # MLP prediction head
-        prev_dim = d_model
+        # NOTE: Input dimension is 2*d_model because we concatenate both directions
+        prev_dim = 2 * d_model
         self.deep_layers, self.output_layer = self._set_mlp_head(
             prev_dim=prev_dim,
             deep_hidden_dims=deep_hidden_dims,
@@ -515,11 +571,12 @@ class CrossAttentionGene2VecModel(BaseTransformerModel):
         )
         
         num_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
-        print(f"Number of learnable parameters in CrossAttentionGene2Vec model: {num_params}")
+        print(f"Number of learnable parameters in Bidirectional CrossAttentionGene2Vec model: {num_params}")
         print(f"Number of genes after Gene2Vec intersection: {len(self.encoder.shared_gene_indices)}")
         print(f"Expression bins: {expression_bins}")
         print(f"CLS token initialization: {cls_init}")
         print(f"Pooling mode: {pooling_mode}")
+        print(f"Value dimension: {2 * d_model} (2x query/key d_model={d_model})")
         
         self._setup_optimizer_scheduler(learning_rate, weight_decay, use_cosine=cosine_lr)
     
@@ -528,10 +585,10 @@ class CrossAttentionGene2VecModel(BaseTransformerModel):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)  # Each: (B, num_genes)
         coords_i, coords_j = torch.chunk(coords, chunks=2, dim=1)  # Each: (B, 3)
         
-        # Encode with cross-attention
-        pooled_output = self.encoder(x_i, x_j, coords_i, coords_j)  # (B, d_model)
+        # Encode with bidirectional cross-attention
+        pooled_output = self.encoder(x_i, x_j, coords_i, coords_j)  # (B, 2*d_model)
         
-        # Predict connectivity
+        # Predict connectivity via MLP head
         y_pred = self.output_layer(self.deep_layers(pooled_output))
         
         return y_pred.squeeze()
@@ -547,7 +604,7 @@ class CrossAttentionGene2VecModel(BaseTransformerModel):
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, 
                                 pin_memory=True, num_workers=self.num_workers, 
                                 prefetch_factor=self.prefetch_factor)
-        self.patience = 200
+        self.patience = 50
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, 
                           self.optimizer, self.patience, scheduler=None, 
                           train_scheduler=self.scheduler if self.cosine_lr else None, 
@@ -599,7 +656,7 @@ class CrossAttentionBlock(nn.Module):
             x = self.ffn(x)
             x = self.ffn_norm(residual + x)
             return x
-'''
+
 class CrossAttentionEncoder(nn.Module):
     def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=2, dropout=0.1):
         super().__init__()
@@ -662,3 +719,4 @@ class CrossAttentionModel(BaseTransformerModel):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         encoded = self.encoder(x_i, x_j)
         return self.deep_layers(encoded).squeeze()
+'''
