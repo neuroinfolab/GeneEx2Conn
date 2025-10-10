@@ -45,7 +45,7 @@ parameters:
     values: [2]
   prefetch_factor:
     values: [4]
-    
+
 best_parameters:
   input_dim:
     value: !!int 0
@@ -54,7 +54,7 @@ best_parameters:
   d_model:
     values: [128]
   encoder_output_dim:
-    values: [8]
+    values: [1]
   use_alibi:
     values: [True]
   nhead:

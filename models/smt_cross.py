@@ -24,6 +24,7 @@ class CrossAttentionBlock(nn.Module):
         self.nhead = nhead
         self.head_dim = d_model // nhead
         self.d_model = d_model
+        self.dropout = dropout
         
         self.q_proj = nn.Linear(d_model, d_model)
         self.k_proj = nn.Linear(d_model, d_model)
@@ -60,8 +61,9 @@ class CrossAttentionBlock(nn.Module):
             output: (B, seq_len_q, d_model) - attended output
         """
         with autocast(dtype=torch.bfloat16):
+            #residual = (queries + keys) / 2 # residual can be mean of both regions
             residual = queries
-            
+
             # Project queries, keys, and values
             q = self.q_proj(queries)  # (B, seq_len_q, d_model)
             k = self.k_proj(keys)  # (B, seq_len_kv, d_model)
@@ -76,7 +78,7 @@ class CrossAttentionBlock(nn.Module):
             # Flash attention (cross-attention)
             attn_output = flash_attn_func(
                 q, k, v,
-                dropout_p=0.0,
+                dropout_p=self.dropout,
                 causal=False,
             )  # (B, seq_len_q, nhead, head_dim)
             
@@ -84,6 +86,7 @@ class CrossAttentionBlock(nn.Module):
             attn_output = attn_output.reshape(attn_output.size(0), attn_output.size(1), self.d_model)        
             # Apply dropout and residual
             attn_output = self.attn_dropout(attn_output)
+            
             x = self.attn_norm(residual + attn_output)
             
             # Feed-forward with residual
@@ -114,7 +117,7 @@ class CrossAttentionGeneVecEncoder(nn.Module):
         pooling_mode: Pooling method - 'mean', 'attention', or 'cls' (default: 'mean')
         device: Device to place model on
     """
-    def __init__(self, valid_genes, expression_bins=5, d_model=128, nhead=4, num_layers=4, 
+    def __init__(self, valid_genes, expression_bins=5, d_model=32, nhead=2, num_layers=2, 
                  dropout=0.1, use_alibi=False, cls_init='random', pooling_mode='mean', genevec_type='gene2vec', device=None):
         super().__init__()
         self.d_model = d_model
@@ -131,9 +134,13 @@ class CrossAttentionGeneVecEncoder(nn.Module):
         self.genevec_projection = nn.Linear(self.genevec_dim, d_model)
         
         # project one-hot bin to d_model
-        # learnable embedding for discrete expression bins - more canonical approach
         self.bin_embedding = nn.Embedding(expression_bins, d_model)
-        #self.bin_projection = nn.Linear(expression_bins, d_model)
+
+        # project scalar expression to d_model
+        self.scalar_projection = nn.Linear(1, d_model)
+
+        # project combined genevec and bin to d_model
+        self.combined_projection = nn.Linear(2*d_model, d_model)
             
         if cls_init == 'random':
             # Random initialization with 6 values, then project to d_model
@@ -150,6 +157,8 @@ class CrossAttentionGeneVecEncoder(nn.Module):
         
         if self.pooling_mode == 'attention':
             self.attention_pooling = AttentionPooling(d_model, hidden_dim=32)
+        elif self.pooling_mode == 'linear':
+            self.linear_pooling = nn.Linear(d_model, 1)
         
     def _load_genevec_embeddings(self, genevec_type='gene2vec'):
         """Load gene vector embeddings and create lookup table aligned with valid_genes
@@ -236,16 +245,20 @@ class CrossAttentionGeneVecEncoder(nn.Module):
         genevec_emb = self.genevec_projection(genevec_emb)  # (B, num_shared_genes, d_model)
         
         # Bin expression values
-        # binned_expr = self.bin_expression(gene_expression_subset)  # (B, num_shared_genes, expression_bins)
-        # bin_emb = self.bin_projection(binned_expr)  # (B, num_shared_genes, d_model)
+        # bin_indices = (gene_expression_subset * self.expression_bins).long()
+        # bin_indices = torch.clamp(bin_indices, 0, self.expression_bins - 1)
+        # bin_emb = self.bin_embedding(bin_indices)
         
-        bin_indices = (gene_expression_subset * self.expression_bins).long()
-        bin_indices = torch.clamp(bin_indices, 0, self.expression_bins - 1)
-        bin_emb = self.bin_embedding(bin_indices)
+        # Project scalar expression to d_model
+        scalar_emb = self.scalar_projection(gene_expression_subset.unsqueeze(-1))  # (B, num_shared_genes, d_model)
         
         # Element-wise addition
-        embeddings = genevec_emb + bin_emb  # (B, num_shared_genes, d_model)
-    
+        #embeddings = genevec_emb + scalar_emb # quick ablation: genevec_emb + bin_emb  # (B, num_shared_genes, d_model)
+        
+        # Concatenate embeddings
+        embeddings = torch.cat([genevec_emb, scalar_emb], dim=-1)  # (B, num_shared_genes, 2*d_model)
+        embeddings = self.combined_projection(embeddings)  # Project back to d_model dimension
+
         return embeddings
     
     def create_cls_token(self, coords_i, coords_j, batch_size):
@@ -311,6 +324,10 @@ class CrossAttentionGeneVecEncoder(nn.Module):
             pooled = attn_output.mean(dim=1)  # (B, d_model)
         elif self.pooling_mode == 'attention': # Attention pooling over all attn_output tokens
             pooled = self.attention_pooling(attn_output)  # (B, d_model)
+        elif self.pooling_mode == 'linear': # Mean pool over all attn_output tokens
+            # Reshape from (B, num_tokens, d_model) to (B, d_model, num_tokens) for linear projection
+            pooled = self.linear_pooling(attn_output).squeeze(-1)  # (B, num_tokens)
+        
         return pooled
 
 class CrossAttentionGeneVecModel(BaseTransformerModel):
@@ -337,7 +354,7 @@ class CrossAttentionGeneVecModel(BaseTransformerModel):
         self.cosine_lr = cosine_lr
         self.valid_genes = region_pair_dataset.valid_genes
         self.lambda_sym = lambda_sym
-        self.patience = 50
+        self.patience = 70
 
         # Setup symmetric loss if lambda_sym > 0
         if self.lambda_sym > 0:
@@ -361,7 +378,10 @@ class CrossAttentionGeneVecModel(BaseTransformerModel):
         self.encoder = torch.compile(self.encoder)
         
         # MLP prediction head
-        prev_dim = d_model
+        if self.pooling_mode == 'linear':
+            prev_dim = len(self.encoder.shared_genes)
+        else:
+            prev_dim = d_model
         self.deep_layers, self.output_layer = self._set_mlp_head(
             prev_dim=prev_dim,
             deep_hidden_dims=deep_hidden_dims,
