@@ -57,13 +57,13 @@ best_parameters:
   expression_bins:
     values: [5]
   genevec_type:
-    values: ['gene2vec'] # 'gene2vec', 'coexpression', 'one_hot'
+    values: ['one_hot'] # 'gene2vec', 'coexpression', 'one_hot'
   d_model:
-    values: [32]
+    values: [64]
   nhead:
-    values: [2]
+    values: [4]
   num_layers:
-    values: [2]
+    values: [4]
   deep_hidden_dims:
     values:
       - [512, 256, 128]
@@ -74,11 +74,11 @@ best_parameters:
   use_alibi:
     values: [True]
   transformer_dropout:
-    values: [0.2]
+    values: [0.3]
   dropout_rate:
-    values: [0.2]
+    values: [0.1]
   learning_rate:
-    values: [0.00008]
+    values: [0.00009]
   weight_decay:
     values: [0.0001]
   batch_size:
@@ -86,7 +86,7 @@ best_parameters:
   epochs:
     values: [200]
   aug_prob:
-    values: [0.1]
+    values: [0.3]
   aug_style:
     values: ['curriculum_swap_linear_decay']
   lambda_sym:
