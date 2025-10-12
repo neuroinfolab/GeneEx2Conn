@@ -420,8 +420,8 @@ def plot_true_vs_null_model_barchart_w_legend(
     if model_groups is None:
         model_groups = {
             'Deep Learning': {
-                'dynamic_mlp': 'Deep Neural Net',
-                'dynamic_mlp_coords': 'Deep Neural Net w/ coords',
+                'dynamic_mlp': 'MLP',
+                'dynamic_mlp_coords': 'MLP w/ coords',
                 'shared_transformer': 'SMT',
                 'shared_transformer_cls': 'SMT w/ [CLS]'
             },
@@ -582,8 +582,8 @@ def plot_true_vs_null_model_barchart(
     if model_groups is None:
         model_groups = {
             'Non-Linear': {
-                'dynamic_mlp': 'Deep Neural Net',
-                'dynamic_mlp_coords': 'Deep Neural Net w/ coords',
+                'dynamic_mlp': 'MLP',
+                'dynamic_mlp_coords': 'MLP w/ coords',
                 'shared_transformer': 'SMT',
                 'shared_transformer_cls': 'SMT w/ [CLS]'
             },
@@ -749,8 +749,8 @@ def plot_true_vs_null_model_barchart_weighted(
     if model_groups is None:
         model_groups = {
             'Non-Linear': {
-                'dynamic_mlp': 'Deep Neural Net',
-                'dynamic_mlp_coords': 'Deep Neural Net w/ coords',
+                'dynamic_mlp': 'MLP',
+                'dynamic_mlp_coords': 'MLP w/ coords',
                 'shared_transformer': 'SMT',
                 'shared_transformer_cls': 'SMT w/ [CLS]'
             },

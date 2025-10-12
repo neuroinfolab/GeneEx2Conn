@@ -14,7 +14,7 @@ connectome_target: 'FC'
 # Gene expression
 impute_strategy: 'mirror_interpolate'
 sort_genes: 'expression'
-gene_list: '250_var'
+gene_list: '100_var'
 null_model: 'none'
 
 # Cross-validation

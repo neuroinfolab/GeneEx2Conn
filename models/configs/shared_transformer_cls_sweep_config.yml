@@ -54,7 +54,7 @@ best_parameters:
   d_model:
     values: [128]
   encoder_output_dim:
-    values: [1]
+    values: [3]
   use_alibi:
     values: [True]
   nhead:
@@ -79,7 +79,7 @@ best_parameters:
   aug_prob:
     values: [0.3]
   aug_style:
-    values: ['curriculum_swap_constant']
+    values: ['curriculum_swap_linear_decay']
   epochs:
     values: [110]
   num_workers:

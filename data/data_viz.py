@@ -1118,3 +1118,134 @@ def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, std_e
     
     plt.tight_layout()
     plt.show()
+
+def plot_spectral_embedding_w_fc(conn_matrix, network_labels, n_components=2, conn_matrix_edges=None, std_edge_threshold=None, 
+                               edge_threshold=None, title=None, fontsize=30, axis_fontsize=26, scatter_alpha=0.8, 
+                               scatter_size=18, edge_alpha=0.2, edge_width=0.5, omit_subcortical=False):
+    """
+    Plot 2D visualization of spectral embedding of connectivity matrix, with regions colored by network labels and optional FC edges.
+    
+    Args:
+        conn_matrix: Functional connectivity matrix to compute embedding from
+        network_labels: Array of network labels for coloring points
+        n_components: Number of components for spectral embedding (default 2)
+        conn_matrix_edges: Optional separate FC matrix for drawing edges (if None, uses conn_matrix)
+        std_edge_threshold: Optional std dev threshold for showing edges (e.g. 3.0 shows +/-3 std)
+        edge_threshold: Optional tuple of (neg_thresh, pos_thresh) for absolute thresholds
+        title: Optional title for the plot
+        fontsize: Font size for title (default 30)
+        axis_fontsize: Font size for axis labels (default 26)
+        scatter_alpha: Alpha value for scatter points (default 0.8)
+        scatter_size: Size of scatter points (default 15)
+        edge_alpha: Alpha value for FC edges (default 0.2)
+        edge_width: Line width for FC edges (default 0.5)
+        omit_subcortical: If True, drops coords past nearest hundred (default False)
+    """
+    from sklearn.manifold import SpectralEmbedding
+
+    # Handle subcortical omission if requested
+    if omit_subcortical:
+        n_regions = conn_matrix.shape[0]
+        n_keep = (n_regions // 100) * 100
+        conn_matrix = conn_matrix[:n_keep, :n_keep]
+        network_labels = network_labels[:n_keep]
+        if conn_matrix_edges is not None:
+            conn_matrix_edges = conn_matrix_edges[:n_keep, :n_keep]
+
+    # Compute spectral embedding
+    embedding = SpectralEmbedding(n_components=n_components, affinity='precomputed')
+    # Convert correlation matrix to affinity matrix (shift to 0-1 range)
+    affinity_matrix = (conn_matrix + 1) / 2
+    coords = embedding.fit_transform(affinity_matrix)
+    
+    # Define colors for each network
+    unique_networks = np.unique(network_labels)
+    colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_networks)))
+    network_to_color = dict(zip(unique_networks, colors))
+    
+    # Create color array based on network labels
+    point_colors = np.array([network_to_color[label] for label in network_labels])
+    
+    # Create scatter plot
+    plt.figure(figsize=(10,7))
+    plt.gca().set_facecolor("#eaeaf2")  # Light bluish background for plot area only
+    
+    # If FC matrix provided and either threshold is set, draw edges first
+    if (conn_matrix_edges is not None or conn_matrix is not None) and (std_edge_threshold is not None or edge_threshold is not None):
+        edge_matrix = conn_matrix_edges if conn_matrix_edges is not None else conn_matrix
+        
+        if std_edge_threshold is not None:
+            # Use standard deviation based thresholding
+            fc_mean = np.mean(edge_matrix)
+            fc_std = np.std(edge_matrix)
+            pos_threshold = fc_mean + (std_edge_threshold * fc_std)
+            neg_threshold = fc_mean - (std_edge_threshold * fc_std)
+        else:
+            # Use absolute thresholds from tuple
+            neg_threshold, pos_threshold = edge_threshold
+            neg_threshold = -abs(neg_threshold)  # Ensure negative
+            pos_threshold = abs(pos_threshold)   # Ensure positive
+        
+        # Get upper triangle indices exceeding positive threshold
+        rows, cols = np.where(np.triu(edge_matrix > pos_threshold, k=1))
+        # Draw positive edges with opacity based on strength
+        for i, j in zip(rows, cols):
+            # Scale opacity between edge_alpha and 1 based on FC strength
+            edge_strength = (edge_matrix[i,j] - pos_threshold) / (edge_matrix.max() - pos_threshold)
+            opacity = edge_alpha + (1 - edge_alpha) * edge_strength
+            plt.plot([coords[i,0], coords[j,0]],
+                    [coords[i,1], coords[j,1]],
+                    color='red', alpha=opacity, linewidth=edge_width)
+            
+        # Get negative edges exceeding negative threshold
+        rows, cols = np.where(np.triu(edge_matrix < neg_threshold, k=1))
+        # Draw negative edges with opacity based on strength
+        for i, j in zip(rows, cols):
+            # Scale opacity between edge_alpha and 1 based on FC strength
+            edge_strength = (neg_threshold - edge_matrix[i,j]) / (neg_threshold - edge_matrix.min())
+            opacity = edge_alpha + (1 - edge_alpha) * edge_strength
+            plt.plot([coords[i,0], coords[j,0]],
+                    [coords[i,1], coords[j,1]], 
+                    color='blue', alpha=opacity, linewidth=edge_width)
+    
+    # Plot points for each network
+    for network, color in zip(unique_networks, colors):
+        mask = network_labels == network
+        plt.scatter(coords[mask, 0], coords[mask, 1],
+                   color=color, alpha=scatter_alpha, s=scatter_size)
+    
+    # Create legend elements
+    legend_elements = [plt.Line2D([0], [0], marker='o', color='w',
+                                markerfacecolor=color, label=network, markersize=15)
+                      for network, color in zip(unique_networks, colors)]
+    
+    # Add edge legend if edges are shown
+    if (conn_matrix_edges is not None or conn_matrix is not None) and (std_edge_threshold is not None or edge_threshold is not None):
+        if std_edge_threshold is not None:
+            legend_elements.extend([
+                plt.Line2D([0], [0], color='red', alpha=edge_alpha+0.3, 
+                          label=f'FC > {std_edge_threshold:.1f}σ'), 
+                plt.Line2D([0], [0], color='blue', alpha=edge_alpha+0.3,
+                          label=f'FC < -{std_edge_threshold:.1f}σ')
+            ])
+        else:
+            legend_elements.extend([
+                plt.Line2D([0], [0], color='red', alpha=edge_alpha+0.3, 
+                          label=f'FC > {pos_threshold:.2f}'),
+                plt.Line2D([0], [0], color='blue', alpha=edge_alpha+0.3,
+                          label=f'FC < {neg_threshold:.2f}')
+            ])
+    
+    plt.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    if title:
+        plt.title(title, fontsize=fontsize, pad=10)
+    
+    # Set axis labels
+    plt.xlabel('Embedding Dimension 1', fontsize=axis_fontsize, labelpad=10)
+    plt.ylabel('Embedding Dimension 2', fontsize=axis_fontsize, labelpad=10)
+    plt.xticks([])
+    plt.yticks([])
+    
+    plt.tight_layout()
+    plt.show()

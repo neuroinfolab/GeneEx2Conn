@@ -14,7 +14,7 @@ connectome_target: 'FC'
 # Gene expression
 impute_strategy: 'mirror_interpolate'
 sort_genes: 'refgenome'
-gene_list: 'richiardi2015'
+gene_list: '0.2'
 null_model: 'none'
 
 # Cross-validation

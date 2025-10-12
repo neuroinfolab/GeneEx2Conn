@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader, Subset
 
 class CrossAttentionBlock(nn.Module):
     """
-    Cross-Attention block using FlashAttention.
+    FlashAttention Cross-Attention block
     
     This block performs cross-attention with standard dimensions:
     - Queries, Keys, Values map to d_model
@@ -61,7 +61,6 @@ class CrossAttentionBlock(nn.Module):
             output: (B, seq_len_q, d_model) - attended output
         """
         with autocast(dtype=torch.bfloat16):
-            #residual = (queries + keys) / 2 # residual can be mean of both regions
             residual = queries
 
             # Project queries, keys, and values
@@ -86,7 +85,6 @@ class CrossAttentionBlock(nn.Module):
             attn_output = attn_output.reshape(attn_output.size(0), attn_output.size(1), self.d_model)        
             # Apply dropout and residual
             attn_output = self.attn_dropout(attn_output)
-            
             x = self.attn_norm(residual + attn_output)
             
             # Feed-forward with residual
@@ -141,7 +139,8 @@ class CrossAttentionGeneVecEncoder(nn.Module):
 
         # project combined genevec and bin to d_model
         self.combined_projection = nn.Linear(2*d_model, d_model)
-            
+        #self.norm = nn.RMSNorm(d_model)
+        
         if cls_init == 'random':
             # Random initialization with 6 values, then project to d_model
             self.cls_token_proj = nn.Linear(6, d_model)
@@ -258,6 +257,7 @@ class CrossAttentionGeneVecEncoder(nn.Module):
         # Concatenate embeddings
         embeddings = torch.cat([genevec_emb, scalar_emb], dim=-1)  # (B, num_shared_genes, 2*d_model)
         embeddings = self.combined_projection(embeddings)  # Project back to d_model dimension
+        #embeddings = self.norm(embeddings)
 
         return embeddings
     
@@ -340,7 +340,7 @@ class CrossAttentionGeneVecModel(BaseTransformerModel):
                  use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, 
                  learning_rate=0.001, weight_decay=0.0, batch_size=512, epochs=100, 
                  aug_prob=0.0, num_workers=2, prefetch_factor=2, cosine_lr=False, aug_style='linear_decay',
-                 lambda_sym=0.1, genevec_type='gene2vec'):
+                 lambda_sym=0.1, genevec_type='gene2vec', bidirectional=True):
         
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, 
                         num_workers, prefetch_factor, d_model, nhead, num_layers, 
@@ -354,8 +354,9 @@ class CrossAttentionGeneVecModel(BaseTransformerModel):
         self.cosine_lr = cosine_lr
         self.valid_genes = region_pair_dataset.valid_genes
         self.lambda_sym = lambda_sym
+        self.bidirectional = bidirectional
         self.patience = 70
-
+        
         # Setup symmetric loss if lambda_sym > 0
         if self.lambda_sym > 0:
             self.criterion = SymmetricLoss(nn.MSELoss(), lambda_sym=self.lambda_sym)
@@ -380,6 +381,8 @@ class CrossAttentionGeneVecModel(BaseTransformerModel):
         # MLP prediction head
         if self.pooling_mode == 'linear':
             prev_dim = len(self.encoder.shared_genes)
+        elif self.bidirectional:
+            prev_dim = 2 * d_model
         else:
             prev_dim = d_model
         self.deep_layers, self.output_layer = self._set_mlp_head(
@@ -399,9 +402,14 @@ class CrossAttentionGeneVecModel(BaseTransformerModel):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)  # Each: (B, num_genes)
         coords_i, coords_j = torch.chunk(coords, chunks=2, dim=1)  # Each: (B, 3)
         
-        # Encode with cross-attention
-        pooled_output = self.encoder(x_i, x_j, coords_i, coords_j)  # (B, d_model)
-        
+        # Encode bidirectionally with cross-attention
+        pooled_output_j = self.encoder(x_i, x_j, coords_i, coords_j)  # (B, d_model)
+        if self.bidirectional:
+            pooled_output_i = self.encoder(x_j, x_i, coords_j, coords_i)  # (B, d_model)
+            pooled_output = torch.cat([pooled_output_i, pooled_output_j], dim=-1)  # (B, d_model*2)
+        else: 
+            pooled_output = pooled_output_j
+            
         # Predict connectivity via MLP head
         y_pred = self.output_layer(self.deep_layers(pooled_output))
         
@@ -418,10 +426,11 @@ class CrossAttentionGeneVecModel(BaseTransformerModel):
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, 
                                 pin_memory=True, num_workers=self.num_workers, 
                                 prefetch_factor=self.prefetch_factor)
+        
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, 
-                          self.optimizer, self.patience, scheduler=None, 
-                          train_scheduler=self.scheduler if self.cosine_lr else None, 
-                          save_model=save_model, verbose=verbose, dataset=dataset)
+                            self.optimizer, self.patience, scheduler=self.scheduler, 
+                            save_model=save_model, verbose=verbose, dataset=dataset)
+
 
 
 '''
