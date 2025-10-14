@@ -29,7 +29,7 @@ from models.smt_advanced import SharedSelfAttentionAEModel
 from models.smt_advanced import SharedSelfAttentionCelltypeModel
 from models.smt_advanced import SharedSelfAttentionGeneformerModel
 from models.smt_advanced import SharedSelfAttentionGene2VecModel
-from models.smt_cross import CrossAttentionGeneVecModel #, CrossAttentionModel
+from models.smt_cross import CrossAttentionGeneVecModel
 
 MODEL_CLASSES = {
     'cge': CGEModel,

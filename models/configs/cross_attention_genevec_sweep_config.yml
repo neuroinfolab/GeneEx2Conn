@@ -10,17 +10,17 @@ parameters:
   expression_bins:       # Number of expression bins per gene
     values: [5]
   d_model:              # Transformer embedding dimension
-    values: [16, 32, 64]
+    values: [32, 64]
   nhead:                # Number of attention heads
     values: [2, 4]
   num_layers:           # Number of cross-attention layers
     values: [2, 4]
   deep_hidden_dims:     # MLP head dimensions
     values:
-      - [256, 128]
+      - [256, 128, 64]
       - [512, 256, 128]
   genevec_type:
-    values: ['gene2vec', 'coexpression', 'one_hot']
+    values: ['gene2vec', 'one_hot']
   cls_init:             # CLS token initialization
     values: ['random']
   pooling_mode:         # Output pooling method
@@ -32,13 +32,13 @@ parameters:
   dropout_rate:        # Dropout in MLP head
     values: [0.1, 0.3]
   learning_rate:
-    values: [0.0001, .00009, 0.00005]
+    values: [0.0001, .00009]
   weight_decay:
-    values: [0.00001, 0.0001, 0.001]
+    values: [0, 0.0001, 0.001]
   batch_size:
     values: [512, 1024]
   epochs:
-    values: [100, 150, 200]
+    values: [150, 200, 250]
   aug_prob:            # Data augmentation probability
     values: [0.0, 0.1, 0.3]
   aug_style:
@@ -46,13 +46,13 @@ parameters:
   lambda_sym:
     values: [0, .0001, .00001]
   bidirectional:
-    values: [True, False]
+    values: [True]
   num_workers:
     values: [2]
   prefetch_factor:
     values: [4]
   cosine_lr:           # Use cosine learning rate schedule
-    values: [True, False]
+    values: [False]
 
 best_parameters:
   input_dim:
@@ -60,16 +60,16 @@ best_parameters:
   expression_bins:
     values: [5]
   genevec_type:
-    values: ['one_hot'] # 'gene2vec', 'coexpression', 'one_hot'
+    values: ['one_hot'] # 'gene2vec', 'coexpression', 'one_hot' (best)
   d_model:
-    values: [32]
+    values: [32] # 64 is best
   nhead:
-    values: [2]
+    values: [2] # 4 is best
   num_layers:
-    values: [2]
+    values: [2] # 4 is best
   deep_hidden_dims:
     values:
-      - [256, 128]
+      - [256, 128, 64] # 512, 256, 128 is best
   cls_init:
     values: ['random']
   pooling_mode:
@@ -77,7 +77,7 @@ best_parameters:
   use_alibi:
     values: [True]
   transformer_dropout:
-    values: [0.3]
+    values: [0.1]
   dropout_rate:
     values: [0.1]
   learning_rate:
@@ -85,15 +85,15 @@ best_parameters:
   weight_decay:
     values: [0.0001]
   batch_size:
-    values: [1024]
+    values: [512]
   epochs:
     values: [200]
   aug_prob:
-    values: [0.1]
+    values: [0.3]
   aug_style:
     values: ['curriculum_swap_linear_decay']
   lambda_sym:
-    values: [0.000]
+    values: [0.0001]
   bidirectional:
     values: [True]
   num_workers:

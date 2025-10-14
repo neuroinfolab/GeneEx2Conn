@@ -217,7 +217,7 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
               .drop_duplicates("run_name", keep="first")
         )
         if len(df_unique) != expected_runs:
-            raise ValueError(f"❌ Expected {expected_runs} unique run names, found {len(df_unique)} after deduplication.")
+            raise ValueError(f"❌ Expected {expected_runs} unique run names, found {len(df_unique)} after deduplication (from {len(df)} total runs).")
 
     # Store history before cleaning for aggregation
     history_df = df_unique.copy()

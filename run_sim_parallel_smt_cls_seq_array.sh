@@ -3,10 +3,10 @@
 #SBATCH --account=pr_125_tandon_advanced
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
-#SBATCH --time=5:00:00
+#SBATCH --time=3:00:00
 #SBATCH --mem=256GB
 #SBATCH --gres=gpu:1
-#SBATCH --constraint=h100|a100
+#SBATCH --constraint=h100
 #SBATCH --job-name=gx2c_cls
 #SBATCH --output=/scratch/asr655/neuroinformatics/GeneEx2Conn/sim/logs/sim_%A_%a.out
 #SBATCH --error=/scratch/asr655/neuroinformatics/GeneEx2Conn/sim/logs/sim_%A_%a.err
