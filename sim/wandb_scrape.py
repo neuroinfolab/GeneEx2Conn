@@ -150,7 +150,7 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
         },
         "created_at": {
             "$gte": start_time.isoformat(), 
-            #"$lte": end_time.isoformat()
+            "$lte": end_time.isoformat()
         },
         "state": "finished"
     }
@@ -255,8 +255,64 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
     else:
         return summary_df
 
-def process_model_feature_combinations(cv_type, null_model, models, model_feature_types, summary_dict, use_weighted=False, exclude='HCP', within_last=None, before_last=None):
-    """Helper function to process model/feature type combinations and populate summary dictionary"""
+def process_model_feature_combinations(cv_type, null_model, models, model_feature_types, summary_dict, use_weighted=False, exclude='HCP', within_last=None, before_last=None, time_ranges=None):
+    """
+    Helper function to process model/feature type combinations and populate summary dictionary.
+    
+    Args:
+        cv_type (str): Cross-validation type
+        null_model (str): Null model type
+        models (list): List of model names to process
+        model_feature_types (dict): Mapping of models to their feature types
+        summary_dict (dict): Dictionary to populate with results
+        use_weighted (bool): Whether to use weighted statistics
+        exclude (str): Dataset to exclude
+        within_last (int): Default within_last parameter (fallback)
+        before_last (int): Default before_last parameter (fallback)
+        time_ranges (dict): Custom time ranges with structure:
+            {
+                'default': {'within_last': int, 'before_last': int},
+                'model_specific': {
+                    'model_name': {'within_last': int, 'before_last': int}
+                },
+                'null_model_specific': {
+                    'null_model_name': {'within_last': int, 'before_last': int}
+                },
+                'model_null_specific': {
+                    ('model_name', 'null_model_name'): {'within_last': int, 'before_last': int}
+                }
+            }
+    """
+    def get_time_range(model, null_model):
+        """Get time range for specific model/null_model combination with fallback hierarchy"""
+        if time_ranges is None:
+            return within_last, before_last
+            
+        # Priority 1: model_null_specific (most specific)
+        if 'model_null_specific' in time_ranges:
+            key = (model, null_model)
+            if key in time_ranges['model_null_specific']:
+                range_dict = time_ranges['model_null_specific'][key]
+                return range_dict.get('within_last'), range_dict.get('before_last')
+        
+        # Priority 2: model_specific
+        if 'model_specific' in time_ranges and model in time_ranges['model_specific']:
+            range_dict = time_ranges['model_specific'][model]
+            return range_dict.get('within_last'), range_dict.get('before_last')
+            
+        # Priority 3: null_model_specific  
+        if 'null_model_specific' in time_ranges and null_model in time_ranges['null_model_specific']:
+            range_dict = time_ranges['null_model_specific'][null_model]
+            return range_dict.get('within_last'), range_dict.get('before_last')
+            
+        # Priority 4: default from time_ranges
+        if 'default' in time_ranges:
+            range_dict = time_ranges['default']
+            return range_dict.get('within_last'), range_dict.get('before_last')
+            
+        # Priority 5: function parameters (original fallback)
+        return within_last, before_last
+    
     # Set expected number of runs based on cv_type
     if cv_type == "schaefer":
         expected_runs = 9
@@ -272,10 +328,13 @@ def process_model_feature_combinations(cv_type, null_model, models, model_featur
         feature_types = model_feature_types[model]
         for feature_type in feature_types:
             try:
+                # Get custom time range for this model/null_model combination
+                model_within_last, model_before_last = get_time_range(model, null_model)
+                
                 df = fetch_and_summarize_wandb_runs(
                     model, cv_type, null_model, feature_type, 
                     use_weighted=use_weighted, exclude=exclude,
-                    within_last=within_last, before_last=before_last
+                    within_last=model_within_last, before_last=model_before_last
                 )
                 
                 # Handle bilinear_CM and dynamic_mlp_coords splits explicitly

@@ -4,9 +4,9 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
 #SBATCH --time=3:00:00
-#SBATCH --mem=128GB
+#SBATCH --mem=256GB
 #SBATCH --gres=gpu:1
-#SBATCH --constraint=h100|a100
+#SBATCH --constraint=h100
 #SBATCH --job-name=gx2c_smt
 #SBATCH --output=/scratch/asr655/neuroinformatics/GeneEx2Conn/sim/logs/sim_%A_%a.out
 #SBATCH --error=/scratch/asr655/neuroinformatics/GeneEx2Conn/sim/logs/sim_%A_%a.err
@@ -40,6 +40,7 @@ singularity exec --nv \
   --feature_type transcriptome \
   --random_seed $seed \
   --skip_cv true \
+  # --n_cvs 6 \
   --use_folds 0 1 2 3"
 
 echo "Job Complete"

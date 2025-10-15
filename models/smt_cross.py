@@ -41,6 +41,10 @@ class CrossAttentionBlock(nn.Module):
         )
         self.ffn_norm = nn.LayerNorm(d_model)
         
+        # Add attention weight storage for analysis
+        self.store_attn = False
+        self.last_attn_weights = None
+        
         self.use_alibi = use_alibi
         if use_alibi:
             slopes = FlashAttentionBlock.build_alibi_slopes(nhead)
@@ -50,6 +54,10 @@ class CrossAttentionBlock(nn.Module):
         """Split heads for queries, keys and values"""
         return x.view(x.size(0), x.size(1), self.nhead, self.head_dim)
     
+    def merge_heads(self, x):
+        """Merge heads back to original shape"""
+        return x.transpose(1, 2).reshape(x.size(0), x.size(2), -1)
+
     def forward(self, queries, keys, values):
         """
         Args:
@@ -66,23 +74,36 @@ class CrossAttentionBlock(nn.Module):
             # Project queries, keys, and values
             q = self.q_proj(queries)  # (B, seq_len_q, d_model)
             k = self.k_proj(keys)  # (B, seq_len_kv, d_model)
-            v = self.v_proj(values)  # (B, seq_len_kv, d_model*2)
+            v = self.v_proj(values)  # (B, seq_len_kv, d_model)
             
             # Reshape for multi-head attention
             # flash_attn_func expects (B, seqlen, nhead, head_dim) format
             q = self.split_heads(q)  # (B, seq_len_q, nhead, head_dim)
             k = self.split_heads(k)  # (B, seq_len_kv, nhead, head_dim)
-            v = self.split_heads(v)  # (B, seq_len_kv, nhead, head_dim*2)
+            v = self.split_heads(v)  # (B, seq_len_kv, nhead, head_dim)
             
-            # Flash attention (cross-attention)
-            attn_output = flash_attn_func(
-                q, k, v,
-                dropout_p=self.dropout,
-                causal=False,
-            )  # (B, seq_len_q, nhead, head_dim)
+            if self.store_attn:
+                # Use manual attention computation to get weights
+                q_reshaped = q.transpose(1, 2)  # (B, nhead, seq_len_q, head_dim)
+                k_reshaped = k.transpose(1, 2)  # (B, nhead, seq_len_kv, head_dim)
+                v_reshaped = v.transpose(1, 2)  # (B, nhead, seq_len_kv, head_dim)
+                
+                attn_output, attn_weights = scaled_dot_product_cross_attention_with_weights(
+                    q_reshaped, k_reshaped, v_reshaped, dropout_p=0.0, apply_dropout=False
+                )
+                self.last_attn_weights = attn_weights.detach().cpu()
+                attn_output = self.merge_heads(attn_output)
+            else:
+                # Flash attention (cross-attention)
+                attn_output = flash_attn_func(
+                    q, k, v,
+                    dropout_p=self.dropout,
+                    causal=False,
+                )  # (B, seq_len_q, nhead, head_dim)
+                
+                # Reshape back: (B, seq_len_q, d_model)
+                attn_output = attn_output.reshape(attn_output.size(0), attn_output.size(1), self.d_model)
             
-            # Reshape back: (B, seq_len_q, d_model*2)
-            attn_output = attn_output.reshape(attn_output.size(0), attn_output.size(1), self.d_model)        
             # Apply dropout and residual
             attn_output = self.attn_dropout(attn_output)
             x = self.attn_norm(residual + attn_output)
@@ -355,7 +376,7 @@ class CrossAttentionGeneVecModel(BaseTransformerModel):
         self.valid_genes = region_pair_dataset.valid_genes
         self.lambda_sym = lambda_sym
         self.bidirectional = bidirectional
-        self.patience = 70
+        self.patience = 200 # usually 70
         
         # Setup symmetric loss if lambda_sym > 0
         if self.lambda_sym > 0:
@@ -430,6 +451,84 @@ class CrossAttentionGeneVecModel(BaseTransformerModel):
         return train_model(self, train_loader, test_loader, self.epochs, self.criterion, 
                             self.optimizer, self.patience, scheduler=self.scheduler, 
                             save_model=save_model, verbose=verbose, dataset=dataset)
+
+
+    def predict(self, loader, collect_attn=False, save_attn_path=None):
+        self.eval()
+        predictions = []
+        targets = []
+        
+        all_attn = []
+        total_batches = 0
+        
+        self.store_attn = collect_attn
+        if collect_attn and not getattr(self, 'use_attention_pooling', False):
+            # 1. Set forward pass to collect weights instead of FlashAttention
+            collect_full_cross_attention_heads(self.encoder.cross_attn_layers)
+        
+        with torch.no_grad():
+            for batch_idx, batch_data in enumerate(loader):
+                batch_X, batch_y, batch_coords, batch_expanded_idx = batch_data[0], batch_data[1], batch_data[2], batch_data[3]
+                batch_X = batch_X.to(self.device)
+                batch_coords = batch_coords.to(self.device)
+                batch_expanded_idx = batch_expanded_idx.to(self.device)
+                
+                if collect_attn:
+                    out = self(batch_X, batch_coords, batch_expanded_idx)
+                    if getattr(self, 'use_attention_pooling', False): # defaults to False
+                        batch_preds = out["output"].cpu().numpy()
+                        attns = (out["attn_beta_i"], out["attn_beta_j"])
+                        all_attn.append(attns)
+                    else:
+                        # 2. Compute batch-wise average attention weights from last layer of transformer
+                        batch_preds = out.cpu().numpy()
+                        accumulate_cross_attention_weights(self.encoder.cross_attn_layers, is_first_batch=(batch_idx == 0))
+                        total_batches += 1
+                else:
+                    batch_preds = self(batch_X, batch_coords, batch_expanded_idx).cpu().numpy()
+                
+                predictions.append(batch_preds)
+                targets.append(batch_y.numpy())
+        
+        predictions = np.concatenate(predictions)
+        targets = np.concatenate(targets)
+        
+        self.store_attn = False  # Disable attention collection to prevent memory leaks
+        if collect_attn:
+            if getattr(self, 'use_attention_pooling', False):
+                avg_attn_arr = collect_attention_pooling_weights(all_attn, save_attn_path)
+                return predictions, targets, avg_attn_arr, all_attn
+            else:
+                # 3. Compute overall average attention weights over all batches
+                avg_attn = process_full_cross_attention_heads(self.encoder.cross_attn_layers, total_batches, save_attn_path, len(self.encoder.shared_genes))
+                return predictions, targets, avg_attn
+        
+        return predictions, targets
+
+    def get_attention_heads(self, avg_attn):
+        """
+        Simple helper to extract individual heads and global average from attention tensor
+        
+        Args:
+            avg_attn: attention tensor from predict() method
+            
+        Returns:
+            tuple: (individual_heads_list, global_average)
+        """
+        if avg_attn is None:
+            return None, None
+            
+        # Convert to numpy if needed
+        if hasattr(avg_attn, 'cpu'):
+            avg_attn = avg_attn.cpu().numpy()
+        
+        # Individual heads as list
+        individual_heads = [avg_attn[h] for h in range(avg_attn.shape[0])]
+        
+        # Global average
+        global_average = avg_attn.mean(axis=0)
+        
+        return individual_heads, global_average
 
 
 

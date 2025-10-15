@@ -10,7 +10,7 @@ parameters:
   expression_bins:       # Number of expression bins per gene
     values: [5]
   d_model:              # Transformer embedding dimension
-    values: [32, 64]
+    values: [16, 32, 64]
   nhead:                # Number of attention heads
     values: [2, 4]
   num_layers:           # Number of cross-attention layers
@@ -42,11 +42,11 @@ parameters:
   aug_prob:            # Data augmentation probability
     values: [0.0, 0.1, 0.3]
   aug_style:
-    values: ['curriculum_swap_linear_decay', 'curriculum_swap_constant']
+    values: ['curriculum_swap_linear_decay', 'curriculum_swap_constant', 'linear_decay']
   lambda_sym:
     values: [0, .0001, .00001]
   bidirectional:
-    values: [True]
+    values: [True, False]
   num_workers:
     values: [2]
   prefetch_factor:
@@ -60,7 +60,7 @@ best_parameters:
   expression_bins:
     values: [5]
   genevec_type:
-    values: ['one_hot'] # 'gene2vec', 'coexpression', 'one_hot' (best)
+    values: ['gene2vec'] # 'gene2vec', 'coexpression', 'one_hot' (best)
   d_model:
     values: [32] # 64 is best
   nhead:

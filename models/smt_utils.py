@@ -226,6 +226,15 @@ def scaled_dot_product_attention_with_weights(query, key, value, dropout_p=0.0, 
     output = torch.matmul(weights, value)
     return output, weights
 
+def scaled_dot_product_cross_attention_with_weights(query, key, value, dropout_p=0.0, scale=None, apply_dropout=False):
+    """Helper function to compute cross-attention output and weights at inference"""
+    scale_factor = 1 / math.sqrt(query.size(-1)) if scale is None else scale
+    scores = torch.matmul(query, key.transpose(-2, -1)) * scale_factor
+    weights = torch.softmax(scores, dim=-1)
+    weights = F.dropout(weights, p=dropout_p, training=apply_dropout)
+    output = torch.matmul(weights, value)
+    return output, weights
+
 def create_gene_tokens(token_chunk_size=20, verbose=True):
     """
     Create gene tokens and chromosome switch points based on token chunk size
@@ -364,14 +373,60 @@ def plot_avg_attention(avg_attn, token_encoder_dim=None, use_chrom_labels=True):
     plt.tight_layout()
     plt.show()
 
+def plot_cross_attention(avg_attn, genevec_dim=None):
+    """Helper function to plot average cross-attention weights"""
+    nhead = avg_attn.shape[0]
+    
+    # Create subplot grid with n+1 plots (n heads + global average)
+    fig, axes = plt.subplots(1, nhead+1, figsize=((nhead+1)*6, 5))
+    
+    # Plot individual attention heads
+    for h in range(nhead):
+        vmin, vmax = avg_attn[h].min(), avg_attn[h].max()
+        im = axes[h].imshow(avg_attn[h], cmap="viridis", vmin=vmin, vmax=vmax)
+        axes[h].set_title(f"Cross-Attention Head {h}")
+        axes[h].set_xlabel("Key Genes (Region J)")
+        axes[h].set_ylabel("Query Genes (Region I)")
+        plt.colorbar(im, ax=axes[h], label=f"Weight [{vmin:.2f}, {vmax:.2f}]")
+    
+    # Plot global average attention
+    global_avg = avg_attn.mean(axis=0)
+    vmin, vmax = global_avg.min(), global_avg.max()
+    im = axes[-1].imshow(global_avg, cmap="viridis", vmin=vmin, vmax=vmax)
+    axes[-1].set_title("Global Average")
+    axes[-1].set_xlabel("Key Genes (Region J)")
+    axes[-1].set_ylabel("Query Genes (Region I)")
+    plt.colorbar(im, ax=axes[-1], label=f"Weight [{vmin:.2f}, {vmax:.2f}]")
+    
+    plt.tight_layout()
+    plt.show()
+
 def collect_full_attention_heads(encoder_layers, save_attn_path=None):
     """Enable full attention head collection"""
     for layer in encoder_layers:
         layer.store_attn = True
     return None
 
+def collect_full_cross_attention_heads(encoder_layers, save_attn_path=None):
+    """Enable full cross-attention head collection"""
+    for layer in encoder_layers:
+        layer.store_attn = True
+    return None
+
 def accumulate_attention_weights(encoder_layers, is_first_batch=False):
     """Accumulate attention weights during inference"""
+    last_layer = encoder_layers[-1]
+    attn_weights = last_layer.last_attn_weights # trained weights
+    
+    if attn_weights is not None:
+        batch_avg = attn_weights.mean(dim=0)
+        if is_first_batch or not hasattr(last_layer, '_accumulated_attn'):
+            last_layer._accumulated_attn = batch_avg
+        else:
+            last_layer._accumulated_attn += batch_avg
+
+def accumulate_cross_attention_weights(encoder_layers, is_first_batch=False):
+    """Accumulate cross-attention weights during inference"""
     last_layer = encoder_layers[-1]
     attn_weights = last_layer.last_attn_weights # trained weights
     
@@ -402,6 +457,28 @@ def process_full_attention_heads(encoder_layers, total_batches, save_attn_path=N
             delattr(layer, '_accumulated_attn')
     
     return avg_attn
+
+def process_full_cross_attention_heads(encoder_layers, total_batches, save_attn_path=None, genevec_dim=None):
+    """Process collected full cross-attention head weights"""
+    # Extract last layer of transformer and accumulated average attention over all batches
+    last_layer = encoder_layers[-1]
+    avg_attn = getattr(last_layer, '_accumulated_attn', None)
+    
+    if avg_attn is not None and total_batches > 0:
+        avg_attn = avg_attn / total_batches
+        plot_cross_attention(avg_attn.cpu(), genevec_dim=genevec_dim)
+        
+        if save_attn_path is not None:
+            np.save('./models/saved_models/saved_heads/'+save_attn_path, avg_attn.cpu().numpy())
+    
+    # Clean up
+    for layer in encoder_layers:
+        layer.store_attn = False
+        if hasattr(layer, '_accumulated_attn'):
+            delattr(layer, '_accumulated_attn')
+    
+    return avg_attn
+
 
 def collect_attention_pooling_weights(all_attn, save_attn_path=None):
     """Process and save attention pooling weights"""

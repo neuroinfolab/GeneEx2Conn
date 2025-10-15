@@ -154,11 +154,11 @@ class BilinearCM(nn.Module):
         if self.closed_form:
             return self.fit_closed_form(dataset, train_indices, test_indices, train_loader, test_loader)
         else: 
-            return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.patience, self.scheduler, self.optimizer)
+            return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.patience, self.scheduler, self.optimizer, save_model=save_model, verbose=verbose)
 
-    def fit_full(self, dataset, verbose=True):
+    def fit_full(self, dataset, verbose=True, save_model=None):
         train_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, pin_memory=False)
-        return train_model(self, train_loader, None, self.epochs, self.criterion, self.patience, self.scheduler, self.optimizer)
+        return train_model(self, train_loader, None, self.epochs, self.criterion, self.patience, self.scheduler, self.optimizer, save_model=save_model, verbose=verbose)
     
     def fit_closed_form(self, dataset, train_indices, test_indices, train_loader, test_loader):
         """

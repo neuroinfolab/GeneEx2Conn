@@ -28,7 +28,7 @@ parameters:
   transformer_dropout:
     values: [0.1, 0.2]
   dropout_rate:
-    values: [0.1, 0.2]
+    values: [0.1, 0.2, 0.3]
   learning_rate:
     values: [0.00009, 0.0001]
   weight_decay:
@@ -50,7 +50,7 @@ best_parameters:
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [20]
+    values: [60]
   d_model:
     values: [128]
   encoder_output_dim:
@@ -69,9 +69,9 @@ best_parameters:
   transformer_dropout:
     values: [0.2]
   dropout_rate:
-    values: [0.2]
+    values: [0.3]
   learning_rate:
-    values: [0.0001]
+    values: [0.00009]
   weight_decay:
     values: [0.0001]
   batch_size:
@@ -83,6 +83,6 @@ best_parameters:
   epochs:
     values: [110]
   num_workers:
-    values: [1]
+    values: [2]
   prefetch_factor:
-    values: [1]
+    values: [4]
