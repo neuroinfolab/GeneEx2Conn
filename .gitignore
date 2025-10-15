@@ -30,5 +30,7 @@ data/geneformer*
 !glass/cv_split_s400_structural_connectivity_random_split_4.gif
 !glass/S400_LAMA1_expression.png
 !run_sim.sh
-!run_sim_parallel_smt_seq_array.sh
-!run_sim_parallel_smt_cls_seq_array.sh
+!run_sim_parallel_smt_seq_noCV_array.sh
+!run_sim_parallel_smt_seq_CV_array.sh
+!run_sim_parallel_smt_cls_seq_noCV_array.sh
+!run_sim_parallel_smt_cls_seq_CV_array.sh

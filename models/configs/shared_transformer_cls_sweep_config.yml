@@ -21,8 +21,8 @@ parameters:
     values: [2, 4]
   deep_hidden_dims:
     values:
-     - [256, 128]
-     - [512, 256, 128]
+    - [256, 128]
+    - [512, 256, 128]
   cls_init:
     values: ['spatial_learned']
   transformer_dropout:
@@ -50,7 +50,7 @@ best_parameters:
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [60]
+    values: [20]
   d_model:
     values: [128]
   encoder_output_dim:
@@ -71,9 +71,9 @@ best_parameters:
   dropout_rate:
     values: [0.3]
   learning_rate:
-    values: [0.00009]
+    values: [0.0001] # 0.0001 for 20, .00009 for 60
   weight_decay:
-    values: [0.0001]
+    values: [0.0001] 
   batch_size:
     values: [512]
   aug_prob:

@@ -6,6 +6,7 @@ feature_type:
 use_shared_regions: false
 test_shared_regions: false
 omit_subcortical: false
+dataset: 'BHA2'
 parcellation: 'iPA_391'
 hemisphere: 'both'
 connectome_target: 'FC'
@@ -26,5 +27,5 @@ skip_cv: true
 use_folds: [0, 1, 2, 3]
 
 # Model
-model_type: dynamic_mlp
+model_type: shared_transformer
 use_gpu: true

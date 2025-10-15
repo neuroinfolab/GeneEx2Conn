@@ -111,16 +111,16 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             genes_list = genes_data.columns.tolist()
         
         # Choose gene list for subsetting genes_data
-        if gene_list == '0.2' or gene_list == '1': # ~7.5k for 0.2, ~15k for 1
+        if 'iPA' in parcellation:
+            genes_list_abagen = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_400.txt", header=None)[0].tolist() # broadest gene list
+            genes_list = list(set(genes_list).intersection(set(genes_list_abagen)))
+        elif gene_list == '0.2' or gene_list == '1': # ~7.5k for 0.2, ~15k for 1
             if parcellation == 'S156':
                 genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_100.txt", header=None)[0].tolist()
             elif parcellation == 'S456':
                 genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_400.txt", header=None)[0].tolist()
             else:
                 genes_list = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_{parcellation[1:]}.txt", header=None)[0].tolist()
-        elif 'iPA' in parcellation:
-            genes_list_abagen = pd.read_csv(f"./data/enigma/gene_lists/stable_r{gene_list}_schaefer_400.txt", header=None)[0].tolist() # broadest gene list
-            genes_list = list(set(genes_list).intersection(set(genes_list_abagen))) # drop last 3 genes to make token divisible
         elif gene_list == 'richiardi2015': # 136 genes usually subset to ~105
             genes_list = pd.read_csv('./data/enigma/gene_lists/richiardi2015.txt', header=None)[0].tolist()
         elif gene_list == 'syngo': # ~1.5k genes
@@ -195,48 +195,42 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             genes_data = _apply_pca(genes_data, version=run_PCA)
 
         # base return for iPA parcellation
-        if 'iPA' in parcellation:
-            if null_model == 'spin':
-                hemi_mask, subcortical_mask, n_cortical = get_iPA_masks(parcellation)
-                # load spins
-                spins_df_10k = pd.read_csv(f'./data/enigma/10000_{parcellation}_null_spins.csv')
-                spins_df_10k = spins_df_10k.sort_values('mean_error_rank', ascending=True)
-                seed_to_index = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 9: 8, 42: 9}
-                # Get spin index based on random seed
-                spin_idx = seed_to_index.get(random_seed, 0)# Get spin indices
-                cortical_spins_list = spins_df_10k['cortical_spins'].tolist()
-                cortical_spins_list = [eval(x) for x in cortical_spins_list]
-                cortical_spin_indices = np.array(cortical_spins_list)
-                subcortical_spins_list = spins_df_10k['subcortical_spins'].tolist()
-                subcortical_spins_list = [eval(x) for x in subcortical_spins_list]
-                subcortical_spin_indices = np.array(subcortical_spins_list)
         
-                cortical_spin_idx = cortical_spin_indices[spin_idx]
-                subcortical_spin_idx = subcortical_spin_indices[spin_idx]
+        if null_model == 'spin' and 'iPA' in parcellation:
+            hemi_mask, subcortical_mask, n_cortical = get_iPA_masks(parcellation)
+            # load spins
+            spins_df_10k = pd.read_csv(f'./data/enigma/10000_{parcellation}_null_spins.csv')
+            spins_df_10k = spins_df_10k.sort_values('mean_error_rank', ascending=True)
+            seed_to_index = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 7, 9: 8, 42: 9}
+            # Get spin index based on random seed
+            spin_idx = seed_to_index.get(random_seed, 0)# Get spin indices
+            cortical_spins_list = spins_df_10k['cortical_spins'].tolist()
+            cortical_spins_list = [eval(x) for x in cortical_spins_list]
+            cortical_spin_indices = np.array(cortical_spins_list)
+            subcortical_spins_list = spins_df_10k['subcortical_spins'].tolist()
+            subcortical_spins_list = [eval(x) for x in subcortical_spins_list]
+            subcortical_spin_indices = np.array(subcortical_spins_list)
+    
+            cortical_spin_idx = cortical_spin_indices[spin_idx]
+            subcortical_spin_idx = subcortical_spin_indices[spin_idx]
 
-                genes_data = np.vstack([genes_data[cortical_spin_idx], genes_data[subcortical_spin_idx+n_cortical]])
-
-            return genes_data
-
-        # Drop subcortical regions if specified
-        if omit_subcortical:
-            n = (genes_data.shape[0] // 100) * 100 # Hacky way to retain only cortical regions by rounding down to nearest hundred
-            genes_data = genes_data[:n, :]
-            region_labels = region_labels[:n]
-        
-        # Subset genes_data and region_labels based on hemisphere
-        lh_indices, rh_indices = [i for i, label in enumerate(region_labels) if 'LH' in label], [i for i, label in enumerate(region_labels) if 'RH' in label]
-        lh_labels, rh_labels = [region_labels[i] for i in lh_indices], [region_labels[i] for i in rh_indices]
-        if hemisphere == 'left':
-            genes_data = genes_data[lh_indices, :]
-            region_labels = lh_labels
-        elif hemisphere == 'right':
-            genes_data = genes_data[rh_indices, :]
-            region_labels = rh_labels
-
-        if return_valid_genes:
-            #print("valid genes", valid_genes)
-            return genes_data, valid_genes
+            genes_data = np.vstack([genes_data[cortical_spin_idx], genes_data[subcortical_spin_idx+n_cortical]])
+        elif 'iPA' not in parcellation:
+            # Drop subcortical regions if specified
+            if omit_subcortical:
+                n = (genes_data.shape[0] // 100) * 100 # Hacky way to retain only cortical regions by rounding down to nearest hundred
+                genes_data = genes_data[:n, :]
+                region_labels = region_labels[:n]
+            
+            # Subset genes_data and region_labels based on hemisphere
+            lh_indices, rh_indices = [i for i, label in enumerate(region_labels) if 'LH' in label], [i for i, label in enumerate(region_labels) if 'RH' in label]
+            lh_labels, rh_labels = [region_labels[i] for i in lh_indices], [region_labels[i] for i in rh_indices]
+            if hemisphere == 'left':
+                genes_data = genes_data[lh_indices, :]
+                region_labels = lh_labels
+            elif hemisphere == 'right':
+                genes_data = genes_data[rh_indices, :]
+                region_labels = rh_labels
         
         if null_model == 'spin' and parcellation == 'S456':
             print('Spinning gene expression')
@@ -268,6 +262,9 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             rng = np.random.default_rng(random_seed)
             genes_data = rng.permutation(genes_data)
         
+        if return_valid_genes:
+            return genes_data, valid_genes
+        
         return genes_data
 
 def load_cell_types(parcellation='S456', omit_subcortical=True, ref_dataset='Jorstad'):
@@ -282,7 +279,7 @@ def load_cell_types(parcellation='S456', omit_subcortical=True, ref_dataset='Jor
         np.ndarray: Cell type data, padded to 456 regions if omit_subcortical=False
     """
     if parcellation != 'S456':
-        raise ValueError("Cell type data only available for S400/S456 parcellation")
+        print("Warning: Cell type data only available for S400/S456 parcellation")
     
     cell_types_df = pd.read_csv(f'./data/enigma/schaef400_{ref_dataset}_cell_types.csv', index_col=0)
     cell_types = np.array(cell_types_df)

@@ -117,9 +117,9 @@ class Simulation:
         self.X, self.valid_genes = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes, null_model=self.null_model, random_seed=self.random_seed, return_valid_genes=True)
         self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA='95var', hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
         self.X_pca_full = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA='full', hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
-        self.X_cell_types_Jorstad = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='Jorstad')
-        self.X_cell_types_Lake_DFC = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeDFC')
-        self.X_cell_types_Lake_VIS = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeVIS')
+        #self.X_cell_types_Jorstad = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='Jorstad')
+        #self.X_cell_types_Lake_DFC = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeDFC')
+        #self.X_cell_types_Lake_VIS = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeVIS')
         self.Y_sc = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None, hemisphere=self.hemisphere)
         self.Y_sc_binary = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
         self.Y_sc_spectralL = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L', hemisphere=self.hemisphere)
@@ -141,9 +141,6 @@ class Simulation:
         self.X = self.X[valid_indices]
         self.X_pca = self.X_pca[valid_indices]
         self.X_pca_full = self.X_pca_full[valid_indices]
-        self.X_cell_types_Jorstad = self.X_cell_types_Jorstad[valid_indices]
-        self.X_cell_types_Lake_DFC = self.X_cell_types_Lake_DFC[valid_indices]
-        self.X_cell_types_Lake_VIS = self.X_cell_types_Lake_VIS[valid_indices]
         self.Y_sc = self.Y_sc[valid_indices][:, valid_indices]
         self.Y_sc_binary = self.Y_sc_binary[valid_indices][:, valid_indices]
         self.Y_sc_spectralL = self.Y_sc_spectralL[valid_indices]
@@ -153,18 +150,21 @@ class Simulation:
         self.coords = self.coords[valid_indices]
         self.network_labels = self.network_labels[valid_indices]
         self.labels = [self.labels[i] for i in range(len(self.labels)) if valid_indices[i]]
+        #self.X_cell_types_Jorstad = self.X_cell_types_Jorstad[valid_indices]
+        #self.X_cell_types_Lake_DFC = self.X_cell_types_Lake_DFC[valid_indices]
+        #self.X_cell_types_Lake_VIS = self.X_cell_types_Lake_VIS[valid_indices]
         
         print(f"X shape: {self.X.shape}")
         print(f"X_pca shape: {self.X_pca.shape}")
         print(f"X_pca_full shape: {self.X_pca_full.shape}")
-        print(f"X_cell_types_Jorstad shape: {self.X_cell_types_Jorstad.shape}") 
-        print(f"X_cell_types_LakeDFC shape: {self.X_cell_types_Lake_DFC.shape}")
-        print(f"X_cell_types_LakeVIS shape: {self.X_cell_types_Lake_VIS.shape}")
         print(f"Y_sc shape: {self.Y_sc.shape}")
         print(f"Y_sc_spectralL shape: {self.Y_sc_spectralL.shape}")
         print(f"Y_sc_spectralA shape: {self.Y_sc_spectralA.shape}")
         print(f"Y_fc shape: {self.Y_fc.shape}")
         print(f"Coordinates shape: {self.coords.shape}")
+        #print(f"X_cell_types_Jorstad shape: {self.X_cell_types_Jorstad.shape}") 
+        #print(f"X_cell_types_LakeDFC shape: {self.X_cell_types_Lake_DFC.shape}")
+        #print(f"X_cell_types_LakeVIS shape: {self.X_cell_types_Lake_VIS.shape}")
         
         # Define target connectome
         self.Y = self.Y_fc if 'FC' in self.connectome_target else self.Y_sc
@@ -206,10 +206,6 @@ class Simulation:
         feature_dict = {'transcriptome': self.X,
                         'transcriptome_PCA_95var': self.X_pca,
                         'transcriptome_PCA_full': self.X_pca_full,
-                        # cell type info 
-                        'Jorstad': self.X_cell_types_Jorstad,
-                        'LakeDFC': self.X_cell_types_Lake_DFC,
-                        'LakeVIS': self.X_cell_types_Lake_VIS,
                         'structural':   self.Y_sc,
                         'structural_spectral_L': self.Y_sc_spectralL,
                         'structural_spectral_A': self.Y_sc_spectralA,
@@ -217,6 +213,10 @@ class Simulation:
                         'euclidean': self.coords, 
                         'structural_spatial_null': np.hstack((self.coords, self.Y_sc)), # cannot be combined with other feats
                         'transcriptome_spatial_autocorr_null': np.hstack((self.coords, self.Y_sc, self.X_pca, self.X)), # cannot be combined with other feats
+                        # cell type info 
+                        #'Jorstad': self.X_cell_types_Jorstad,
+                        #'LakeDFC': self.X_cell_types_Lake_DFC,
+                        #'LakeVIS': self.X_cell_types_Lake_VIS
                         }
     
         X_all = []
