@@ -862,17 +862,19 @@ def plot_train_test_reordered_connectome(Y, train_indices, test_indices, measure
     plt.show()
 
 # EMBEDDING VISUALIZATIONS
-def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, std_edge_threshold=None, edge_threshold=None,
+def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, pc_values=None, std_edge_threshold=None, edge_threshold=None,
                         title=None, n_neighbors=15, spread=2.0, min_dist=0.5,
                         fontsize=30, axis_fontsize=26, scatter_alpha=0.8, scatter_size=18,
-                        edge_alpha=0.2, edge_width=0.5, omit_subcortical=False):
+                        edge_alpha=0.2, edge_width=0.5, omit_subcortical=False, label_indices=False,
+                        label_network_indices=None, flip_umap1=False, flip_umap2=False, network_gains=None):
     """
-    Plot UMAP visualization of embeddings colored by network labels, with optional FC edges.
+    Plot UMAP visualization of embeddings colored by network labels or PC values, with optional FC edges.
     
     Args:
         embeddings: Array of embeddings to visualize
-        network_labels: Array of network labels for coloring points
-        fc_matrix: Optional functional connectivity matrix matching embeddings indices
+        network_labels: Array of network labels for coloring points (ignored if pc_values provided)
+        conn_matrix: Optional functional connectivity matrix matching embeddings indices
+        pc_values: Optional array of PC values to color points by instead of network labels
         std_edge_threshold: Optional std dev threshold for showing edges (e.g. 3.0 shows +/-3 std)
         edge_threshold: Optional tuple of (neg_thresh, pos_thresh) for absolute thresholds
         title: Optional title for the plot
@@ -886,6 +888,11 @@ def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, std_
         edge_alpha: Alpha value for FC edges (default 0.2)
         edge_width: Line width for FC edges (default 0.5)
         omit_subcortical: If True, drops embeddings past nearest hundred (default False)
+        label_indices: If True, labels all points with their indices
+        label_network_indices: Network name to label points with their indices (e.g. 'Vis')
+        flip_umap1: If True, flips the UMAP1 axis (default False)
+        flip_umap2: If True, flips the UMAP2 axis (default False)
+        network_gains: Optional dictionary mapping network names to their gain values
     """
     # Handle subcortical omission if requested
     if omit_subcortical:
@@ -895,6 +902,8 @@ def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, std_
         network_labels = network_labels[:n_keep]
         if conn_matrix is not None:
             conn_matrix = conn_matrix[:n_keep, :n_keep]
+        if pc_values is not None:
+            pc_values = pc_values[:n_keep]
 
     # Create UMAP reducer with consistent parameters
     umap_params = dict(n_components=2, random_state=42, 
@@ -904,13 +913,11 @@ def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, std_
     # Fit and transform the embeddings
     umap_embeddings = reducer.fit_transform(embeddings)
     
-    # Define colors for each network
-    unique_networks = np.unique(network_labels)
-    colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_networks)))
-    network_to_color = dict(zip(unique_networks, colors))
-    
-    # Create color array based on network labels
-    point_colors = np.array([network_to_color[label] for label in network_labels])
+    # Apply axis flips if requested
+    if flip_umap1:
+        umap_embeddings[:, 0] = -umap_embeddings[:, 0]
+    if flip_umap2:
+        umap_embeddings[:, 1] = -umap_embeddings[:, 1]
     
     # Create scatter plot
     plt.figure(figsize=(10,8))
@@ -952,16 +959,98 @@ def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, std_
                     [umap_embeddings[i,1], umap_embeddings[j,1]], 
                     color='blue', alpha=opacity, linewidth=edge_width)
     
-    # Plot points for each network
-    for network, color in zip(unique_networks, colors):
-        mask = network_labels == network
-        plt.scatter(umap_embeddings[mask, 0], umap_embeddings[mask, 1],
-                   color=color, alpha=scatter_alpha, s=scatter_size)
+    legend_elements = []
     
-    # Create legend elements
-    legend_elements = [plt.Line2D([0], [0], marker='o', color='w',
-                                markerfacecolor=color, label=network, markersize=15)
-                      for network, color in zip(unique_networks, colors)]
+    if pc_values is not None:
+        if network_gains is not None:
+            # Scale point sizes by network gains
+            point_sizes = np.zeros(len(network_labels))
+            min_gain = min(network_gains.values())
+            max_gain = max(network_gains.values())
+            size_scale = scatter_size * 8  # Increase size range
+            
+            for network in np.unique(network_labels):
+                mask = network_labels == network
+                normalized_gain = (network_gains[network] - min_gain) / (max_gain - min_gain)
+                point_sizes[mask] = scatter_size + (normalized_gain * size_scale)
+            
+            scatter = plt.scatter(umap_embeddings[:, 0], umap_embeddings[:, 1],
+                                c=pc_values, cmap='viridis', 
+                                alpha=scatter_alpha, s=point_sizes)
+            plt.colorbar(scatter, label='PC Value')
+            
+            # Add size legend
+            legend_elements.extend([
+                plt.scatter([], [], c='gray', alpha=scatter_alpha, 
+                          s=scatter_size + (0 * size_scale),
+                          label=f'Min Gain ({min_gain:.2f})'),
+                plt.scatter([], [], c='gray', alpha=scatter_alpha,
+                          s=scatter_size + (1 * size_scale),
+                          label=f'Max Gain ({max_gain:.2f})')
+            ])
+        else:
+            scatter = plt.scatter(umap_embeddings[:, 0], umap_embeddings[:, 1],
+                                c=pc_values, cmap='viridis', 
+                                alpha=scatter_alpha, s=scatter_size)
+            plt.colorbar(scatter, label='PC Value')
+        
+        if label_indices:
+            for idx in range(len(umap_embeddings)):
+                plt.annotate(str(idx), 
+                           (umap_embeddings[idx,0], umap_embeddings[idx,1]),
+                           fontsize=6,
+                           alpha=0.7,
+                           xytext=(5,5), 
+                           textcoords='offset points')
+    else:
+        # Define colors for each network
+        unique_networks = np.unique(network_labels)
+        
+        if network_gains is not None:
+            # Create colormap based on gains
+            min_gain = min(network_gains.values())
+            max_gain = max(network_gains.values())
+            norm = plt.Normalize(min_gain, max_gain)
+            cmap = plt.cm.Greens
+            
+            # Create scatter collection for colorbar
+            scatter_points = []
+            scatter_colors = []
+            
+            # Plot points for each network
+            for network in unique_networks:
+                mask = network_labels == network
+                color_val = norm(network_gains[network])
+                points = plt.scatter(umap_embeddings[mask, 0], umap_embeddings[mask, 1],
+                                  color=cmap(color_val), alpha=scatter_alpha, s=scatter_size)
+                scatter_points.extend(umap_embeddings[mask])
+                scatter_colors.extend([color_val] * np.sum(mask))
+                
+                # Add index labels if requested
+                if (label_network_indices is not None and network == label_network_indices) or label_indices:
+                    indices = np.where(mask)[0]
+                    for idx in indices:
+                        plt.annotate(str(idx), 
+                                   (umap_embeddings[idx,0], umap_embeddings[idx,1]),
+                                   fontsize=6,
+                                   alpha=0.7,
+                                   xytext=(5,5), 
+                                   textcoords='offset points')
+            
+            # Add colorbar
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            plt.colorbar(sm, label='Non-linear Relative Performance Gain')
+            
+        else:
+            # Use rainbow colors if no gains provided
+            colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_networks)))
+            for network, color in zip(unique_networks, colors):
+                mask = network_labels == network
+                plt.scatter(umap_embeddings[mask, 0], umap_embeddings[mask, 1],
+                          color=color, alpha=scatter_alpha, s=scatter_size)
+                legend_elements.append(plt.Line2D([0], [0], marker='o', color='w',
+                                               markerfacecolor=color, label=network, 
+                                               markersize=15))
     
     # Add edge legend if edges are shown
     if conn_matrix is not None and (std_edge_threshold is not None or edge_threshold is not None):
@@ -980,7 +1069,8 @@ def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, std_
                           label=f'FC < {neg_threshold:.2f}')
             ])
     
-    plt.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left')
+    if legend_elements:
+        plt.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left')
     
     if title:
         plt.title(title, fontsize=fontsize, pad=10)
@@ -994,17 +1084,19 @@ def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, std_
 
 
 # EMBEDDING VISUALIZATIONS
-def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, std_edge_threshold=None, edge_threshold=None,
+def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, pc_values=None, std_edge_threshold=None, edge_threshold=None,
                     title=None, fontsize=30, axis_fontsize=26, scatter_alpha=0.8, scatter_size=18,
-                    edge_alpha=0.2, edge_width=0.5, omit_subcortical=False):
+                    edge_alpha=0.2, edge_width=0.5, omit_subcortical=False, label_network_indices=None, label_indices=False,
+                    network_gains=None):
     """
-    Plot 2D visualization of coordinates colored by network labels, with optional FC edges.
+    Plot 2D visualization of coordinates colored by network labels or PC values, with optional FC edges.
     
     Args:
         coords: Array of coordinates to visualize (N x D array where D >= 2)
-        network_labels: Array of network labels for coloring points
+        network_labels: Array of network labels for coloring points (ignored if pc_values provided)
         dims: Tuple of dimensions to plot, e.g. (0,1) for x,y or (1,2) for y,z (default (0,1))
         conn_matrix: Optional functional connectivity matrix matching coords indices
+        pc_values: Optional array of PC values to color points by instead of network labels
         std_edge_threshold: Optional std dev threshold for showing edges (e.g. 3.0 shows +/-3 std)
         edge_threshold: Optional tuple of (neg_thresh, pos_thresh) for absolute thresholds
         title: Optional title for the plot
@@ -1015,6 +1107,9 @@ def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, std_e
         edge_alpha: Alpha value for FC edges (default 0.2)
         edge_width: Line width for FC edges (default 0.5)
         omit_subcortical: If True, drops coords past nearest hundred (default False)
+        label_network_indices: Network name to label points with their indices (e.g. 'Vis')
+        label_indices: If True, label all points with their indices
+        network_gains: Optional dictionary mapping network names to their gain values
     """
     # Handle subcortical omission if requested
     if omit_subcortical:
@@ -1024,21 +1119,18 @@ def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, std_e
         network_labels = network_labels[:n_keep]
         if conn_matrix is not None:
             conn_matrix = conn_matrix[:n_keep, :n_keep]
+        if pc_values is not None:
+            pc_values = pc_values[:n_keep]
 
     # Extract the requested dimensions
     plot_coords = coords[:, list(dims)]
     
-    # Define colors for each network
-    unique_networks = np.unique(network_labels)
-    colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_networks)))
-    network_to_color = dict(zip(unique_networks, colors))
-    
-    # Create color array based on network labels
-    point_colors = np.array([network_to_color[label] for label in network_labels])
-    
     # Create scatter plot
     plt.figure(figsize=(10,7))
     plt.gca().set_facecolor("#eaeaf2")  # Light bluish background for plot area only
+    
+    # Initialize legend elements list
+    legend_elements = []
     
     # If FC matrix provided and either threshold is set, draw edges first
     if conn_matrix is not None and (std_edge_threshold is not None or edge_threshold is not None):
@@ -1075,17 +1167,107 @@ def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, std_e
             plt.plot([plot_coords[i,0], plot_coords[j,0]],
                     [plot_coords[i,1], plot_coords[j,1]], 
                     color='blue', alpha=opacity, linewidth=edge_width)
-    
-    # Plot points for each network
-    for network, color in zip(unique_networks, colors):
-        mask = network_labels == network
-        plt.scatter(plot_coords[mask, 0], plot_coords[mask, 1],
-                   color=color, alpha=scatter_alpha, s=scatter_size)
-    
-    # Create legend elements
-    legend_elements = [plt.Line2D([0], [0], marker='o', color='w',
-                                markerfacecolor=color, label=network, markersize=15)
-                      for network, color in zip(unique_networks, colors)]
+
+    if pc_values is not None:
+        if network_gains is not None:
+            # Scale point sizes by network gains
+            point_sizes = np.zeros(len(network_labels))
+            min_gain = min(network_gains.values())
+            max_gain = max(network_gains.values())
+            size_scale = scatter_size * 8  # Increase size range
+            
+            for network in np.unique(network_labels):
+                mask = network_labels == network
+                normalized_gain = (network_gains[network] - min_gain) / (max_gain - min_gain)
+                point_sizes[mask] = scatter_size + (normalized_gain * size_scale)
+            
+            scatter = plt.scatter(plot_coords[:, 0], plot_coords[:, 1],
+                                c=pc_values, cmap='viridis', 
+                                alpha=scatter_alpha, s=point_sizes)
+            plt.colorbar(scatter, label='PC Value')
+            
+            # Add size legend
+            legend_elements.extend([
+                plt.scatter([], [], c='gray', alpha=scatter_alpha, 
+                          s=scatter_size + (0 * size_scale),
+                          label=f'Min Gain ({min_gain:.2f})'),
+                plt.scatter([], [], c='gray', alpha=scatter_alpha,
+                          s=scatter_size + (1 * size_scale),
+                          label=f'Max Gain ({max_gain:.2f})')
+            ])
+        else:
+            scatter = plt.scatter(plot_coords[:, 0], plot_coords[:, 1],
+                                c=pc_values, cmap='viridis', 
+                                alpha=scatter_alpha, s=scatter_size)
+            plt.colorbar(scatter, label='PC Value')
+        
+        if label_indices:
+            for idx in range(len(plot_coords)):
+                plt.annotate(str(idx),
+                           (plot_coords[idx,0], plot_coords[idx,1]),
+                           fontsize=6,
+                           alpha=0.7,
+                           xytext=(5,5),
+                           textcoords='offset points')
+    else:
+        # Define colors for each network
+        unique_networks = np.unique(network_labels)
+        if network_gains is not None:
+            # Use gains to color points
+            min_gain = min(network_gains.values())
+            max_gain = max(network_gains.values())
+            norm = plt.Normalize(min_gain, max_gain)
+            cmap = plt.cm.Greens
+            
+            scatter_points = []
+            scatter_colors = []
+            
+            # Plot points for each network
+            for network in unique_networks:
+                mask = network_labels == network
+                color_val = norm(network_gains[network])
+                points = plt.scatter(plot_coords[mask, 0], plot_coords[mask, 1],
+                                  color=cmap(color_val), alpha=scatter_alpha, s=scatter_size)
+                scatter_points.extend(plot_coords[mask])
+                scatter_colors.extend([color_val] * np.sum(mask))
+                
+                # Add index labels if requested
+                if (label_network_indices is not None and network == label_network_indices) or label_indices:
+                    indices = np.where(mask)[0]
+                    for idx in indices:
+                        plt.annotate(str(idx), 
+                                   (plot_coords[idx,0], plot_coords[idx,1]),
+                                   fontsize=6,
+                                   alpha=0.7,
+                                   xytext=(5,5), 
+                                   textcoords='offset points')
+            
+            # Add colorbar
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            plt.colorbar(sm, label='Non-linear Relative Performance Gain')
+            
+        else:
+            # Use rainbow colors if no gains provided
+            colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_networks)))
+            for network, color in zip(unique_networks, colors):
+                mask = network_labels == network
+                plt.scatter(plot_coords[mask, 0], plot_coords[mask, 1],
+                          color=color, alpha=scatter_alpha, s=scatter_size)
+                       
+                # Add index labels for specified network or all if label_indices=True
+                if (label_network_indices is not None and network == label_network_indices) or label_indices:
+                    indices = np.where(network_labels == network)[0]
+                    for idx in indices:
+                        plt.annotate(str(idx), 
+                                   (plot_coords[idx,0], plot_coords[idx,1]),
+                                   fontsize=6,
+                                   alpha=0.7,
+                                   xytext=(5,5), 
+                                   textcoords='offset points')
+                               
+                # Add network colors to legend
+                legend_elements.append(plt.Line2D([0], [0], marker='o', color='w',
+                                                markerfacecolor=color, label=network, markersize=15))
     
     # Add edge legend if edges are shown
     if conn_matrix is not None and (std_edge_threshold is not None or edge_threshold is not None):
@@ -1104,7 +1286,8 @@ def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, std_e
                           label=f'FC < {neg_threshold:.2f}')
             ])
     
-    plt.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left')
+    if legend_elements:
+        plt.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left')
     
     if title:
         plt.title(title, fontsize=fontsize, pad=10)

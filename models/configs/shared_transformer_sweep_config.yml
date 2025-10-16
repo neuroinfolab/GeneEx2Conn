@@ -71,9 +71,9 @@ best_parameters:
   weight_decay:
     values: [0.0001]
   batch_size:
-    values: [512]
+    values: [512] # 512 default
   aug_prob:
-    values: [0.3]
+    values: [0.3] # 0.3 default
   aug_style:
     values: ['curriculum_swap_linear_decay']
   epochs:
