@@ -861,11 +861,12 @@ def plot_train_test_reordered_connectome(Y, train_indices, test_indices, measure
     plt.tight_layout()
     plt.show()
 
+
 # EMBEDDING VISUALIZATIONS
 def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, pc_values=None, std_edge_threshold=None, edge_threshold=None,
                         title=None, n_neighbors=15, spread=2.0, min_dist=0.5,
-                        fontsize=30, axis_fontsize=26, scatter_alpha=0.8, scatter_size=18,
-                        edge_alpha=0.2, edge_width=0.5, omit_subcortical=False, label_indices=False,
+                        fontsize=30, axis_fontsize=26, scatter_alpha=0.8, scatter_size=18, figsize=(10,7),
+                        edge_alpha=0.3, edge_width=0.7, omit_subcortical=False, label_indices=False,
                         label_network_indices=None, flip_umap1=False, flip_umap2=False, network_gains=None):
     """
     Plot UMAP visualization of embeddings colored by network labels or PC values, with optional FC edges.
@@ -919,8 +920,8 @@ def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, pc_v
     if flip_umap2:
         umap_embeddings[:, 1] = -umap_embeddings[:, 1]
     
-    # Create scatter plot
-    plt.figure(figsize=(10,8))
+    # Create scatter plot with high DPI
+    plt.figure(figsize=figsize, dpi=300)
     plt.gca().set_facecolor("#eaeaf2")  # Light bluish background for plot area only
 
     # If FC matrix provided and either threshold is set, draw edges first
@@ -967,32 +968,33 @@ def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, pc_v
             point_sizes = np.zeros(len(network_labels))
             min_gain = min(network_gains.values())
             max_gain = max(network_gains.values())
-            size_scale = scatter_size * 8  # Increase size range
+            size_scale = scatter_size * 5 # Increase size range
             
             for network in np.unique(network_labels):
                 mask = network_labels == network
                 normalized_gain = (network_gains[network] - min_gain) / (max_gain - min_gain)
-                point_sizes[mask] = scatter_size + (normalized_gain * size_scale)
-            
+                # Apply exponential scaling to enhance larger gains
+                enhanced_gain = normalized_gain ** 1.5
+                point_sizes[mask] = scatter_size + (enhanced_gain * size_scale)
             scatter = plt.scatter(umap_embeddings[:, 0], umap_embeddings[:, 1],
                                 c=pc_values, cmap='viridis', 
                                 alpha=scatter_alpha, s=point_sizes)
-            plt.colorbar(scatter, label='PC Value')
+            plt.colorbar(scatter, label='PC2 Value', shrink=0.5)
             
             # Add size legend
             legend_elements.extend([
                 plt.scatter([], [], c='gray', alpha=scatter_alpha, 
-                          s=scatter_size + (0 * size_scale),
-                          label=f'Min Gain ({min_gain:.2f})'),
+                          s=scatter_size + (0.2 * size_scale),
+                          label=f'Min Gain (+{min_gain:.2f})'),
                 plt.scatter([], [], c='gray', alpha=scatter_alpha,
                           s=scatter_size + (1 * size_scale),
-                          label=f'Max Gain ({max_gain:.2f})')
+                          label=f'Max Gain (+{max_gain:.2f})')
             ])
         else:
             scatter = plt.scatter(umap_embeddings[:, 0], umap_embeddings[:, 1],
                                 c=pc_values, cmap='viridis', 
                                 alpha=scatter_alpha, s=scatter_size)
-            plt.colorbar(scatter, label='PC Value')
+            plt.colorbar(scatter, label='PC2 Value')
         
         if label_indices:
             for idx in range(len(umap_embeddings)):
@@ -1052,23 +1054,32 @@ def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, pc_v
                                                markerfacecolor=color, label=network, 
                                                markersize=15))
     
-    # Add edge legend if edges are shown
+     # Add edge legend if edges are shown
     if conn_matrix is not None and (std_edge_threshold is not None or edge_threshold is not None):
         if std_edge_threshold is not None:
-            legend_elements.extend([
+            # Add positive threshold to legend
+            legend_elements.append(
                 plt.Line2D([0], [0], color='red', alpha=edge_alpha+0.3, 
-                          label=f'FC > {std_edge_threshold:.1f}σ'), 
-                plt.Line2D([0], [0], color='blue', alpha=edge_alpha+0.3,
-                          label=f'FC < -{std_edge_threshold:.1f}σ')
-            ])
+                          label=f'FC > {std_edge_threshold:.1f}σ')
+            )
+            # Only add negative threshold if there are negative edges
+            if np.any(conn_matrix < (np.mean(conn_matrix) - std_edge_threshold * np.std(conn_matrix))):
+                legend_elements.append(
+                    plt.Line2D([0], [0], color='blue', alpha=edge_alpha+0.3,
+                              label=f'FC < -{std_edge_threshold:.1f}σ')
+                )
         else:
-            legend_elements.extend([
+            # Add positive threshold to legend
+            legend_elements.append(
                 plt.Line2D([0], [0], color='red', alpha=edge_alpha+0.3, 
-                          label=f'FC > {pos_threshold:.2f}'),
-                plt.Line2D([0], [0], color='blue', alpha=edge_alpha+0.3,
-                          label=f'FC < {neg_threshold:.2f}')
-            ])
-    
+                          label=f'FC > {pos_threshold:.2f}')
+            )
+            # Only add negative threshold if there are negative edges
+            if np.any(conn_matrix < neg_threshold):
+                legend_elements.append(
+                    plt.Line2D([0], [0], color='blue', alpha=edge_alpha+0.3,
+                              label=f'FC < {neg_threshold:.2f}')
+                )
     if legend_elements:
         plt.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left')
     
@@ -1086,7 +1097,467 @@ def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, pc_v
 # EMBEDDING VISUALIZATIONS
 def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, pc_values=None, std_edge_threshold=None, edge_threshold=None,
                     title=None, fontsize=30, axis_fontsize=26, scatter_alpha=0.8, scatter_size=18,
-                    edge_alpha=0.2, edge_width=0.5, omit_subcortical=False, label_network_indices=None, label_indices=False,
+                    edge_alpha=0.3, edge_width=0.7, omit_subcortical=False, label_network_indices=None, label_indices=False,
+                    network_gains=None, figsize=(10,7)):
+    """
+    Plot 2D visualization of coordinates colored by network labels or PC values, with optional FC edges.
+    
+    Args:
+        coords: Array of coordinates to visualize (N x D array where D >= 2)
+        network_labels: Array of network labels for coloring points (ignored if pc_values provided)
+        dims: Tuple of dimensions to plot, e.g. (0,1) for x,y or (1,2) for y,z (default (0,1))
+        conn_matrix: Optional functional connectivity matrix matching coords indices
+        pc_values: Optional array of PC values to color points by instead of network labels
+        std_edge_threshold: Optional std dev threshold for showing edges (e.g. 3.0 shows +/-3 std)
+        edge_threshold: Optional tuple of (neg_thresh, pos_thresh) for absolute thresholds
+        title: Optional title for the plot
+        fontsize: Font size for title (default 30)
+        axis_fontsize: Font size for axis labels (default 26)
+        scatter_alpha: Alpha value for scatter points (default 0.8)
+        scatter_size: Size of scatter points (default 15)
+        edge_alpha: Alpha value for FC edges (default 0.2)
+        edge_width: Line width for FC edges (default 0.5)
+        omit_subcortical: If True, drops coords past nearest hundred (default False)
+        label_network_indices: Network name to label points with their indices (e.g. 'Vis')
+        label_indices: If True, label all points with their indices
+        network_gains: Optional dictionary mapping network names to their gain values
+    """
+    # Handle subcortical omission if requested
+    if omit_subcortical:
+        n_regions = coords.shape[0]
+        n_keep = (n_regions // 100) * 100
+        coords = coords[:n_keep]
+        network_labels = network_labels[:n_keep]
+        if conn_matrix is not None:
+            conn_matrix = conn_matrix[:n_keep, :n_keep]
+        if pc_values is not None:
+            pc_values = pc_values[:n_keep]
+
+    # Extract the requested dimensions
+    plot_coords = coords[:, list(dims)]
+    
+    # Create scatter plot with high DPI
+    plt.figure(figsize=figsize, dpi=300)
+    plt.gca().set_facecolor("#eaeaf2")  # Light bluish background for plot area only
+    
+    # Initialize legend elements list
+    legend_elements = []
+    
+    # If FC matrix provided and either threshold is set, draw edges first
+    if conn_matrix is not None and (std_edge_threshold is not None or edge_threshold is not None):
+        if std_edge_threshold is not None:
+            # Use standard deviation based thresholding
+            fc_mean = np.mean(conn_matrix)
+            fc_std = np.std(conn_matrix)
+            pos_threshold = fc_mean + (std_edge_threshold * fc_std)
+            neg_threshold = fc_mean - (std_edge_threshold * fc_std)
+        else:
+            # Use absolute thresholds from tuple
+            neg_threshold, pos_threshold = edge_threshold
+            neg_threshold = -abs(neg_threshold)  # Ensure negative
+            pos_threshold = abs(pos_threshold)   # Ensure positive
+        
+        # Get upper triangle indices exceeding positive threshold
+        rows, cols = np.where(np.triu(conn_matrix > pos_threshold, k=1))
+        # Draw positive edges with opacity based on strength
+        for i, j in zip(rows, cols):
+            # Scale opacity between edge_alpha and 1 based on FC strength
+            edge_strength = (conn_matrix[i,j] - pos_threshold) / (conn_matrix.max() - pos_threshold)
+            opacity = edge_alpha + (1 - edge_alpha) * edge_strength
+            plt.plot([plot_coords[i,0], plot_coords[j,0]],
+                    [plot_coords[i,1], plot_coords[j,1]],
+                    color='red', alpha=opacity, linewidth=edge_width)
+            
+        # Get negative edges exceeding negative threshold
+        rows, cols = np.where(np.triu(conn_matrix < neg_threshold, k=1))
+        # Draw negative edges with opacity based on strength
+        for i, j in zip(rows, cols):
+            # Scale opacity between edge_alpha and 1 based on FC strength
+            edge_strength = (neg_threshold - conn_matrix[i,j]) / (neg_threshold - conn_matrix.min())
+            opacity = edge_alpha + (1 - edge_alpha) * edge_strength
+            plt.plot([plot_coords[i,0], plot_coords[j,0]],
+                    [plot_coords[i,1], plot_coords[j,1]], 
+                    color='blue', alpha=opacity, linewidth=edge_width)
+    if pc_values is not None:
+        if network_gains is not None:
+            # Scale point sizes by network gains
+            point_sizes = np.zeros(len(network_labels))
+            min_gain = min(network_gains.values())
+            max_gain = max(network_gains.values())
+            size_scale = scatter_size * 5 # Increase size range
+            
+            for network in np.unique(network_labels):
+                mask = network_labels == network
+                normalized_gain = (network_gains[network] - min_gain) / (max_gain - min_gain)
+                # Apply exponential scaling to enhance larger gains
+                enhanced_gain = normalized_gain ** 1.5
+                point_sizes[mask] = scatter_size + (enhanced_gain * size_scale)
+            scatter = plt.scatter(plot_coords[:, 0], plot_coords[:, 1],
+                                c=pc_values, cmap='viridis', 
+                                alpha=scatter_alpha, s=point_sizes)
+            plt.colorbar(scatter, label='PC2 Value', shrink=0.5)
+            
+            # Add size legend
+            legend_elements.extend([
+                plt.scatter([], [], c='gray', alpha=scatter_alpha, 
+                          s=scatter_size + (0.2 * size_scale),
+                          label=f'Min Gain (+{min_gain:.2f})'),
+                plt.scatter([], [], c='gray', alpha=scatter_alpha,
+                          s=scatter_size + (1 * size_scale),
+                          label=f'Max Gain (+{max_gain:.2f})')
+            ])
+        else:
+            scatter = plt.scatter(plot_coords[:, 0], plot_coords[:, 1],
+                                c=pc_values, cmap='viridis', 
+                                alpha=scatter_alpha, s=scatter_size)
+            plt.colorbar(scatter, label='PC2 Value')
+        if label_indices:
+            for idx in range(len(plot_coords)):
+                plt.annotate(str(idx),
+                           (plot_coords[idx,0], plot_coords[idx,1]),
+                           fontsize=6,
+                           alpha=0.7,
+                           xytext=(5,5),
+                           textcoords='offset points')
+    else:
+        # Define colors for each network
+        unique_networks = np.unique(network_labels)
+        if network_gains is not None:
+            # Use gains to color points
+            min_gain = min(network_gains.values())
+            max_gain = max(network_gains.values())
+            norm = plt.Normalize(min_gain, max_gain)
+            cmap = plt.cm.Greens
+            
+            scatter_points = []
+            scatter_colors = []
+            
+            # Plot points for each network
+            for network in unique_networks:
+                mask = network_labels == network
+                color_val = norm(network_gains[network])
+                points = plt.scatter(plot_coords[mask, 0], plot_coords[mask, 1],
+                                  color=cmap(color_val), alpha=scatter_alpha, s=scatter_size)
+                scatter_points.extend(plot_coords[mask])
+                scatter_colors.extend([color_val] * np.sum(mask))
+                
+                # Add index labels if requested
+                if (label_network_indices is not None and network == label_network_indices) or label_indices:
+                    indices = np.where(mask)[0]
+                    for idx in indices:
+                        plt.annotate(str(idx), 
+                                   (plot_coords[idx,0], plot_coords[idx,1]),
+                                   fontsize=6,
+                                   alpha=0.7,
+                                   xytext=(5,5), 
+                                   textcoords='offset points')
+            
+            # Add colorbar
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            plt.colorbar(sm, label='Non-linear Relative Performance Gain')
+            
+        else:
+            # Use rainbow colors if no gains provided
+            colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_networks)))
+            for network, color in zip(unique_networks, colors):
+                mask = network_labels == network
+                plt.scatter(plot_coords[mask, 0], plot_coords[mask, 1],
+                          color=color, alpha=scatter_alpha, s=scatter_size)
+                       
+                # Add index labels for specified network or all if label_indices=True
+                if (label_network_indices is not None and network == label_network_indices) or label_indices:
+                    indices = np.where(network_labels == network)[0]
+                    for idx in indices:
+                        plt.annotate(str(idx), 
+                                   (plot_coords[idx,0], plot_coords[idx,1]),
+                                   fontsize=6,
+                                   alpha=0.7,
+                                   xytext=(5,5), 
+                                   textcoords='offset points')
+                               
+                # Add network colors to legend
+                legend_elements.append(plt.Line2D([0], [0], marker='o', color='w',
+                                                markerfacecolor=color, label=network, markersize=15))
+    
+    # Add edge legend if edges are shown
+    if conn_matrix is not None and (std_edge_threshold is not None or edge_threshold is not None):
+        if std_edge_threshold is not None:
+            # Add positive threshold to legend
+            legend_elements.append(
+                plt.Line2D([0], [0], color='red', alpha=edge_alpha+0.3, 
+                          label=f'FC > {std_edge_threshold:.1f}σ')
+            )
+            # Only add negative threshold if there are negative edges
+            if np.any(conn_matrix < (np.mean(conn_matrix) - std_edge_threshold * np.std(conn_matrix))):
+                legend_elements.append(
+                    plt.Line2D([0], [0], color='blue', alpha=edge_alpha+0.3,
+                              label=f'FC < -{std_edge_threshold:.1f}σ')
+                )
+        else:
+            # Add positive threshold to legend
+            legend_elements.append(
+                plt.Line2D([0], [0], color='red', alpha=edge_alpha+0.3, 
+                          label=f'FC > {pos_threshold:.2f}')
+            )
+            # Only add negative threshold if there are negative edges
+            if np.any(conn_matrix < neg_threshold):
+                legend_elements.append(
+                    plt.Line2D([0], [0], color='blue', alpha=edge_alpha+0.3,
+                              label=f'FC < {neg_threshold:.2f}')
+                )
+    
+    if legend_elements:
+        plt.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    if title:
+        plt.title(title, fontsize=fontsize, pad=10)
+    
+    # Set axis labels based on dimensions
+    dim_labels = ['X', 'Y', 'Z']
+    plt.xlabel(f'{dim_labels[dims[0]]}', fontsize=axis_fontsize, labelpad=10)
+    plt.ylabel(f'{dim_labels[dims[1]]}', fontsize=axis_fontsize, labelpad=10)
+    plt.xticks([])
+    plt.yticks([])
+    
+    plt.tight_layout()
+    plt.show()
+
+'''
+# EMBEDDING VISUALIZATIONS
+def plot_umap_embeddings_w_fc(embeddings, network_labels, conn_matrix=None, pc_values=None, std_edge_threshold=None, edge_threshold=None,
+                        title=None, n_neighbors=15, spread=2.0, min_dist=0.5,
+                        fontsize=30, axis_fontsize=26, scatter_alpha=0.8, scatter_size=18,
+                        edge_alpha=0.4, edge_width=0.7, omit_subcortical=False, label_indices=False,
+                        label_network_indices=None, flip_umap1=False, flip_umap2=False, network_gains=None):
+    """
+    Plot UMAP visualization of embeddings colored by network labels or PC values, with optional FC edges.
+    
+    Args:
+        embeddings: Array of embeddings to visualize
+        network_labels: Array of network labels for coloring points (ignored if pc_values provided)
+        conn_matrix: Optional functional connectivity matrix matching embeddings indices
+        pc_values: Optional array of PC values to color points by instead of network labels
+        std_edge_threshold: Optional std dev threshold for showing edges (e.g. 3.0 shows +/-3 std)
+        edge_threshold: Optional tuple of (neg_thresh, pos_thresh) for absolute thresholds
+        title: Optional title for the plot
+        n_neighbors: UMAP n_neighbors parameter (default 15)
+        spread: UMAP spread parameter (default 2.0) 
+        min_dist: UMAP min_dist parameter (default 0.5)
+        fontsize: Font size for title (default 30)
+        axis_fontsize: Font size for axis labels (default 26)
+        scatter_alpha: Alpha value for scatter points (default 0.8)
+        scatter_size: Size of scatter points (default 15)
+        edge_alpha: Alpha value for FC edges (default 0.2)
+        edge_width: Line width for FC edges (default 0.5)
+        omit_subcortical: If True, drops embeddings past nearest hundred (default False)
+        label_indices: If True, labels all points with their indices
+        label_network_indices: Network name to label points with their indices (e.g. 'Vis')
+        flip_umap1: If True, flips the UMAP1 axis (default False)
+        flip_umap2: If True, flips the UMAP2 axis (default False)
+        network_gains: Optional dictionary mapping network names to their gain values
+    """
+    random_seed = 42
+    np.random.seed(random_seed)
+
+    # Handle subcortical omission if requested
+    if omit_subcortical:
+        n_regions = embeddings.shape[0]
+        n_keep = (n_regions // 100) * 100
+        embeddings = embeddings[:n_keep]
+        network_labels = network_labels[:n_keep]
+        if conn_matrix is not None:
+            conn_matrix = conn_matrix[:n_keep, :n_keep]
+        if pc_values is not None:
+            pc_values = pc_values[:n_keep]
+
+    # Create UMAP reducer with consistent parameters
+    umap_params = dict(n_components=2, random_state=random_seed, 
+                      n_neighbors=n_neighbors, spread=spread, min_dist=min_dist)
+    reducer = umap.UMAP(**umap_params)
+    
+    # Fit and transform the embeddings
+    umap_embeddings = reducer.fit_transform(embeddings)
+    
+    # Apply axis flips if requested
+    if flip_umap1:
+        umap_embeddings[:, 0] = -umap_embeddings[:, 0]
+    if flip_umap2:
+        umap_embeddings[:, 1] = -umap_embeddings[:, 1]
+    
+    # Create main plot figure
+    plt.figure(figsize=(12, 10))
+    plt.gca().set_facecolor("#eaeaf2")  # Light bluish background for plot area only
+
+    # If FC matrix provided and either threshold is set, draw edges first
+    if conn_matrix is not None and (std_edge_threshold is not None or edge_threshold is not None):
+        if std_edge_threshold is not None:
+            # Use standard deviation based thresholding
+            fc_mean = np.mean(conn_matrix)
+            fc_std = np.std(conn_matrix)
+            pos_threshold = fc_mean + (std_edge_threshold * fc_std)
+            neg_threshold = fc_mean - (std_edge_threshold * fc_std)
+        else:
+            # Use absolute thresholds from tuple
+            neg_threshold, pos_threshold = edge_threshold
+            neg_threshold = -abs(neg_threshold)  # Ensure negative
+            pos_threshold = abs(pos_threshold)   # Ensure positive
+        
+        # Get upper triangle indices exceeding positive threshold
+        rows, cols = np.where(np.triu(conn_matrix > pos_threshold, k=1))
+        # Draw positive edges with opacity based on strength
+        for i, j in zip(rows, cols):
+            # Scale opacity between edge_alpha and 1 based on FC strength
+            edge_strength = (conn_matrix[i,j] - pos_threshold) / (conn_matrix.max() - pos_threshold)
+            opacity = edge_alpha + (1 - edge_alpha) * edge_strength
+            plt.plot([umap_embeddings[i,0], umap_embeddings[j,0]],
+                    [umap_embeddings[i,1], umap_embeddings[j,1]],
+                    color='red', alpha=opacity, linewidth=edge_width)
+            
+        # Get negative edges exceeding negative threshold
+        rows, cols = np.where(np.triu(conn_matrix < neg_threshold, k=1))
+        # Draw negative edges with opacity based on strength
+        for i, j in zip(rows, cols):
+            # Scale opacity between edge_alpha and 1 based on FC strength
+            edge_strength = (neg_threshold - conn_matrix[i,j]) / (neg_threshold - conn_matrix.min())
+            opacity = edge_alpha + (1 - edge_alpha) * edge_strength
+            plt.plot([umap_embeddings[i,0], umap_embeddings[j,0]],
+                    [umap_embeddings[i,1], umap_embeddings[j,1]], 
+                    color='blue', alpha=opacity, linewidth=edge_width)
+    
+    legend_elements = []
+    
+    if pc_values is not None:
+        if network_gains is not None:
+            # Scale point sizes by network gains
+            point_sizes = np.zeros(len(network_labels))
+            min_gain = min(network_gains.values())
+            max_gain = max(network_gains.values())
+            size_scale = scatter_size * 10  # Increase size range
+            
+            for network in np.unique(network_labels):
+                mask = network_labels == network
+                normalized_gain = (network_gains[network] - min_gain) / (max_gain - min_gain)
+                point_sizes[mask] = scatter_size + (normalized_gain * size_scale)
+            
+            scatter = plt.scatter(umap_embeddings[:, 0], umap_embeddings[:, 1],
+                                c=pc_values, cmap='viridis', 
+                                alpha=scatter_alpha, s=point_sizes)
+            plt.colorbar(scatter, label='PC2 Score')
+            
+            # Add size legend elements
+            legend_elements.extend([
+                plt.scatter([], [], c='gray', alpha=scatter_alpha, 
+                          s=scatter_size + (0 * size_scale),
+                          label=f'Min Gain (+{min_gain:.2f})'),
+                plt.scatter([], [], c='gray', alpha=scatter_alpha,
+                          s=scatter_size + (1 * size_scale),
+                          label=f'Max Gain (+{max_gain:.2f})')
+            ])
+        else:
+            scatter = plt.scatter(umap_embeddings[:, 0], umap_embeddings[:, 1],
+                                c=pc_values, cmap='viridis', 
+                                alpha=scatter_alpha, s=scatter_size)
+            plt.colorbar(scatter, label='PC2 Score')
+        
+        if label_indices:
+            for idx in range(len(umap_embeddings)):
+                plt.annotate(str(idx), 
+                           (umap_embeddings[idx,0], umap_embeddings[idx,1]),
+                           fontsize=6,
+                           alpha=0.5,
+                           xytext=(5,5), 
+                           textcoords='offset points')
+    else:
+        # Define colors for each network
+        unique_networks = np.unique(network_labels)
+        
+        if network_gains is not None:
+            # Create colormap based on gains
+            min_gain = min(network_gains.values())
+            max_gain = max(network_gains.values())
+            norm = plt.Normalize(min_gain, max_gain)
+            cmap = plt.cm.Greens
+            
+            # Plot points for each network
+            for network in unique_networks:
+                mask = network_labels == network
+                color_val = norm(network_gains[network])
+                plt.scatter(umap_embeddings[mask, 0], umap_embeddings[mask, 1],
+                          color=cmap(color_val), alpha=scatter_alpha, s=scatter_size)
+                
+                # Add index labels if requested
+                if (label_network_indices is not None and network == label_network_indices) or label_indices:
+                    indices = np.where(mask)[0]
+                    for idx in indices:
+                        plt.annotate(str(idx), 
+                                   (umap_embeddings[idx,0], umap_embeddings[idx,1]),
+                                   fontsize=6,
+                                   alpha=0.5,
+                                   xytext=(5,5), 
+                                   textcoords='offset points')
+            
+            # Add colorbar
+            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+            plt.colorbar(sm, label='Non-linear Relative Performance Gain')
+            
+        else:
+            # Use rainbow colors if no gains provided
+            colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_networks)))
+            for network, color in zip(unique_networks, colors):
+                mask = network_labels == network
+                plt.scatter(umap_embeddings[mask, 0], umap_embeddings[mask, 1],
+                          color=color, alpha=scatter_alpha, s=scatter_size)
+                legend_elements.append(plt.Line2D([0], [0], marker='o', color='w',
+                                               markerfacecolor=color, label=network, 
+                                               markersize=15))
+    
+    # Add edge legend elements if edges are shown
+    if conn_matrix is not None and (std_edge_threshold is not None or edge_threshold is not None):
+        if std_edge_threshold is not None:
+            if np.any(conn_matrix > std_edge_threshold):
+                legend_elements.append(
+                    plt.Line2D([0], [0], color='red', alpha=edge_alpha+0.3,
+                              label=f'FC > {std_edge_threshold:.1f}σ')
+                )
+            if np.any(conn_matrix < -std_edge_threshold):
+                legend_elements.append(
+                    plt.Line2D([0], [0], color='blue', alpha=edge_alpha+0.3,
+                              label=f'FC < -{std_edge_threshold:.1f}σ')
+                )
+        else:
+            if np.any(conn_matrix > pos_threshold):
+                legend_elements.append(
+                    plt.Line2D([0], [0], color='red', alpha=edge_alpha+0.3,
+                              label=f'FC > {pos_threshold:.2f}')
+                )
+            if np.any(conn_matrix < neg_threshold):
+                legend_elements.append(
+                    plt.Line2D([0], [0], color='blue', alpha=edge_alpha+0.3,
+                              label=f'FC < {neg_threshold:.2f}')
+                )
+    
+    if title:
+        plt.title(title, fontsize=fontsize, pad=10)
+    plt.xlabel('UMAP1', fontsize=axis_fontsize, labelpad=10)
+    plt.ylabel('UMAP2', fontsize=axis_fontsize, labelpad=10)
+    plt.xticks([])
+    plt.yticks([])
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Create separate legend figure if we have legend elements
+    if legend_elements:
+        legend_fig = plt.figure(figsize=(4, 10))
+        legend_fig.legend(handles=legend_elements, loc='center', fontsize=fontsize-14)
+        plt.axis('off')
+        plt.show()
+'''
+'''
+# EMBEDDING VISUALIZATIONS
+def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, pc_values=None, std_edge_threshold=None, edge_threshold=None,
+                    title=None, fontsize=30, axis_fontsize=26, scatter_alpha=0.8, scatter_size=18,
+                    edge_alpha=0.4, edge_width=0.7, omit_subcortical=False, label_network_indices=None, label_indices=False,
                     network_gains=None):
     """
     Plot 2D visualization of coordinates colored by network labels or PC values, with optional FC edges.
@@ -1174,7 +1645,7 @@ def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, pc_va
             point_sizes = np.zeros(len(network_labels))
             min_gain = min(network_gains.values())
             max_gain = max(network_gains.values())
-            size_scale = scatter_size * 8  # Increase size range
+            size_scale = scatter_size * 10  # Increase size range
             
             for network in np.unique(network_labels):
                 mask = network_labels == network
@@ -1238,7 +1709,7 @@ def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, pc_va
                         plt.annotate(str(idx), 
                                    (plot_coords[idx,0], plot_coords[idx,1]),
                                    fontsize=6,
-                                   alpha=0.7,
+                                   alpha=0.5,
                                    xytext=(5,5), 
                                    textcoords='offset points')
             
@@ -1261,7 +1732,7 @@ def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, pc_va
                         plt.annotate(str(idx), 
                                    (plot_coords[idx,0], plot_coords[idx,1]),
                                    fontsize=6,
-                                   alpha=0.7,
+                                   alpha=0.5,
                                    xytext=(5,5), 
                                    textcoords='offset points')
                                
@@ -1301,6 +1772,7 @@ def plot_coords_w_fc(coords, network_labels, dims=(0,1), conn_matrix=None, pc_va
     
     plt.tight_layout()
     plt.show()
+'''
 
 def plot_spectral_embedding_w_fc(conn_matrix, network_labels, n_components=2, conn_matrix_edges=None, std_edge_threshold=None, 
                                edge_threshold=None, title=None, fontsize=30, axis_fontsize=26, scatter_alpha=0.8, 
