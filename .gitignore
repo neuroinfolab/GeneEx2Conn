@@ -25,6 +25,7 @@ sim/logs/*
 data/compressed_transcriptomics/
 data/gene_emb/
 data/geneformer*
+data/nilearn_data*
 
 !glass/cv_split_s400_structural_connectivity_spatial_split_10-3.gif
 !glass/cv_split_s400_structural_connectivity_random_split_4.gif
