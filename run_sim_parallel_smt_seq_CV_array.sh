@@ -3,8 +3,8 @@
 #SBATCH --account=pr_125_tandon_advanced
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=4
-#SBATCH --time=6:00:00
-#SBATCH --mem=400GB
+#SBATCH --time=2:00:00
+#SBATCH --mem=256GB
 #SBATCH --gres=gpu:1
 #SBATCH --constraint=h100|a100
 #SBATCH --job-name=gx2c_smt
