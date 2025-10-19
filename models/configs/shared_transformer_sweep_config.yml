@@ -8,13 +8,13 @@ parameters:
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [20, 30, 60, 180]
+    values: [60]
   d_model:
     values: [128]
   encoder_output_dim:
     values: [10]
   use_alibi:
-    values: [False]
+    values: [True, False]
   nhead:
     values: [4]
   num_layers:

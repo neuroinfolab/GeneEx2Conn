@@ -152,16 +152,20 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             valid_genes = [gene for gene in genes_list if gene in gene_order_dict and gene in genes_data.columns]
 
         if sort_genes == 'refgenome':
+            print("Resorting genes by reference genome order")
             # Resort genes data based on reference genome order
             valid_genes.sort(key=lambda x: gene_order_dict[x])
             genes_data = np.array(genes_data[valid_genes])
         elif sort_genes == 'expression':
+            print("Resorting genes by expression level")
             genes_data = np.array(genes_data[valid_genes])
             mean_expr = np.nanmean(genes_data, axis=0)
             sort_idx = np.argsort(mean_expr)
             genes_data = genes_data[:, sort_idx]
             valid_genes = [valid_genes[i] for i in sort_idx]
         elif sort_genes == 'random':
+            print("Randomly resorting genes")
+            np.random.seed(random_seed)
             random_genes = np.random.permutation(valid_genes)
             genes_data = np.array(genes_data[random_genes])
             valid_genes = random_genes
@@ -188,7 +192,7 @@ def load_transcriptome(parcellation='S456', gene_list='0.2', dataset='AHBA', run
             genes_data = np.insert(genes_data, 454, np.nan, axis=0)
             return genes_data, genes_list
         else:
-            genes_data = np.array(genes_data[valid_genes])
+             genes_data = np.array(genes_data[valid_genes])
 
         # Apply PCA if specified
         if run_PCA is not None:

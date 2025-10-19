@@ -98,7 +98,7 @@ def weighted_mean_and_se(values, weights):
     
     return weighted_mean, weighted_se
 
-def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='transcriptome', target='FC', gene_list='0.2', within_last=60, before_last=0, use_weighted=False, exclude='HCP', return_history=False):
+def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='transcriptome', target='FC', gene_list='0.2', within_last=60, before_last=0, use_weighted=False, exclude='HCP', only_include='UKBB', return_history=False):
     """
     Fetches wandb runs matching specific tags and summarizes their final train/test metrics.
     Handles different CV types with their expected number of runs:
@@ -158,7 +158,10 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
     # Add exclusion filter if specified
     if exclude != "":
         filters["tags"]["$nin"] = [f"dataset_{exclude}"]
-    
+
+    if only_include != "":
+        filters["tags"]["$in"] = [f"dataset_{only_include}"]
+
     print(f"🔍 Fetching runs for: model={model}, cv_type={cv_type}, null_model={null_model}, feature_type={feature_type}")
     runs = api.runs(project_path, filters=filters, order="-created_at")
     
@@ -255,7 +258,7 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
     else:
         return summary_df
 
-def process_model_feature_combinations(cv_type, null_model, models, model_feature_types, summary_dict, use_weighted=False, exclude='HCP', within_last=None, before_last=None, time_ranges=None):
+def process_model_feature_combinations(cv_type, null_model, models, model_feature_types, summary_dict, use_weighted=False, exclude='HCP', only_include='', within_last=None, before_last=None, time_ranges=None):
     """
     Helper function to process model/feature type combinations and populate summary dictionary.
     
@@ -267,6 +270,7 @@ def process_model_feature_combinations(cv_type, null_model, models, model_featur
         summary_dict (dict): Dictionary to populate with results
         use_weighted (bool): Whether to use weighted statistics
         exclude (str): Dataset to exclude
+        only_include (str): Dataset to include only
         within_last (int): Default within_last parameter (fallback)
         before_last (int): Default before_last parameter (fallback)
         time_ranges (dict): Custom time ranges with structure:
@@ -334,6 +338,7 @@ def process_model_feature_combinations(cv_type, null_model, models, model_featur
                 df = fetch_and_summarize_wandb_runs(
                     model, cv_type, null_model, feature_type, 
                     use_weighted=use_weighted, exclude=exclude,
+                    only_include=only_include,
                     within_last=model_within_last, before_last=model_before_last
                 )
                 
