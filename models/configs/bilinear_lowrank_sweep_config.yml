@@ -1,5 +1,5 @@
 name: bilinear_lowrank
-method: random
+method: grid
 metric:
   name: mean_val_loss
   goal: minimize
@@ -17,13 +17,13 @@ parameters:
   regularization:
     values: ['l2']
   lambda_reg:
-    values: [0.00001, 0.001]
+    values: [0.001] #, 0.001, .0001, .00001
   shared_weights:
     values: [True]
   reduced_dim:
-    values: [5, 8, 10, 12, 15, 20, 25]
+    values: [5, 8, 10, 15, 20, 25]
   epochs:
-    values: [100, 125, 150]
+    values: [125] # [100, 125, 150]
 
 # BEST
 best_parameters:

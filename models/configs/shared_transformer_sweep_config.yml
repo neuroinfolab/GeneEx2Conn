@@ -14,7 +14,7 @@ parameters:
   encoder_output_dim:
     values: [10]
   use_alibi:
-    values: [True, False]
+    values: [True]
   nhead:
     values: [4]
   num_layers:
@@ -31,11 +31,11 @@ parameters:
   weight_decay:
     values: [0.0001]
   batch_size:
-    values: [1024]
+    values: [512]
   aug_prob:
-    values: [0]
+    values: [0.0, 0.1, 0.3, 0.45, 0.7]
   aug_style:
-    values: ['linear_decay']
+    values: ['curriculum_swap_linear_decay']
   epochs:
     values: [110]
   num_workers:
