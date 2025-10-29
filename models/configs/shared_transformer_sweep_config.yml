@@ -8,80 +8,41 @@ parameters:
   input_dim:
     value: !!int 0
   token_encoder_dim:
-    values: [60]
+    values: [20, 60, 180]
   d_model:
-    values: [128]
+    values: [64, 128]
   encoder_output_dim:
-    values: [10]
+    values: [5, 10]
   use_alibi:
-    values: [False]
+    values: [True]
   nhead:
-    values: [4]
+    values: [2, 4]
   num_layers:
-    values: [4]
+    values: [2, 4]
   deep_hidden_dims:
     values:
+    - [256, 128]
     - [512, 256, 128]
   transformer_dropout:
-    values: [0.2]
+    values: [0.1, 0.2]
   dropout_rate:
-    values: [0.2]
+    values: [0.1, 0.2, 0.3]
   learning_rate:
-    values: [0.0001]
+    values: [0.00009, 0.0001]
   weight_decay:
-    values: [0.0001]
+    values: [0.0001, 0.001]
   batch_size:
-    values: [512]
+    values: [512, 1024]
   aug_prob:
-    values: [0.0]
+    values: [0, 0.1, 0.3]
   aug_style:
-    values: ['curriculum_swap_linear_decay']
+    values: ['linear_decay', 'linear_peak', 'curriculum_swap_constant', 'curriculum_swap_linear_decay']
   epochs:
-    values: [110]
+    values: [90, 110]
   num_workers:
     values: [2]
   prefetch_factor:
     values: [4]
-
-# parameters: 
-#   input_dim:
-#     value: !!int 0
-#   token_encoder_dim:
-#     values: [20, 60]
-#   d_model:
-#     values: [64, 128]
-#   encoder_output_dim:
-#     values: [5, 10]
-#   use_alibi:
-#     values: [True]
-#   nhead:
-#     values: [2, 4]
-#   num_layers:
-#     values: [2, 4]
-#   deep_hidden_dims:
-#     values:
-#     - [256, 128]
-#     - [512, 256, 128]
-#   transformer_dropout:
-#     values: [0.1, 0.2]
-#   dropout_rate:
-#     values: [0.1, 0.2, 0.3]
-#   learning_rate:
-#     values: [0.00009, 0.0001]
-#   weight_decay:
-#     values: [0.0001, 0.001]
-#   batch_size:
-#     values: [512, 1024]
-#   aug_prob:
-#     values: [0, 0.1, 0.3]
-#   aug_style:
-#     values: ['linear_decay', 'curriculum_swap_constant', 'curriculum_swap_linear_decay']
-#   epochs:
-#     values: [90, 110, 130]
-#   num_workers:
-#     values: [2]
-#   prefetch_factor:
-#     values: [4]
 
 best_parameters:
   input_dim:
@@ -112,7 +73,7 @@ best_parameters:
   batch_size:
     values: [512]
   aug_prob:
-    values: [0.0]
+    values: [0.3]
   aug_style:
     values: ['curriculum_swap_linear_decay']
   epochs:
@@ -121,42 +82,3 @@ best_parameters:
     values: [2]
   prefetch_factor:
     values: [4]
-
-# best_parameters:
-#   input_dim:
-#     value: !!int 0
-#   token_encoder_dim:
-#     values: [60]
-#   d_model:
-#     values: [128]
-#   encoder_output_dim:
-#     values: [10]
-#   use_alibi:
-#     values: [True]
-#   nhead:
-#     values: [4]
-#   num_layers:
-#     values: [4]
-#   deep_hidden_dims:
-#     values:
-#       - [512, 256, 128]
-#   transformer_dropout:
-#     values: [0.2]
-#   dropout_rate:
-#     values: [0.2]
-#   learning_rate:
-#     values: [0.00009] # 0.0001 for 20, .00009 for 60
-#   weight_decay:
-#     values: [0.0001]
-#   batch_size:
-#     values: [512] # 512 default
-#   aug_prob:
-#     values: [0.3] # 0.3 default
-#   aug_style:
-#     values: ['curriculum_swap_linear_decay']
-#   epochs:
-#     values: [110]
-#   num_workers:
-#     values: [2]
-#   prefetch_factor:
-#     values: [4]
