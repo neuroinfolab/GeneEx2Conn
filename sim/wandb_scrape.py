@@ -641,7 +641,8 @@ def plot_true_vs_null_model_barchart(
     model_groups=None,
     xlim=(0.1, 0.9),
     overlay_style="alpha",  # or "hatch"
-    display_metric=False
+    display_metric=False,
+    horizontal=False
 ):
     if model_groups is None:
         model_groups = {
@@ -652,15 +653,15 @@ def plot_true_vs_null_model_barchart(
                 'shared_transformer_cls': 'SMT w/ [CLS]'
             },
             'Bilinear': {
-                'bilinear_CM': 'Connectome Model',
-                'bilinear_CM_PCA': 'Connectome Model (PCA)',
-                'pls_bilineardecoder': 'Connectome Model (PLS)',
-                'bilinear_lowrank': 'Connectome Model (LR)'
+                'bilinear_CM': 'CM',
+                'bilinear_CM_PCA': 'CM (PCA)',
+                'pls_bilineardecoder': 'CM (PLS)',
+                'bilinear_lowrank': 'CM (Lowrank)'
             },
             'Feature Based': {
                 'cge': 'CGE',
-                'gaussian_kernel': 'Gaussian Kernel',
-                'exponential_decay': 'Exponential Decay'
+                'gaussian_kernel': 'Gauss. Kernel',
+                'exponential_decay': 'Exp. Decay'
             }
         }
 
@@ -686,100 +687,197 @@ def plot_true_vs_null_model_barchart(
                     })
 
     plot_df = pd.DataFrame(plot_data)
-    plot_df = plot_df.sort_values("TrueMean", ascending=False).reset_index(drop=True)
+    
+    # Sort by performance - for horizontal, ascending=True (worst to best left to right)
+    # For vertical, ascending=False (best to worst top to bottom)
+    plot_df = plot_df.sort_values("TrueMean", ascending=horizontal).reset_index(drop=True)
 
     # Color map
     unique_groups = list(model_groups.keys())
     palette = sns.color_palette("viridis", n_colors=12, desat=1.0)[2::4]
     group_color_map = {group: color for group, color in zip(unique_groups, palette)}
 
-    # Plotting
-    plt.figure(figsize=(6, 7), dpi=300)
+    # Plotting - adjust figure size based on orientation
+    if horizontal:
+        plt.figure(figsize=(7, 4), dpi=300)
+    else:
+        plt.figure(figsize=(6, 7), dpi=300)
     ax = plt.gca()
 
     for i, row in plot_df.iterrows():
-        y = i
-        ax.barh(
-            y=y,
-            width=row["TrueMean"],
-            height=0.6,
-            color=group_color_map[row["Group"]],
-            edgecolor="black",
-            zorder=1
-        )
-        ax.errorbar(
-            x=row["TrueMean"],
-            y=y,
-            xerr=row["TrueStdErr"],
-            fmt='none',
-            ecolor='black',
-            capsize=1,
-            linewidth=1,
-            zorder=2
-        )
-
-        if display_metric:
-            ax.text(
-                row["TrueMean"] + 0.02,  # slight offset from bar end
-                y,
-                f"{row['TrueMean']:.3f} ± {row['TrueStdErr']:.3f}",
-                va="center",
-                ha="left",
-                fontsize=label_fontsize * 0.8,  # Smaller font since showing both values
-                color="black"
+        if horizontal:
+            # Horizontal bars (vertical chart)
+            x = i
+            ax.bar(
+                x=x,
+                height=row["TrueMean"],
+                width=0.6,
+                color=group_color_map[row["Group"]],
+                edgecolor="black",
+                zorder=1
             )
-        elif i == 0:  # Only show metric for top model if display_metric is False
-            ax.text(
-                row["TrueMean"],
-                y - 0.4,  # shift upward
-                f"{row['TrueMean']:.2f}",
-                va="bottom",
-                ha="center",
-                fontsize=label_fontsize,
-                color="black"
-            )
-
-        if row["Model"] not in ["Gaussian Kernel", "Exponential Decay"]:
-            if overlay_style == 'hatch':
-                ax.barh(
-                    y=y,
-                    width=row["NullMean"],
-                    height=0.6,
-                    facecolor='none',
-                    edgecolor='black',
-                    hatch="////",
-                    linewidth=1,
-                    zorder=3
-                )
-            elif overlay_style == 'alpha':
-                ax.barh(
-                    y=y,
-                    width=row["NullMean"],
-                    height=0.6,
-                    color="lightgray",
-                    edgecolor="black",
-                    alpha=0.3,
-                    zorder=3
-                )
             ax.errorbar(
-                x=row["NullMean"],
-                y=y,
-                xerr=row["NullStdErr"],
+                x=x,
+                y=row["TrueMean"],
+                yerr=row["TrueStdErr"],
                 fmt='none',
                 ecolor='black',
                 capsize=1,
                 linewidth=1,
-                linestyle='--',
-                zorder=4
+                zorder=2
             )
 
-    ax.set_xlim(*xlim)
-    ax.set_xticks(np.arange(xlim[0], xlim[1] + 0.2, 0.2))
-    ax.set_xlabel("Pearson-r", fontsize=label_fontsize)
-    ax.set_yticks(range(len(plot_df)))
-    ax.set_yticklabels(plot_df["Model"], fontsize=label_fontsize)
-    ax.invert_yaxis()
-    ax.tick_params(axis='x', labelsize=label_fontsize)
+            if display_metric:
+                ax.text(
+                    x,
+                    row["TrueMean"] + 0.02,  # slight offset from bar end
+                    f"{row['TrueMean']:.3f} ± {row['TrueStdErr']:.3f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=label_fontsize * 0.8,  # Smaller font since showing both values
+                    color="black",
+                    rotation=45
+                )
+            elif i == len(plot_df) - 1:  # Show metric for best model (rightmost)
+                ax.text(
+                    x,
+                    row["TrueMean"] + 0.02,
+                    f"{row['TrueMean']:.2f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=label_fontsize*0.8,
+                    color="black"
+                )
+
+            if row["Model"] not in ["Gaussian Kernel", "Exponential Decay"]:
+                if overlay_style == 'hatch':
+                    ax.bar(
+                        x=x,
+                        height=row["NullMean"],
+                        width=0.6,
+                        bottom=0,
+                        facecolor='none',
+                        edgecolor='black',
+                        hatch="////",
+                        linewidth=1,
+                        zorder=3
+                    )
+                elif overlay_style == 'alpha':
+                    ax.bar(
+                        x=x,
+                        height=row["NullMean"],
+                        width=0.6,
+                        bottom=0,
+                        color="lightgray",
+                        edgecolor="black",
+                        alpha=0.3,
+                        zorder=3
+                    )
+                ax.errorbar(
+                    x=x,
+                    y=row["NullMean"],
+                    yerr=row["NullStdErr"],
+                    fmt='none',
+                    ecolor='black',
+                    capsize=1,
+                    linewidth=1,
+                    linestyle='--',
+                    zorder=4
+                )
+        else:
+            # Vertical bars (horizontal chart) - original behavior
+            y = i
+            ax.barh(
+                y=y,
+                width=row["TrueMean"],
+                height=0.6,
+                color=group_color_map[row["Group"]],
+                edgecolor="black",
+                zorder=1
+            )
+            ax.errorbar(
+                x=row["TrueMean"],
+                y=y,
+                xerr=row["TrueStdErr"],
+                fmt='none',
+                ecolor='black',
+                capsize=1,
+                linewidth=1,
+                zorder=2
+            )
+
+            if display_metric:
+                ax.text(
+                    row["TrueMean"] + 0.02,  # slight offset from bar end
+                    y,
+                    f"{row['TrueMean']:.3f} ± {row['TrueStdErr']:.3f}",
+                    va="center",
+                    ha="left",
+                    fontsize=label_fontsize * 0.8,  # Smaller font since showing both values
+                    color="black"
+                )
+            elif i == 0:  # Only show metric for top model if display_metric is False
+                ax.text(
+                    row["TrueMean"],
+                    y - 0.4,  # shift upward
+                    f"{row['TrueMean']:.2f}",
+                    va="bottom",
+                    ha="center",
+                    fontsize=label_fontsize,
+                    color="black"
+                )
+
+            if row["Model"] not in ["Gaussian Kernel", "Exponential Decay"]:
+                if overlay_style == 'hatch':
+                    ax.barh(
+                        y=y,
+                        width=row["NullMean"],
+                        height=0.6,
+                        facecolor='none',
+                        edgecolor='black',
+                        hatch="////",
+                        linewidth=1,
+                        zorder=3
+                    )
+                elif overlay_style == 'alpha':
+                    ax.barh(
+                        y=y,
+                        width=row["NullMean"],
+                        height=0.6,
+                        color="lightgray",
+                        edgecolor="black",
+                        alpha=0.3,
+                        zorder=3
+                    )
+                ax.errorbar(
+                    x=row["NullMean"],
+                    y=y,
+                    xerr=row["NullStdErr"],
+                    fmt='none',
+                    ecolor='black',
+                    capsize=1,
+                    linewidth=1,
+                    linestyle='--',
+                    zorder=4
+                )
+
+    # Set axis properties based on orientation
+    if horizontal:
+        ax.set_ylim(*xlim)
+        ax.set_yticks(np.arange(xlim[0], xlim[1] + 0.2, 0.2))
+        ax.set_ylabel("Pearson-r", fontsize=label_fontsize)
+        ax.set_xticks(range(len(plot_df)))
+        ax.set_xticklabels(plot_df["Model"], fontsize=label_fontsize, rotation=45, ha='right')
+        ax.tick_params(axis='y', labelsize=label_fontsize)
+        ax.tick_params(axis='x', labelsize=label_fontsize, length=0)  # Remove tick marks but keep labels
+    else:
+        ax.set_xlim(*xlim)
+        ax.set_xticks(np.arange(xlim[0], xlim[1] + 0.2, 0.2))
+        ax.set_xlabel("Pearson-r", fontsize=label_fontsize)
+        ax.set_yticks(range(len(plot_df)))
+        ax.set_yticklabels(plot_df["Model"], fontsize=label_fontsize)
+        ax.invert_yaxis()
+        ax.tick_params(axis='x', labelsize=label_fontsize)
 
     sns.despine()
     plt.tight_layout()
@@ -794,7 +892,8 @@ def plot_true_vs_null_model_barchart_weighted(
     metric="final_test_pearson_r",
     model_groups=None,
     xlim=(0.1, 0.9),
-    overlay_style="alpha"  # or "hatch"
+    overlay_style="alpha",  # or "hatch"
+    horizontal=False
 ):
     """
     Plot a horizontal bar chart comparing true vs null model performance using weighted metrics.
@@ -853,95 +952,460 @@ def plot_true_vs_null_model_barchart_weighted(
                     })
 
     plot_df = pd.DataFrame(plot_data)
-    plot_df = plot_df.sort_values("WeightedTrueMean", ascending=False).reset_index(drop=True)
+    
+    # Sort by performance - for horizontal, ascending=True (worst to best left to right)
+    # For vertical, ascending=False (best to worst top to bottom)
+    plot_df = plot_df.sort_values("WeightedTrueMean", ascending=horizontal).reset_index(drop=True)
 
     # Color mapping
     unique_groups = list(model_groups.keys())
     palette = sns.color_palette("viridis", n_colors=12)[2::4]
     group_color_map = {group: color for group, color in zip(unique_groups, palette)}
 
-    # Plot
-    plt.figure(figsize=(6, 7), dpi=300)
+    # Plot - adjust figure size based on orientation
+    if horizontal:
+        plt.figure(figsize=(10, 4), dpi=300)
+    else:
+        plt.figure(figsize=(6, 7), dpi=300)
     ax = plt.gca()
 
     for i, row in plot_df.iterrows():
-        y = i
-
-        # True bar
-        ax.barh(
-            y=y,
-            width=row["WeightedTrueMean"],
-            height=0.6,
-            color=group_color_map[row["Group"]],
-            edgecolor="black",
-            zorder=1
-        )
-        ax.errorbar(
-            x=row["WeightedTrueMean"],
-            y=y,
-            xerr=row["WeightedTrueStdErr"],
-            fmt='none',
-            ecolor='black',
-            capsize=1,
-            linewidth=1,
-            zorder=2
-        )
-
-        # Annotate best model with Pearson-r
-        if i == 0:
-            ax.text(
-                row["WeightedTrueMean"],
-                y - 0.4,  # shift upward (adjust spacing if needed)
-                f"{row['WeightedTrueMean']:.2f}",
-                va="bottom",
-                ha="center",
-                fontsize=label_fontsize,
-                color="black"
+        if horizontal:
+            # Horizontal bars (vertical chart)
+            x = i
+            ax.bar(
+                x=x,
+                height=row["WeightedTrueMean"],
+                width=0.6,
+                color=group_color_map[row["Group"]],
+                edgecolor="black",
+                zorder=1
             )
-
-        # Overlay null bar (except for kernel baselines)
-        if row["Model"] not in ["Gaussian Kernel", "Exponential Decay"]:
-            if overlay_style == "hatch":
-                ax.barh(
-                    y=y,
-                    width=row["WeightedNullMean"],
-                    height=0.6,
-                    facecolor='none',
-                    edgecolor='black',
-                    hatch="////",
-                    linewidth=1,
-                    zorder=3
-                )
-            elif overlay_style == "alpha":
-                ax.barh(
-                    y=y,
-                    width=row["WeightedNullMean"],
-                    height=0.6,
-                    color="lightgray",
-                    edgecolor="black",
-                    alpha=0.3,
-                    zorder=3
-                )
             ax.errorbar(
-                x=row["WeightedNullMean"],
-                y=y,
-                xerr=row["WeightedNullStdErr"],
+                x=x,
+                y=row["WeightedTrueMean"],
+                yerr=row["WeightedTrueStdErr"],
                 fmt='none',
                 ecolor='black',
                 capsize=1,
                 linewidth=1,
-                linestyle='--',
-                zorder=4
+                zorder=2
             )
 
-    # Axes and styling
-    ax.set_xlim(*xlim)
-    ax.set_xticks(np.arange(xlim[0], xlim[1] + 0.2, 0.2))
-    ax.set_xlabel("Pearson-r", fontsize=label_fontsize)
-    ax.set_yticks(range(len(plot_df)))
-    ax.set_yticklabels(plot_df["Model"], fontsize=label_fontsize)
-    ax.invert_yaxis()
-    ax.tick_params(axis='x', labelsize=label_fontsize)
+            # Annotate best model with Pearson-r (rightmost)
+            if i == len(plot_df) - 1:
+                ax.text(
+                    x,
+                    row["WeightedTrueMean"] + 0.02,
+                    f"{row['WeightedTrueMean']:.2f}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=label_fontsize,
+                    color="black"
+                )
+
+            # Overlay null bar (except for kernel baselines)
+            if row["Model"] not in ["Gaussian Kernel", "Exponential Decay"]:
+                if overlay_style == "hatch":
+                    ax.bar(
+                        x=x,
+                        height=row["WeightedNullMean"],
+                        width=0.6,
+                        bottom=0,
+                        facecolor='none',
+                        edgecolor='black',
+                        hatch="////",
+                        linewidth=1,
+                        zorder=3
+                    )
+                elif overlay_style == "alpha":
+                    ax.bar(
+                        x=x,
+                        height=row["WeightedNullMean"],
+                        width=0.6,
+                        bottom=0,
+                        color="lightgray",
+                        edgecolor="black",
+                        alpha=0.3,
+                        zorder=3
+                    )
+                ax.errorbar(
+                    x=x,
+                    y=row["WeightedNullMean"],
+                    yerr=row["WeightedNullStdErr"],
+                    fmt='none',
+                    ecolor='black',
+                    capsize=1,
+                    linewidth=1,
+                    linestyle='--',
+                    zorder=4
+                )
+        else:
+            # Vertical bars (horizontal chart) - original behavior
+            y = i
+            ax.barh(
+                y=y,
+                width=row["WeightedTrueMean"],
+                height=0.6,
+                color=group_color_map[row["Group"]],
+                edgecolor="black",
+                zorder=1
+            )
+            ax.errorbar(
+                x=row["WeightedTrueMean"],
+                y=y,
+                xerr=row["WeightedTrueStdErr"],
+                fmt='none',
+                ecolor='black',
+                capsize=1,
+                linewidth=1,
+                zorder=2
+            )
+
+            # Annotate best model with Pearson-r
+            if i == 0:
+                ax.text(
+                    row["WeightedTrueMean"],
+                    y - 0.4,  # shift upward (adjust spacing if needed)
+                    f"{row['WeightedTrueMean']:.2f}",
+                    va="bottom",
+                    ha="center",
+                    fontsize=label_fontsize,
+                    color="black"
+                )
+
+            # Overlay null bar (except for kernel baselines)
+            if row["Model"] not in ["Gaussian Kernel", "Exponential Decay"]:
+                if overlay_style == "hatch":
+                    ax.barh(
+                        y=y,
+                        width=row["WeightedNullMean"],
+                        height=0.6,
+                        facecolor='none',
+                        edgecolor='black',
+                        hatch="////",
+                        linewidth=1,
+                        zorder=3
+                    )
+                elif overlay_style == "alpha":
+                    ax.barh(
+                        y=y,
+                        width=row["WeightedNullMean"],
+                        height=0.6,
+                        color="lightgray",
+                        edgecolor="black",
+                        alpha=0.3,
+                        zorder=3
+                    )
+                ax.errorbar(
+                    x=row["WeightedNullMean"],
+                    y=y,
+                    xerr=row["WeightedNullStdErr"],
+                    fmt='none',
+                    ecolor='black',
+                    capsize=1,
+                    linewidth=1,
+                    linestyle='--',
+                    zorder=4
+                )
+
+    # Set axis properties based on orientation
+    if horizontal:
+        ax.set_ylim(*xlim)
+        ax.set_yticks(np.arange(xlim[0], xlim[1] + 0.2, 0.2))
+        ax.set_ylabel("Pearson-r", fontsize=label_fontsize)
+        ax.set_xticks(range(len(plot_df)))
+        ax.set_xticklabels(plot_df["Model"], fontsize=label_fontsize, rotation=45, ha='right')
+        ax.tick_params(axis='y', labelsize=label_fontsize)
+        ax.tick_params(axis='x', labelsize=label_fontsize, length=0)  # Remove tick marks but keep labels
+    else:
+        ax.set_xlim(*xlim)
+        ax.set_xticks(np.arange(xlim[0], xlim[1] + 0.2, 0.2))
+        ax.set_xlabel("Pearson-r", fontsize=label_fontsize)
+        ax.set_yticks(range(len(plot_df)))
+        ax.set_yticklabels(plot_df["Model"], fontsize=label_fontsize)
+        ax.invert_yaxis()
+        ax.tick_params(axis='x', labelsize=label_fontsize)
+
+    sns.despine()
+    plt.tight_layout()
+    plt.show()
+
+    return group_color_map
+
+def plot_final_subsetted_barchart(
+    summary_true_dict,
+    summary_null_dict,
+    metric="test_pearson_r",
+    ylim=(0.1, 0.9),
+    overlay_style="ratio",  # "alpha", "hatch", or "ratio"
+    horizontal=False,
+    title=None
+):
+    """
+    Create a final subsetted bar chart with customizable model groups and performance axis limits.
+    
+    Args:
+        summary_true_dict (dict): Model → summary DataFrame for true performance
+        summary_null_dict (dict): Model → summary DataFrame for null performance  
+        metric (str): Metric column name (default = "test_pearson_r")
+        ylim (tuple): Exact y-axis limits for performance values
+        overlay_style (str): Style for null comparison - "alpha", "hatch", or "ratio"
+        horizontal (bool): If True, create horizontal layout (worst to best, left to right)
+        title (str): Optional title for the plot (e.g., 'Random Split UKBB Performance')
+    
+    Returns:
+        dict: Group-to-color mapping for external legend construction
+    """
+    
+    # Manually defined model groups - can be easily modified here
+    model_groups = {
+        'Non-Linear': {
+            'dynamic_mlp': 'MLP',
+            'shared_transformer': 'SMT',
+            'dynamic_mlp_coords': 'MLP w/ coords',
+            'shared_transformer_cls': 'SMT w/ [CLS]'
+        },
+        'Bilinear': {
+            'pls_bilineardecoder': 'Bilinear PLS',
+            'bilinear_lowrank': 'Bilinear Low-Rank',
+        }
+    }
+
+    base_fontsize = 22
+    label_fontsize = base_fontsize * 0.7
+    plt.rcParams.update({'font.size': base_fontsize})
+
+    # Prepare plot data
+    plot_data = []
+    for group_name, model_dict in model_groups.items():
+        for model_key, display_name in model_dict.items():
+            if model_key in summary_true_dict and model_key in summary_null_dict:
+                df_true = summary_true_dict[model_key]
+                df_null = summary_null_dict[model_key]
+                if metric in df_true.columns and metric in df_null.columns:
+                    plot_data.append({
+                        "Model": display_name,
+                        "Group": group_name,
+                        "TrueMean": df_true.loc["mean", metric],
+                        "TrueStdErr": df_true.loc["stderr", metric],
+                        "NullMean": df_null.loc["mean", metric],
+                        "NullStdErr": df_null.loc["stderr", metric]
+                    })
+
+    plot_df = pd.DataFrame(plot_data)
+    
+    # Sort by performance - for horizontal, ascending=True (worst to best left to right)
+    # For vertical, ascending=False (best to worst top to bottom)
+    plot_df = plot_df.sort_values("TrueMean", ascending=horizontal).reset_index(drop=True)
+
+    # Color mapping
+    unique_groups = list(model_groups.keys())
+    palette = sns.color_palette("viridis", n_colors=12, desat=1.0)[2::4]
+    group_color_map = {group: color for group, color in zip(unique_groups, palette)}
+
+    # Plotting - adjust figure size based on orientation
+    if horizontal:
+        plt.figure(figsize=(7, 5), dpi=300)
+    else:
+        plt.figure(figsize=(6, 7), dpi=300)
+    ax = plt.gca()
+
+    for i, row in plot_df.iterrows():
+        if horizontal:
+            # Horizontal bars (vertical chart)
+            x = i
+            ax.bar(
+                x=x,
+                height=row["TrueMean"],
+                width=0.6,
+                color=group_color_map[row["Group"]],
+                edgecolor="black",
+                zorder=1
+            )
+            ax.errorbar(
+                x=x,
+                y=row["TrueMean"],
+                yerr=row["TrueStdErr"],
+                fmt='none',
+                ecolor='black',
+                capsize=2,
+                linewidth=2,
+                zorder=2
+            )
+
+            # Add metric text based on overlay style
+            if overlay_style == "ratio":
+                # Show true/null ratio without leading zeros
+                ratio_text = f"{row['TrueMean']:.2f}/{row['NullMean']:.2f}".replace('0.', '.')
+                ax.text(
+                    x,
+                    row["TrueMean"] + 0.025,  # Increased spacing from bar
+                    ratio_text,
+                    ha="center",
+                    va="bottom",
+                    fontsize=label_fontsize,  # Increased font size
+                    color="black"
+                )
+            else:
+                # Show only true performance for best model (rightmost)
+                if i == len(plot_df) - 1:
+                    ax.text(
+                        x,
+                        row["TrueMean"] + 0.02,  # Increased spacing from bar
+                        f"{row['TrueMean']:.2f}",
+                        ha="center",
+                        va="bottom",
+                        fontsize=label_fontsize,  # Increased font size
+                        color="black"
+                    )
+
+            # Add null overlay if not using ratio style
+            if overlay_style != "ratio":
+                if overlay_style == 'hatch':
+                    ax.bar(
+                        x=x,
+                        height=row["NullMean"],
+                        width=0.6,
+                        bottom=0,
+                        facecolor='none',
+                        edgecolor='black',
+                        hatch="////",
+                        linewidth=1,
+                        zorder=3
+                    )
+                elif overlay_style == 'alpha':
+                    ax.bar(
+                        x=x,
+                        height=row["NullMean"],
+                        width=0.6,
+                        bottom=0,
+                        color="lightgray",
+                        edgecolor="black",
+                        alpha=0.3,
+                        zorder=3
+                    )
+                ax.errorbar(
+                    x=x,
+                    y=row["NullMean"],
+                    yerr=row["NullStdErr"],
+                    fmt='none',
+                    ecolor='black',
+                    capsize=1,
+                    linewidth=1,
+                    linestyle='--',
+                    zorder=4
+                )
+        else:
+            # Vertical bars (horizontal chart) - original behavior
+            y = i
+            ax.barh(
+                y=y,
+                width=row["TrueMean"],
+                height=0.6,
+                color=group_color_map[row["Group"]],
+                edgecolor="black",
+                zorder=1
+            )
+            ax.errorbar(
+                x=row["TrueMean"],
+                y=y,
+                xerr=row["TrueStdErr"],
+                fmt='none',
+                ecolor='black',
+                capsize=2,
+                linewidth=2,
+                zorder=2
+            )
+
+            # Add metric text based on overlay style
+            if overlay_style == "ratio":
+                # Show true/null ratio without leading zeros
+                ratio_text = f"{row['TrueMean']:.2f}/{row['NullMean']:.2f}".replace('0.', '.')
+                ax.text(
+                    row["TrueMean"] + 0.02,  # Increased spacing from bar
+                    y,
+                    ratio_text,
+                    va="center",
+                    ha="left",
+                    fontsize=label_fontsize,  # Increased font size
+                    color="black"
+                )
+            else:
+                # Show only true performance for best model (topmost)
+                if i == 0:
+                    ax.text(
+                        row["TrueMean"],
+                        y - 0.4,
+                        f"{row['TrueMean']:.2f}",
+                        va="bottom",
+                        ha="center",
+                        fontsize=label_fontsize,
+                        color="black"
+                    )
+
+            # Add null overlay if not using ratio style
+            if overlay_style != "ratio":
+                if overlay_style == 'hatch':
+                    ax.barh(
+                        y=y,
+                        width=row["NullMean"],
+                        height=0.6,
+                        facecolor='none',
+                        edgecolor='black',
+                        hatch="////",
+                        linewidth=1,
+                        zorder=3
+                    )
+                elif overlay_style == 'alpha':
+                    ax.barh(
+                        y=y,
+                        width=row["NullMean"],
+                        height=0.6,
+                        color="lightgray",
+                        edgecolor="black",
+                        alpha=0.3,
+                        zorder=3
+                    )
+                ax.errorbar(
+                    x=row["NullMean"],
+                    y=y,
+                    xerr=row["NullStdErr"],
+                    fmt='none',
+                    ecolor='black',
+                    capsize=1,
+                    linewidth=1,
+                    linestyle='--',
+                    zorder=4
+                )
+
+    # Set axis properties based on orientation with hard-coded limits
+    range_size = ylim[1] - ylim[0]
+    if range_size % 0.2 == 0:
+        tick_interval = 0.2
+    else:
+        tick_interval = 0.1
+    
+    if horizontal:
+        ax.set_ylim(*ylim)
+        ax.set_yticks(np.arange(ylim[0], ylim[1] + tick_interval/2, tick_interval))
+        ax.set_ylabel("Pearson-r", fontsize=label_fontsize)
+        ax.set_xticks(range(len(plot_df)))
+        ax.set_xticklabels(plot_df["Model"], fontsize=label_fontsize, rotation=45, ha='right')
+        ax.tick_params(axis='y', labelsize=label_fontsize)
+        ax.tick_params(axis='x', labelsize=label_fontsize, length=0)  # Remove tick marks but keep labels
+    else:
+        ax.set_xlim(*ylim)
+        ax.set_xticks(np.arange(ylim[0], ylim[1] + tick_interval/2, tick_interval))
+        ax.set_xlabel("Pearson-r", fontsize=label_fontsize)
+        ax.set_yticks(range(len(plot_df)))
+        ax.set_yticklabels(plot_df["Model"], fontsize=label_fontsize)
+        ax.invert_yaxis()
+        ax.tick_params(axis='x', labelsize=label_fontsize)
+
+    # Add title if provided
+    if title:
+        plt.title(title, fontsize=base_fontsize-4, pad=30)
 
     sns.despine()
     plt.tight_layout()

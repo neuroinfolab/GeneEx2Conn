@@ -602,6 +602,227 @@ def visualize_splits_3d(splits, coords, Y=None, X=None, edge_threshold=0.5, vali
         print(f"GIF saved to glass/{gif_path}")
 
 
+def visualize_splits_3d_rotate(splits, coords, Y=None, X=None, edge_threshold=0.5, valid_genes=None, gene_name=None,
+                              title_prefix="CV Split", save_gif=True, show_train_edges=True, show_test_edges=True,
+                              fontsize=25, n_rotation_frames=36, elevation=20, x_zoom_factor=0.6, gif_path=None):
+    """
+    Create a single rotating 3D visualization GIF that cycles through all train/test splits.
+    Each split gets a full 360-degree rotation before moving to the next split.
+    
+    Parameters:
+    -----------
+    splits : iterator
+        Iterator yielding (train_indices, test_indices) tuples
+    coords : array-like, shape (n_samples, 3)
+        3D coordinates for each region/point
+    Y : array-like, shape (n_samples, n_samples), optional
+        Connectivity matrix. If provided, edges will be drawn between connected regions
+        with width and opacity proportional to connection strength
+    X : array-like, optional, shape (n_regions, n_genes)
+        Gene expression matrix
+    valid_genes : list, optional
+        List of valid gene names corresponding to X columns
+    gene_name : str, optional
+        Specific gene to use for coloring. If None, randomly select one
+    title_prefix : str, optional
+        Prefix for the plot title to indicate split type
+    edge_threshold : float, optional
+        Threshold for displaying edges (only edges with weight > threshold are shown)
+    save_gif : bool, optional
+        Whether to save as GIF (default True)
+    show_train_edges : bool, optional
+        Whether to display edges between training points
+    show_test_edges : bool, optional
+        Whether to display edges between test points
+    fontsize : int, optional
+        Base font size for plot text elements
+    n_rotation_frames : int, optional
+        Number of frames for full 360 degree rotation (default 36, i.e., 10 degrees per frame)
+    elevation : float, optional
+        Elevation angle for the 3D view (default 20)
+    x_zoom_factor : float, optional
+        Factor to narrow the x-axis view (default 0.6, smaller values = more zoomed in)
+    gif_path : str, optional
+        Custom file path for the saved GIF. If None, generates automatic path based on title_prefix
+        
+    Returns:
+    --------
+    None
+        Saves a single rotating GIF cycling through all splits
+    """
+    # Convert splits to list to allow multiple iterations
+    splits = list(splits)
+    
+    # Get gene expression colors if X is provided
+    expression_values, gene_used = None, None
+    if X is not None and (valid_genes is not None or gene_name is not None):
+        expression_values, gene_used = get_gene_expression_colors(X, valid_genes, gene_name)
+        if gene_used:
+            title_prefix = f"{title_prefix}, {gene_used} Expression"
+    
+    # Store all frames for the combined GIF
+    all_figures = []
+    
+    # Calculate axis limits for consistent zooming
+    x_min, x_max = coords[:, 0].min(), coords[:, 0].max()
+    y_min, y_max = coords[:, 1].min(), coords[:, 1].max()
+    z_min, z_max = coords[:, 2].min(), coords[:, 2].max()
+    
+    # Apply zoom factor to x-axis (lateral narrowing)
+    x_center = (x_min + x_max) / 2
+    x_range = (x_max - x_min) * x_zoom_factor
+    x_lim = [x_center - x_range/2, x_center + x_range/2]
+    
+    for fold_idx, (train_indices, test_indices) in enumerate(splits, 1):
+        # Generate rotation angles (0 to 360 degrees)
+        azimuth_angles = np.linspace(0, 360, n_rotation_frames, endpoint=False)
+        
+        for frame_idx, azimuth in enumerate(azimuth_angles):
+            fig = plt.figure(figsize=(9, 9), dpi=130)  # Square figure for rotation
+            ax = fig.add_subplot(111, projection='3d', computed_zorder=False)
+            
+            # Plot edges if connectivity matrix is provided
+            if Y is not None:
+                # Get all pairs of indices where connectivity > threshold
+                connected_pairs = np.where(Y > edge_threshold)
+                
+                # Get the range of connectivity values for normalization
+                max_weight = np.max(Y[Y > edge_threshold])
+                min_weight = np.min(Y[Y > edge_threshold])
+                
+                # Draw edges with different colors based on train/test membership
+                for i, j in zip(*connected_pairs):
+                    if i < j:  # Only draw each edge once
+                        start = coords[i]
+                        end = coords[j]
+                        
+                        # Normalize weight for visual properties
+                        weight = Y[i, j]
+                        norm_weight = (weight - min_weight) / (max_weight - min_weight)
+                        
+                        # Base alpha and width on connection strength
+                        base_alpha = norm_weight * 0.4  # Slightly reduced for rotation
+                        base_width = norm_weight * 1.5    # Slightly reduced for rotation
+                        
+                        # Only draw edges within train or within test sets based on flags
+                        if show_train_edges and i in train_indices and j in train_indices:
+                            color = '#1f77b4'  # Darker blue
+                            alpha = base_alpha * 0.8
+                            width = base_width * 1.0
+                            ax.plot([start[0], end[0]], 
+                                   [start[1], end[1]], 
+                                   [start[2], end[2]], 
+                                   color=color, alpha=alpha, linewidth=width)
+                        elif show_test_edges and i in test_indices and j in test_indices:
+                            color = 'orange'
+                            alpha = base_alpha * 1.1
+                            width = base_width * 1.75
+                            ax.plot([start[0], end[0]], 
+                                   [start[1], end[1]], 
+                                   [start[2], end[2]], 
+                                   color=color, alpha=alpha, linewidth=width)
+            
+            
+            # Plot points with gene expression coloring if available
+            if expression_values is not None:
+                train_colors = create_color_gradient('#A89CAA', expression_values[train_indices])  # Light gray with pink hue
+                test_colors = create_color_gradient('orange', expression_values[test_indices])
+                
+                train_scatter = ax.scatter(coords[train_indices, 0], 
+                                         coords[train_indices, 1], 
+                                         coords[train_indices, 2], 
+                                         c=train_colors, label='Train', 
+                                         s=61, edgecolor='gray', linewidth=0.5)
+                
+                test_scatter = ax.scatter(coords[test_indices, 0], 
+                                        coords[test_indices, 1], 
+                                        coords[test_indices, 2], 
+                                        c=test_colors, label='Test', 
+                                        s=61, edgecolor='gray', linewidth=0.5)
+            else:
+                # Plot points with solid colors - light gray with pink hue for train
+                train_scatter = ax.scatter(coords[train_indices, 0], 
+                                         coords[train_indices, 1], 
+                                         coords[train_indices, 2], 
+                                         c='#A89CAA', label='Train', alpha=0.9,
+                                         s=61, edgecolor='gray', linewidth=0.7)
+                
+                test_scatter = ax.scatter(coords[test_indices, 0], 
+                                        coords[test_indices, 1], 
+                                        coords[test_indices, 2], 
+                                        c='orange', label='Test', alpha=0.9,
+                                        s=61, edgecolor='gray', linewidth=0.5)
+            
+            # Set consistent axis limits with x-axis narrowing
+            ax.set_xlim(x_lim)
+            ax.set_ylim([y_min, y_max])
+            ax.set_zlim([z_min, z_max])
+            
+            # Remove all axes, ticks, and labels for clean rotation
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_zticks([])
+            ax.set_xlabel('')
+            ax.set_ylabel('')
+            ax.set_zlabel('')
+            
+            # Remove axis lines and panes
+            ax.xaxis.pane.fill = False
+            ax.yaxis.pane.fill = False
+            ax.zaxis.pane.fill = False
+            ax.xaxis.pane.set_edgecolor('w')
+            ax.yaxis.pane.set_edgecolor('w')
+            ax.zaxis.pane.set_edgecolor('w')
+            ax.grid(False)
+            
+            # Set the viewing angle for this frame
+            ax.view_init(elev=elevation, azim=azimuth)
+            
+            # Set clean background
+            ax.set_facecolor('white')
+            fig.patch.set_facecolor('white')
+            
+            # Remove margins for clean rotation
+            plt.subplots_adjust(left=0, right=1, bottom=0, top=1)
+            
+            # Convert figure to image
+            fig.canvas.draw()
+            image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')
+            image = image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+            all_figures.append(image)
+            plt.close()
+    
+    if save_gif and all_figures:
+        # Generate gif path if not provided
+        if gif_path is None:
+            # Create the glass directory if it doesn't exist
+            os.makedirs('glass', exist_ok=True)
+            
+            # Generate automatic gif path for the combined splits
+            n_splits = len(splits)
+            gene_suffix = "_gene" if valid_genes is not None else ""
+            gif_filename = f"cv_split_rotate_{title_prefix.lower().replace(' ', '_')}_all_{n_splits}_splits{gene_suffix}.gif"
+            gif_path = f"glass/{gif_filename}"
+        else:
+            # Use custom path, create directory if needed
+            gif_dir = os.path.dirname(gif_path)
+            if gif_dir and not os.path.exists(gif_dir):
+                os.makedirs(gif_dir, exist_ok=True)
+        
+        # Save as GIF with appropriate frame rate for smooth rotation
+        imageio.mimsave(gif_path, all_figures, fps=10, loop=0)
+        print(f"Combined rotating GIF with {len(splits)} splits ({len(all_figures)} total frames) saved to {gif_path}")
+    
+    if not save_gif:
+        print(f"Generated {len(all_figures)} total rotation frames for {len(splits)} splits")
+        # Display the first frame as a static plot
+        plt.figure(figsize=(12, 12)) # final 12, 12
+        plt.imshow(all_figures[0])
+        plt.axis('off')
+        plt.title(f"{title_prefix} - Split 1 (Frame 1/{n_rotation_frames})")
+        plt.show()
+
+
 def visualize_3d(X, Y, coords, edge_threshold=0.5, valid_genes=None, gene_name=None):
     """
     Visualize brain network in 3D space with optional gene expression coloring.

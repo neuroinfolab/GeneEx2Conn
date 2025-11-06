@@ -58,7 +58,7 @@ best_parameters:
   input_dim:
     value: !!int 0
   expression_bins:
-    values: [5]
+    values: [100]
   genevec_type:
     values: ['gene2vec'] # 'gene2vec', 'coexpression', 'one_hot' (best)
   d_model:
@@ -69,7 +69,7 @@ best_parameters:
     values: [2] # 4 is best
   deep_hidden_dims:
     values:
-      - [256, 128, 64] # 512, 256, 128 is best
+      - [128, 64, 32] # 512, 256, 128 is best
   cls_init:
     values: ['random']
   pooling_mode:
@@ -95,7 +95,7 @@ best_parameters:
   lambda_sym:
     values: [0.0001]
   bidirectional:
-    values: [True]
+    values: [False]
   num_workers:
     values: [2]
   prefetch_factor:
