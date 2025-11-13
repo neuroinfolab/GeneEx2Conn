@@ -1,0 +1,99 @@
+name: mixed_attention_gene2vec
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+parameters:
+  input_dim:
+    value: !!int 0
+  expression_bins:       # Number of expression bins per gene
+    values: [5, 10, 100]
+  d_model:              # Transformer embedding dimension
+    values: [16, 32, 64]
+  nhead:                # Number of attention heads
+    values: [2, 4]
+  num_layers:           # Number of self-attention layers
+    values: [2, 4]
+  deep_hidden_dims:     # MLP head dimensions
+    values:
+      - [256, 128, 64]
+  genevec_type:
+    values: ['gene2vec', 'one_hot']
+  region_emb_init:      # Region embedding initialization
+    values: ['spatial', 'none']
+  pooling_mode:         # Output pooling method
+    values: ['attention']
+  use_alibi:            # Use ALiBi positional biases
+    values: [True, False]
+  transformer_dropout:  # Dropout in attention blocks
+    values: [0.1, 0.3]
+  dropout_rate:        # Dropout in MLP head
+    values: [0.1, 0.3]
+  learning_rate:
+    values: [0.0001, 0.00009]
+  weight_decay:
+    values: [0, 0.0001, 0.001]
+  batch_size:
+    values: [512, 1024]
+  epochs:
+    values: [100, 150, 200]
+  aug_prob:            # Data augmentation probability
+    values: [0.0, 0.1, 0.3]
+  aug_style:
+    values: ['curriculum_swap_linear_decay', 'curriculum_swap_constant', 'linear_decay']
+  lambda_sym:
+    values: [0, 0.0001, 0.00001]
+  num_workers:
+    values: [2]
+  prefetch_factor:
+    values: [4]
+  cosine_lr:           # Use cosine learning rate schedule
+    values: [False]
+
+best_parameters:
+  input_dim:
+    value: !!int 0
+  expression_bins:
+    values: [100]
+  genevec_type:
+    values: ['gene2vec'] # 'gene2vec', 'coexpression', 'one_hot'
+  region_emb_init:
+    values: ['none'] # spatial initialization recommended - 'none' available for ablation
+  d_model:
+    values: [32] 
+  nhead:
+    values: [2] 
+  num_layers:
+    values: [2] 
+  deep_hidden_dims:
+    values:
+      - [256, 128, 64]
+  pooling_mode:
+    values: ['attention'] # attention pooling recommended
+  use_alibi:
+    values: [True]
+  transformer_dropout:
+    values: [0.1]
+  dropout_rate:
+    values: [0.1]
+  learning_rate:
+    values: [0.00009]
+  weight_decay:
+    values: [0.0001]
+  batch_size:
+    values: [1024]
+  epochs:
+    values: [100]
+  aug_prob:
+    values: [0.3]
+  aug_style:
+    values: ['curriculum_swap_linear_decay']
+  lambda_sym:
+    values: [0.0]
+  num_workers:
+    values: [2]
+  prefetch_factor:
+    values: [4]
+  cosine_lr:
+    values: [False]

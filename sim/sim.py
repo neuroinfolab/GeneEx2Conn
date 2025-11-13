@@ -29,7 +29,7 @@ from models.smt_advanced import SharedSelfAttentionAEModel
 from models.smt_advanced import SharedSelfAttentionCelltypeModel
 from models.smt_advanced import SharedSelfAttentionGeneformerModel
 from models.smt_advanced import SharedSelfAttentionGene2VecModel
-from models.smt_cross import CrossAttentionGeneVecModel
+from models.smt_cross import SelfAttentionGeneVecModel, CrossAttentionGeneVecModel, MixedAttentionGeneVecModel
 
 MODEL_CLASSES = {
     'cge': CGEModel,
@@ -55,8 +55,9 @@ MODEL_CLASSES = {
     'shared_transformer_celltype': SharedSelfAttentionCelltypeModel,
     'shared_transformer_geneformer': SharedSelfAttentionGeneformerModel,
     'shared_transformer_gene2vec': SharedSelfAttentionGene2VecModel,
-    #'cross_attention': CrossAttentionModel,
-    'cross_attention_genevec': CrossAttentionGeneVecModel
+    'self_attention_genevec': SelfAttentionGeneVecModel,
+    'cross_attention_genevec': CrossAttentionGeneVecModel,
+    'mixed_attention_genevec': MixedAttentionGeneVecModel
 }
 
 from models.metrics.eval import (
@@ -376,11 +377,12 @@ class Simulation:
                                                 reinit=True)
 
                     if self.model_type in MODEL_CLASSES:
-                        wandb.watch(best_model, log='all')
+                        #wandb.watch(best_model, log='all')
+                        final_eval_run.watch(best_model, log='all', log_freq=100) # test out
                         if self.model_type == 'pls_twostep':
                             train_history = best_model.fit(self.region_pair_dataset, train_indices, test_indices)
                         else:
-                            train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded, save_model=self.save_model)
+                            train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded, save_model=self.save_model, wandb_run=final_eval_run)
                         for epoch, (train_loss, val_loss) in enumerate(zip(train_history['train_loss'], train_history['val_loss'])):
                             wandb.log({'train_mse_loss': train_loss, 'test_mse_loss': val_loss})
                 else:

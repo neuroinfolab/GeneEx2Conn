@@ -4,7 +4,7 @@ from torch.cuda.amp import autocast, GradScaler
 from data.data_utils import augment_batch_y, augment_batch_X, swap_batch_with_strong_edges
 torch.set_float32_matmul_precision('high')
 
-def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, train_scheduler=None, save_model=None, verbose=True, dataset=None):        
+def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, train_scheduler=None, save_model=None, verbose=True, dataset=None, wandb_run=None):        
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     for i in range(torch.cuda.device_count()):
@@ -53,6 +53,9 @@ def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, p
                 else:
                     print(f"\nReached final epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}, Pearson Correlation: {pearson_corr:.4f}")
                 break
+        
+        if wandb_run is not None:
+            wandb_run.log({'train_loss': train_loss, 'val_loss': val_loss})
         
         if verbose and (epoch + 1) % 5 == 0:
             epoch_time = time.time() - start_time
@@ -129,7 +132,7 @@ def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler
             loss = criterion(predictions, batch_y)   
             loss.backward()
             optimizer.step()
-        
+
         total_train_loss += loss.item()
     
     return total_train_loss / len(train_loader)

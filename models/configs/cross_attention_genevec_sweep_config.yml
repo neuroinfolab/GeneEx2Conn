@@ -8,7 +8,7 @@ parameters:
   input_dim:
     value: !!int 0
   expression_bins:       # Number of expression bins per gene
-    values: [5]
+    values: [5, 10, 100]
   d_model:              # Transformer embedding dimension
     values: [16, 32, 64]
   nhead:                # Number of attention heads
@@ -18,15 +18,12 @@ parameters:
   deep_hidden_dims:     # MLP head dimensions
     values:
       - [256, 128, 64]
-      - [512, 256, 128]
   genevec_type:
     values: ['gene2vec', 'one_hot']
-  cls_init:             # CLS token initialization
-    values: ['random']
   pooling_mode:         # Output pooling method
     values: ['attention']
   use_alibi:            # Use ALiBi positional biases
-    values: [True]
+    values: [True, False]
   transformer_dropout:  # Dropout in attention blocks
     values: [0.1, 0.3]
   dropout_rate:        # Dropout in MLP head
@@ -38,7 +35,7 @@ parameters:
   batch_size:
     values: [512, 1024]
   epochs:
-    values: [150, 200, 250]
+    values: [100, 150, 200]
   aug_prob:            # Data augmentation probability
     values: [0.0, 0.1, 0.3]
   aug_style:
@@ -69,9 +66,7 @@ best_parameters:
     values: [2] # 4 is best
   deep_hidden_dims:
     values:
-      - [128, 64, 32] # 512, 256, 128 is best
-  cls_init:
-    values: ['random']
+      - [256, 128, 64] # 512, 256, 128 is best
   pooling_mode:
     values: ['attention']
   use_alibi:
@@ -85,9 +80,9 @@ best_parameters:
   weight_decay:
     values: [0.0001]
   batch_size:
-    values: [512]
+    values: [1024]
   epochs:
-    values: [200]
+    values: [100]
   aug_prob:
     values: [0.3]
   aug_style:
@@ -95,7 +90,7 @@ best_parameters:
   lambda_sym:
     values: [0.0001]
   bidirectional:
-    values: [False]
+    values: [True]
   num_workers:
     values: [2]
   prefetch_factor:

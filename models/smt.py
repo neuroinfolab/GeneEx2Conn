@@ -77,8 +77,13 @@ class BaseTransformerModel(nn.Module):
         
         self.store_attn = collect_attn
         if collect_attn and not getattr(self, 'use_attention_pooling', False):
-            # 1. Set forward pass to collect weights instead of FlashAttention
-            collect_full_attention_heads(self.encoder.transformer_layers)
+            # Use encoder-specific attention collection setup
+            if hasattr(self.encoder, 'setup_attention_collection'):
+                self.encoder.setup_attention_collection()
+            else:
+                # Fallback for older models
+                if hasattr(self.encoder, 'transformer_layers'):
+                    collect_full_attention_heads(self.encoder.transformer_layers)
         
         with torch.no_grad():
             for batch_idx, batch_data in enumerate(loader):
@@ -94,9 +99,14 @@ class BaseTransformerModel(nn.Module):
                         attns = (out["attn_beta_i"], out["attn_beta_j"])
                         all_attn.append(attns)
                     else:
-                        # 2. Compute batch-wise average attention weights from last layer of transformer
+                        # Use encoder-specific attention accumulation
                         batch_preds = out.cpu().numpy()
-                        accumulate_attention_weights(self.encoder.transformer_layers, is_first_batch=(batch_idx == 0))
+                        if hasattr(self.encoder, 'accumulate_attention_weights'):
+                            self.encoder.accumulate_attention_weights(is_first_batch=(batch_idx == 0))
+                        else:
+                            # Fallback for older models
+                            if hasattr(self.encoder, 'transformer_layers'):
+                                accumulate_attention_weights(self.encoder.transformer_layers, is_first_batch=(batch_idx == 0))
                         total_batches += 1
                 else:
                     batch_preds = self(batch_X, batch_coords, batch_expanded_idx).cpu().numpy()
@@ -113,13 +123,18 @@ class BaseTransformerModel(nn.Module):
                 avg_attn_arr = collect_attention_pooling_weights(all_attn, save_attn_path)
                 return predictions, targets, avg_attn_arr, all_attn
             else:
-                # 3. Compute overall average attention weights over all batches
-                avg_attn = process_full_attention_heads(self.encoder.transformer_layers, total_batches, save_attn_path, self.token_encoder_dim)
+                # Use encoder-specific attention processing
+                if hasattr(self.encoder, 'process_attention_weights'):
+                    avg_attn = self.encoder.process_attention_weights(total_batches, save_attn_path)
+                else:
+                    # Fallback for older models
+                    if hasattr(self.encoder, 'transformer_layers'):
+                        avg_attn = process_full_attention_heads(self.encoder.transformer_layers, total_batches, save_attn_path, self.token_encoder_dim)
                 return predictions, targets, avg_attn
         
         return predictions, targets
 
-    def fit(self, dataset, train_indices, test_indices, save_model=None, verbose=True):
+    def fit(self, dataset, train_indices, test_indices, save_model=None, verbose=True, wandb_run=None):
         """Shared fit function for all transformer models"""
         self.train_indices = train_indices
         self.test_indices = test_indices
@@ -131,7 +146,7 @@ class BaseTransformerModel(nn.Module):
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True,
                                num_workers=self.num_workers, prefetch_factor=self.prefetch_factor)
         
-        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, scheduler=self.scheduler, save_model=save_model, verbose=verbose, dataset=dataset)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, scheduler=self.scheduler, save_model=save_model, verbose=verbose, dataset=dataset, wandb_run=wandb_run)
 
 
 class FlashAttentionEncoder(nn.Module):

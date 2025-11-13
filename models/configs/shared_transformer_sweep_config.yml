@@ -77,7 +77,7 @@ best_parameters:
   aug_style:
     values: ['curriculum_swap_linear_decay']
   epochs:
-    values: [110]
+    values: [90]
   num_workers:
     values: [2]
   prefetch_factor:

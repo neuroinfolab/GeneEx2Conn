@@ -64,6 +64,18 @@ CV_WEIGHTS = {
     }
 }
 
+def date_days_ago(days):
+    """Returns the date (YYYY-MM-DD) that was `days` ago from today."""
+    from datetime import datetime, timedelta
+    return (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+
+def days_ago_from_date(date_str):
+    """Returns how many days ago the given date (YYYY-MM-DD) was from today."""
+    from datetime import datetime
+    today = datetime.now().date()
+    date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    return (today - date).days
+
 def weighted_mean_and_se(values, weights):
     """
     Compute weighted mean and standard error for a set of values and weights.
@@ -1248,11 +1260,23 @@ def plot_final_subsetted_barchart(
                     color="black"
                 )
             else:
-                # Show only true performance for best model (rightmost)
-                if i == len(plot_df) - 1:
+                # Show true performance for all models if alpha style, otherwise only best model
+                if overlay_style == "alpha":
+                    # Show true performance above all bars for alpha overlay
                     ax.text(
                         x,
-                        row["TrueMean"] + 0.02,  # Increased spacing from bar
+                        row["TrueMean"] + 0.025,  # Increased spacing from bar
+                        f"{row['TrueMean']:.2f}",
+                        ha="center",
+                        va="bottom",
+                        fontsize=label_fontsize,  # Increased font size
+                        color="black"
+                    )
+                elif i == len(plot_df) - 1:
+                    # Show only true performance for best model (rightmost) for other styles
+                    ax.text(
+                        x,
+                        row["TrueMean"] + 0.025,  # Increased spacing from bar
                         f"{row['TrueMean']:.2f}",
                         ha="center",
                         va="bottom",
