@@ -3,6 +3,7 @@ from data.data_utils import create_data_loader
 from scipy.optimize import curve_fit
 from torch.utils.data import DataLoader, Subset
 
+### Drop in helper functions for comparison with learning-based models ###
 def compute_loss_for_loader(model, loader):
     """Helper function to compute loss for a data loader"""
     total_loss = 0
@@ -29,7 +30,9 @@ def predict_from_loader(model, loader):
     return np.concatenate(predictions), np.concatenate(targets)
 
 class CGEModel(nn.Module):
-    """Simple correlation between gene expression vectors."""
+    """
+    Correlation between gene expression vectors as connectivity prediction
+    """
     def __init__(self, input_dim, binarize=None, scale_range=False):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -77,7 +80,9 @@ class CGEModel(nn.Module):
         return predict_from_loader(self, loader)
 
 class GaussianKernelModel(nn.Module):
-    """Gaussian kernel based on euclidean distance."""
+    """
+    Gaussian kernel based on euclidean distance as connectivity prediction
+    """
     def __init__(self, input_dim, binarize=None, init_sigma=None):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -89,7 +94,7 @@ class GaussianKernelModel(nn.Module):
     def forward(self, x):
         x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         x_i[:, 0] = -torch.abs(x_i[:, 0])  # Make x coordinate negative
-        x_j[:, 0] = -torch.abs(x_j[:, 0])  # Make x coordinate negative
+        x_j[:, 0] = -torch.abs(x_j[:, 0])  # Make x coordinate negative - this trick enforces learning in a single hemisphere so bilateral regions get a prediction
         dist = torch.sum((x_i - x_j)**2, dim=1) # Compute euclidean distance
         return torch.exp(-dist / (2 * self.sigma**2)) # Apply gaussian kernel
         
@@ -127,12 +132,12 @@ class GaussianKernelModel(nn.Module):
         
     def predict(self, loader):
         return predict_from_loader(self, loader)
-        
-        # x_i = -torch.abs(x_i[:, 0:1])  # Take negative of absolute value of first coordinate
-        # x_j = -torch.abs(x_j[:, 0:1])  # Take negative of absolute value of first coordinate
+    
 
 class ExponentialDecayModel(nn.Module):
-    """Exponential decay based on euclidean distance."""
+    """
+    Exponential decay based on euclidean distance as connectivity prediction
+    """
     def __init__(self, input_dim, binarize=None, SA_inf=-0.2, SA_lambda=15.0):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -142,9 +147,9 @@ class ExponentialDecayModel(nn.Module):
         self.SA_lambda = nn.Parameter(torch.tensor(float(SA_lambda)))
         
     def forward(self, x):
-        x_i, x_j = torch.chunk(x, chunks=2, dim=1) 
+        x_i, x_j = torch.chunk(x, chunks=2, dim=1)
         x_i[:, 0] = -torch.abs(x_i[:, 0])  # Make x coordinate negative
-        x_j[:, 0] = -torch.abs(x_j[:, 0])  # Make x coordinate negative
+        x_j[:, 0] = -torch.abs(x_j[:, 0])  # Optionally make x coordinate negative - this trick enforces learning in a single hemisphere so bilateral regions get a prediction
         dist = torch.sum((x_i - x_j)**2, dim=1).sqrt() # Compute euclidean distance
         return self.SA_inf + (1 - self.SA_inf) * torch.exp(-dist / self.SA_lambda) # Apply exponential decay
         

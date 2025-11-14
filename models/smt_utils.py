@@ -1,18 +1,16 @@
+from env.imports import *
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from flash_attn import flash_attn_func, flash_attn_qkvpacked_func
 from torch.cuda.amp import autocast
-import numpy as np
-import matplotlib.pyplot as plt
-import math
-import pandas as pd
-import scipy.stats as stats
-from scipy.stats import spearmanr
 
 # === CORE TRANSFORMER CLASSES === #
 class AttentionPooling(nn.Module):
-    # CellSpliceNet implementation
+    """
+    Attention pooling with FiLM conditioning
+    References: CellSpliceNet, https://github.com/ethanjperez/film/tree/master
+    """
     def __init__(self, input_dim, hidden_dim, use_residual=True):
         super().__init__()
         self.theta1 = nn.Linear(input_dim, hidden_dim)
@@ -106,14 +104,39 @@ class FlashAttentionBlock(nn.Module):
         return x.transpose(1, 2).reshape(x.size(0), x.size(2), -1)
 
     @staticmethod
+    def build_alibi_slopes(n_heads) -> torch.Tensor:
+        """
+        ALiBi slopes implementation as defined in:
+        'Train Short, Test Long: Attention with Linear Biases (ALiBi)' Ofir Press et al. (2021)
+        https://github.com/ofirpress/attention_with_linear_biases
+        """
+        def get_slopes_power_of_2(n):
+            start = 2 ** ( - 2 ** -(math.log2(n) - 3) )
+            ratio = start
+            return [start * (ratio ** i) for i in range(n)]
+        def get_slopes(n):
+            if math.log2(n).is_integer():
+                # Direct case: n is a power of two → generate geometric sequence
+                return get_slopes_power_of_2(n)
+            else:
+                closest_power_of_2 = 2 ** math.floor(math.log2(n))
+                return (
+                    get_slopes_power_of_2(closest_power_of_2)
+                    + get_slopes(2 * closest_power_of_2)[0::2][:n - closest_power_of_2]
+                )
+        slopes = get_slopes(n_heads)
+        return torch.tensor(slopes, dtype=torch.float32)
+    
+    """
+    # Note: Original slopes implementation for NeurIPS SMT. Splits heads into even local and global heads (4 heads --> 2 full global, 2 full local).
     def build_alibi_slopes(n_heads):
-        # geometric sequence approach from Press, 2021 https://openreview.net/pdf?id=R8sQPpGCv0
         slopes = []
         base = 2.0
         for i in range(n_heads):
             power = i // (n_heads // base)
             slopes.append(1.0 / (base ** power))
         return torch.tensor(slopes).float()
+    """
 
     def forward(self, x):
         with autocast(dtype=torch.bfloat16):
@@ -496,7 +519,7 @@ def collect_attention_pooling_weights(all_attn, save_attn_path=None):
     
     return avg_attn_arr
 
-# SPECIFIC ATTENTION PLOTTING MODALITIES
+### SPECIFIC ATTENTION PLOTTING MODALITIES ###
 def plot_global_head_attention(avg_attn_dict, use_chrom_labels=False, token_encoder_dim=60, cls_token=False):
     """Plot global average attention for each head across all subnetworks"""
     # Get dimensions from first attention tensor

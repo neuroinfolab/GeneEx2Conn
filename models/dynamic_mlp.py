@@ -6,6 +6,9 @@ from models.base_models import BaseModel
 class DynamicMLP(nn.Module):
     def __init__(self, input_dim, binarize=None, hidden_dims=[512, 256, 128], dropout_rate=0.2, learning_rate=1e-3, weight_decay=0.0001, batch_size=512, epochs=100):
         super().__init__()
+        """
+        Fully connected MLP model with dynamically initialized hidden layers.
+        """
         self.input_dim = input_dim
         self.binarize = binarize
         self.learning_rate = learning_rate
@@ -29,9 +32,6 @@ class DynamicMLP(nn.Module):
             self.criterion = nn.BCEWithLogitsLoss()
         else: 
             self.criterion = nn.MSELoss()
-            # consider HuberLoss for less sensitivity to outliers; QuantileLoss to prioritize outliers
-            # self.criterion = nn.PoissonNLLLoss(log_input=True)
-            # self.criterion = TweedieLoss(p=1.5)
 
         self.model = nn.Sequential(*layers)
         self.optimizer = AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
@@ -70,7 +70,7 @@ class DynamicMLP(nn.Module):
         targets = np.concatenate(targets)
         return ((predictions > 0.5).astype(int) if self.binarize else predictions), targets
     
-    def fit(self, dataset, train_indices, test_indices, verbose=True, save_model=None):
+    def fit(self, dataset, train_indices, test_indices, verbose=True, save_model=None, wandb_run=None):
         train_dataset = Subset(dataset, train_indices)
         test_dataset = Subset(dataset, test_indices)
 
@@ -78,4 +78,4 @@ class DynamicMLP(nn.Module):
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, shuffle=False, pin_memory=True)
         
-        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, save_model=save_model, verbose=verbose)
+        return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.optimizer, self.patience, self.scheduler, save_model=save_model, verbose=verbose, wandb_run=wandb_run)

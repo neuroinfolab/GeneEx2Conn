@@ -146,7 +146,7 @@ class BilinearCM(nn.Module):
         targets = np.concatenate(targets)
         return predictions, targets
     
-    def fit(self, dataset, train_indices, test_indices, verbose=True, save_model=None):
+    def fit(self, dataset, train_indices, test_indices, verbose=True, save_model=None, wandb_run=None):
         train_dataset = Subset(dataset, train_indices)
         test_dataset = Subset(dataset, test_indices)
         train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True, pin_memory=True)
@@ -154,7 +154,7 @@ class BilinearCM(nn.Module):
         if self.closed_form:
             return self.fit_closed_form(dataset, train_indices, test_indices, train_loader, test_loader)
         else: 
-            return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.patience, self.scheduler, self.optimizer, save_model=save_model, verbose=verbose)
+            return train_model(self, train_loader, test_loader, self.epochs, self.criterion, self.patience, self.scheduler, self.optimizer, save_model=save_model, verbose=verbose, wandb_run=wandb_run)
 
     def fit_full(self, dataset, verbose=True, save_model=None):
         train_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, pin_memory=False)

@@ -59,11 +59,11 @@ best_parameters:
   genevec_type:
     values: ['gene2vec'] # 'gene2vec', 'coexpression', 'one_hot'
   region_emb_init:
-    values: ['none'] # spatial initialization recommended - 'none' available for ablation
+    values: ['none'] # 'spatial' initialization based on coordinates 
   d_model:
-    values: [32] 
+    values: [64] 
   nhead:
-    values: [2] 
+    values: [2]
   num_layers:
     values: [2] 
   deep_hidden_dims:
@@ -78,13 +78,13 @@ best_parameters:
   dropout_rate:
     values: [0.1]
   learning_rate:
-    values: [0.00009]
+    values: [0.0001]
   weight_decay:
     values: [0.0001]
   batch_size:
-    values: [1024]
+    values: [512]
   epochs:
-    values: [100]
+    values: [150]
   aug_prob:
     values: [0.3]
   aug_style:

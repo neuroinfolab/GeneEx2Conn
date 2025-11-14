@@ -4,7 +4,6 @@ metric:
   name: mean_val_loss
   goal: minimize
 
-# SMALL GRID
 parameters:
   input_dim:
     value: !!int 0
@@ -14,9 +13,9 @@ parameters:
       - [512, 256, 128]
       - [1024, 512, 256, 128]
   learning_rate:
-    values: [0.00009] # [0.00009, 0.0001]
-  batch_size:
-    values: [512] # [256, 512, 1024]
+    values: [0.00009, 0.0001]
+  batch_size: 
+    values: [512, 1024]
   dropout_rate:
     values: [0.0, 0.1, 0.3]
   weight_decay:
@@ -24,7 +23,6 @@ parameters:
   epochs:
     values: [75, 100, 125]
 
-# REGRESSION
 best_parameters:
   input_dim:
     value: !!int 0

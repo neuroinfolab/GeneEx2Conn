@@ -10,11 +10,14 @@ from flash_attn import flash_attn_func, flash_attn_qkvpacked_func
 from transformers import get_cosine_schedule_with_warmup
 from torch.cuda.amp import autocast
 
-# === BASE TRANSFORMER MODEL CLASS === #
+
 class BaseTransformerModel(nn.Module):
     def __init__(self, input_dim, learning_rate=0.0001, weight_decay=0.0001, batch_size=512, epochs=100, num_workers=2, prefetch_factor=4, 
     d_model=128, nhead=4, num_layers=4, token_encoder_dim=60, deep_hidden_dims=[512, 256, 128], aug_prob=0.0, aug_style='curriculum_swap_constant'):
         super().__init__()
+        """
+        Base class for shared self-attention transformer models e.g. Spatiomolecular Transformer (SMT)
+        """
         # training
         self.input_dim = input_dim
         self.batch_size = batch_size
@@ -41,8 +44,8 @@ class BaseTransformerModel(nn.Module):
         """Setup optimizer and scheduler - called by subclasses"""
         self.optimizer = AdamW(self.parameters(), lr=learning_rate, weight_decay=weight_decay)
         if use_cosine:
-            training_samples = 120000
             # Calculate total steps and warmup steps based on rough number of training samples
+            training_samples = 120000
             total_steps = int(self.epochs * training_samples / self.batch_size)
             warmup_steps = int(0.1 * total_steps)  # 10% warmup
             self.scheduler = get_cosine_schedule_with_warmup(
@@ -188,7 +191,10 @@ class SharedSelfAttentionModel(BaseTransformerModel):
                  batch_size=512, aug_prob=0.0, aug_style='linear_decay', epochs=100, num_workers=2, prefetch_factor=2):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor,
                          d_model, nhead, num_layers, token_encoder_dim, deep_hidden_dims, aug_prob, aug_style)
-        
+        """
+        Shared self-attention transformer model with flash attention encoder and MLP prediction head.
+        (SMT base model implementation)
+        """
         self.input_dim = input_dim // 2
         self.token_encoder_dim = token_encoder_dim
         self.encoder_output_dim = encoder_output_dim
@@ -245,6 +251,11 @@ class SharedSelfAttentionModel(BaseTransformerModel):
 class SelfAttentionCLSEncoder(nn.Module):
     def __init__(self, token_encoder_dim, d_model, output_dim, nhead=4, num_layers=4, dropout=0.1, cls_init='spatial_learned', use_alibi=False, num_tokens=None, use_attention_pooling=True, cls_in_seq=True, cls_dropout=0.5):
         super().__init__()
+        """
+        Self-attention encoder class with spatial context [CLS] token incorporation.
+        Initializes CLS token using 3d spatial coordinates or 3d spatial coordinates + distance to target.
+        Default behavior is learned linear layer to project CLS token to d_model space.
+        """
         self.token_encoder_dim = token_encoder_dim
         self.d_model = d_model
         self.cls_init = cls_init
@@ -338,11 +349,14 @@ class SelfAttentionCLSEncoder(nn.Module):
 
 class SharedSelfAttentionCLSModel(BaseTransformerModel):
     def __init__(self, input_dim, token_encoder_dim=20, d_model=128, encoder_output_dim=10, nhead=2, num_layers=2, deep_hidden_dims=[256, 128], 
-                 cls_init='spatial_learned', cls_in_seq=True, use_alibi=False, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
+                 cls_init='spatial_learned', cls_in_seq=True, use_alibi=True, transformer_dropout=0.1, dropout_rate=0.1, learning_rate=0.001, weight_decay=0.0, 
                  batch_size=128, epochs=100, aug_prob=0.0, aug_style='linear_decay', num_workers=2, prefetch_factor=2):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor,
                          d_model, nhead, num_layers, token_encoder_dim, deep_hidden_dims, aug_prob, aug_style)
-        
+        """
+        Shared self-attention transformer model with flash attention encoder, spatial context [CLS] token, and MLP prediction head.
+        (SMT w/ [CLS] model implementation)
+        """
         self.input_dim = input_dim // 2
         self.token_encoder_dim = token_encoder_dim 
         self.encoder_output_dim = encoder_output_dim
@@ -395,7 +409,9 @@ class SharedSelfAttentionPoolingModel(BaseTransformerModel):
                  batch_size=256, aug_prob=0.0, epochs=100, num_workers=2, prefetch_factor=2):
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor,
                          d_model, nhead, num_layers, deep_hidden_dims, aug_prob)
-        
+        """
+        Shared self-attention transformer model with flash attention encoder, attention pooling, and MLP prediction head.
+        """
         self.input_dim = input_dim // 2
         self.token_encoder_dim = token_encoder_dim
         self.encoder_output_dim = encoder_output_dim
@@ -451,7 +467,9 @@ class SharedSelfAttentionCLSPoolingModel(BaseTransformerModel):
         
         super().__init__(input_dim, learning_rate, weight_decay, batch_size, epochs, num_workers, prefetch_factor,
                          d_model, nhead, num_layers, deep_hidden_dims, aug_prob)
-        
+        """
+        Shared self-attention transformer model with flash attention encoder, spatial context [CLS] token, attention pooling, and MLP prediction head.
+        """
         self.input_dim = input_dim // 2
         self.token_encoder_dim = token_encoder_dim 
         self.encoder_output_dim = encoder_output_dim

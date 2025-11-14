@@ -1,5 +1,4 @@
 from env.imports import *
-
 from data.data_load import load_transcriptome, load_cell_types, load_connectome, load_coords, load_network_labels, load_lobe_labels
 
 from data.cv_split import (
@@ -13,22 +12,18 @@ from data.cv_split import (
 
 from data.data_utils import (
     expand_X_symmetric,
-    expand_Y_symmetric,
     RegionPairDataset
 )
 
 from models.base_models import ModelBuild, BaseModel, XGBRegressorModel
-from models.feature_based import CGEModel, GaussianKernelModel, ExponentialDecayModel
+from models.rules_based import CGEModel, GaussianKernelModel, ExponentialDecayModel
 from models.bilinear import BilinearLowRank, BilinearCM
 from models.pls import PLSTwoStepModel, PLS_MLPDecoderModel, PLS_BilinearDecoderModel
 from models.dynamic_mlp import DynamicMLP
 from models.shared_encoder_models import SharedMLPEncoderModel, SharedLinearEncoderModel
 from models.smt import SharedSelfAttentionModel, SharedSelfAttentionPoolingModel, SharedSelfAttentionCLSModel, SharedSelfAttentionCLSPoolingModel
 from models.smt_advanced import SharedSelfAttentionPCAModel, SharedSelfAttentionPLSModel, SharedSelfAttentionConvModel
-from models.smt_advanced import SharedSelfAttentionAEModel
-from models.smt_advanced import SharedSelfAttentionCelltypeModel
-from models.smt_advanced import SharedSelfAttentionGeneformerModel
-from models.smt_advanced import SharedSelfAttentionGene2VecModel
+from models.smt_advanced import SharedSelfAttentionAEModel, SharedSelfAttentionCelltypeModel, SharedSelfAttentionGeneformerModel
 from models.smt_cross import SelfAttentionGeneVecModel, CrossAttentionGeneVecModel, MixedAttentionGeneVecModel
 
 MODEL_CLASSES = {
@@ -54,7 +49,6 @@ MODEL_CLASSES = {
     'shared_transformer_ae': SharedSelfAttentionAEModel,
     'shared_transformer_celltype': SharedSelfAttentionCelltypeModel,
     'shared_transformer_geneformer': SharedSelfAttentionGeneformerModel,
-    'shared_transformer_gene2vec': SharedSelfAttentionGene2VecModel,
     'self_attention_genevec': SelfAttentionGeneVecModel,
     'cross_attention_genevec': CrossAttentionGeneVecModel,
     'mixed_attention_genevec': MixedAttentionGeneVecModel
@@ -118,9 +112,6 @@ class Simulation:
         self.X, self.valid_genes = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, hemisphere=self.hemisphere, impute_strategy=self.impute_strategy, sort_genes=self.sort_genes, null_model=self.null_model, random_seed=self.random_seed, return_valid_genes=True)
         self.X_pca = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA='95var', hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
         self.X_pca_full = load_transcriptome(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, gene_list=self.gene_list, run_PCA='full', hemisphere=self.hemisphere, null_model=self.null_model, random_seed=self.random_seed)
-        #self.X_cell_types_Jorstad = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='Jorstad')
-        #self.X_cell_types_Lake_DFC = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeDFC')
-        #self.X_cell_types_Lake_VIS = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeVIS')
         self.Y_sc = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', spectral=None, hemisphere=self.hemisphere)
         self.Y_sc_binary = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', binarize=True, hemisphere=self.hemisphere)
         self.Y_sc_spectralL = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='SC', spectral='L', hemisphere=self.hemisphere)
@@ -129,7 +120,10 @@ class Simulation:
         self.Y_fc_binary = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='FC', binarize=True, hemisphere=self.hemisphere)
         self.coords = load_coords(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
         self.labels, self.network_labels = load_network_labels(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
-
+        #self.X_cell_types_Jorstad = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='Jorstad')
+        #self.X_cell_types_Lake_DFC = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeDFC')
+        #self.X_cell_types_Lake_VIS = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeVIS')
+        
         # Remove rows that are all NaN - necessary for gene expression data with unsampled regions
         valid_indices = ~np.isnan(self.X).all(axis=1)
         self.valid_indices = valid_indices
@@ -163,9 +157,6 @@ class Simulation:
         print(f"Y_sc_spectralA shape: {self.Y_sc_spectralA.shape}")
         print(f"Y_fc shape: {self.Y_fc.shape}")
         print(f"Coordinates shape: {self.coords.shape}")
-        #print(f"X_cell_types_Jorstad shape: {self.X_cell_types_Jorstad.shape}") 
-        #print(f"X_cell_types_LakeDFC shape: {self.X_cell_types_Lake_DFC.shape}")
-        #print(f"X_cell_types_LakeVIS shape: {self.X_cell_types_Lake_VIS.shape}")
         
         # Define target connectome
         self.Y = self.Y_fc if 'FC' in self.connectome_target else self.Y_sc
@@ -192,7 +183,7 @@ class Simulation:
 
     def expand_data_torch(self):
         """
-        Expand data based on feature+processing type, and target
+        Expand data edge-wise based on feature+processing type, and target
         """        
         # Create a list of features to be expanded into edge-wise dataset
         self.features = []
@@ -242,7 +233,7 @@ class Simulation:
         self.X_all = np.hstack(X_all)
         print('Feature matrix, X, generated... expanding to pairwise dataset')
 
-        # Create custom dataset for region pair data
+        # Create region pair torch dataset
         self.region_pair_dataset = RegionPairDataset(
             self.X_all,
             self.Y,
@@ -315,7 +306,7 @@ class Simulation:
             
         return best_model, best_val_loss, best_config, sweep_id
 
-    def run_sim_torch(self, search_method=('random', 'mse', 5), track_wandb=False, use_folds=[0, 1, 2, 3, 4, 5, 6, 7]):
+    def run_sim_torch(self, search_method=('random', 'mse', 5), track_wandb=False, use_folds=[0, 1, 2, 3]):
         """
         Main simulation method
         """
@@ -377,8 +368,7 @@ class Simulation:
                                                 reinit=True)
 
                     if self.model_type in MODEL_CLASSES:
-                        #wandb.watch(best_model, log='all')
-                        final_eval_run.watch(best_model, log='all', log_freq=100) # test out
+                        final_eval_run.watch(best_model, log='all')
                         if self.model_type == 'pls_twostep':
                             train_history = best_model.fit(self.region_pair_dataset, train_indices, test_indices)
                         else:
@@ -391,24 +381,21 @@ class Simulation:
                     else: 
                         train_history = best_model.fit(self.region_pair_dataset, train_indices_expanded, test_indices_expanded, save_model=self.save_model)
                 
-                # Evaluate on the test fold
+                # Evaluate on test fold
                 train_dataset = Subset(self.region_pair_dataset, train_indices_expanded)
                 test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
                 
+                # Functionality for enabling shared regions between train and test sets
                 if self.train_shared_regions or self.test_shared_regions:
-                    # get shared indices between train and test
-                    # Get interconnections between train and test sets using numpy meshgrid
+                    # Get interconnections between train and test sets
                     train_idx_grid, test_idx_grid = np.meshgrid(train_indices, test_indices)
                     train_test_pairs = np.column_stack((train_idx_grid.ravel(), test_idx_grid.ravel()))
-                    
-                    # Add reverse direction pairs
                     train_test_pairs = np.vstack((train_test_pairs, train_test_pairs[:, ::-1]))
                     train_test_indices_expanded = np.array([self.region_pair_dataset.valid_pair_to_expanded_idx[tuple(pair)] for pair in train_test_pairs])
 
                     if self.train_shared_regions: # update train dataset 
                         train_indices_expanded = np.concatenate((train_indices_expanded, train_test_indices_expanded)).astype(train_indices_expanded.dtype)
-                        # train_indices = sorted(list(set(train_indices).union(set(test_indices))))
-                        train_dataset = Subset(self.region_pair_dataset, train_indices_expanded) # viz not yet implemented for this path
+                        train_dataset = Subset(self.region_pair_dataset, train_indices_expanded) # viz not implemented for this path
                     elif self.test_shared_regions: # update test dataset
                         test_indices_expanded = np.concatenate((test_indices_expanded, train_test_indices_expanded)).astype(test_indices_expanded.dtype)
                         test_dataset = Subset(self.region_pair_dataset, test_indices_expanded)
@@ -441,7 +428,6 @@ class Simulation:
                     wandb.finish()
                     print("Final evaluation metrics logged successfully.")
             
-            #torch._dynamo.reset()
             torch.cuda.empty_cache()
             gc.collect()
             
