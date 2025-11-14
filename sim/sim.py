@@ -119,7 +119,7 @@ class Simulation:
         self.Y_fc = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure=self.connectome_target, hemisphere=self.hemisphere)
         self.Y_fc_binary = load_connectome(parcellation=self.parcellation, dataset=self.dataset, omit_subcortical=self.omit_subcortical, measure='FC', binarize=True, hemisphere=self.hemisphere)
         self.coords = load_coords(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
-        self.labels, self.network_labels = load_network_labels(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, hemisphere=self.hemisphere)
+        self.labels, self.network_labels = load_network_labels(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, dataset=self.dataset, hemisphere=self.hemisphere)
         #self.X_cell_types_Jorstad = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='Jorstad')
         #self.X_cell_types_Lake_DFC = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeDFC')
         #self.X_cell_types_Lake_VIS = load_cell_types(parcellation=self.parcellation, omit_subcortical=self.omit_subcortical, ref_dataset='LakeVIS')
@@ -127,11 +127,13 @@ class Simulation:
         # Remove rows that are all NaN - necessary for gene expression data with unsampled regions
         valid_indices = ~np.isnan(self.X).all(axis=1)
         self.valid_indices = valid_indices
+        print('valid_indices', len(valid_indices))
+
         # Create index map so we know original (i.e. true) indices of valid data after subsetting
         valid_indices_values = np.where(valid_indices)[0]
         valid2true_index_mapping = dict(enumerate(valid_indices_values))
         self.valid2true_index_mapping = valid2true_index_mapping
-      
+
         # Subset all data using valid indices
         self.X = self.X[valid_indices]
         self.X_pca = self.X_pca[valid_indices]

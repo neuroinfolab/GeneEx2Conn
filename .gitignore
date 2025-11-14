@@ -12,11 +12,11 @@ sim/sim_results/
 sim/logs/
 
 data/compressed_transcriptomics/
+data/geneformer/*
 data/gene_emb/
-data/geneformer*
-data/annotations*
-data/atlases*
-data/nilearn_data*
+data/annotations/
+data/atlases/atl-schaefer2018/
+data/nilearn_data/
 
 *.sh
 *.pickle
