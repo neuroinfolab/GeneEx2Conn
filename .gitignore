@@ -1,5 +1,6 @@
 # Omit
 *wandb
+sim/wandb/
 *slurm
 slurm-*
 *alexander-ratzan-new-york-university
@@ -11,6 +12,7 @@ notebooks/quick_experiments/
 sim/sim_results/
 sim/logs/
 
+archive/
 data/compressed_transcriptomics/
 data/geneformer/*
 data/gene_emb/
