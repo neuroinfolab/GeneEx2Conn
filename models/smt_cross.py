@@ -49,7 +49,32 @@ class CrossAttentionBlock(nn.Module):
         if use_alibi:
             slopes = FlashAttentionBlock.build_alibi_slopes(nhead)
             self.register_buffer("alibi_slopes", slopes)
-    
+            
+            """
+            # Quick viz example
+            seq_len = 100
+            n_heads = self.nhead
+            positions = torch.arange(seq_len)
+            dist = torch.abs(positions[:, None] - positions[None, :])
+            all_biases = torch.stack([-slopes[h] * dist for h in range(n_heads)])
+            vmin, vmax = all_biases.min().item(), all_biases.max().item()
+            ncols = min(n_heads, 4)
+            nrows = math.ceil(n_heads / ncols)
+            fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 4 * nrows))
+            axes = [axes] if n_heads == 1 else axes.flatten()
+            ims = [axes[h].imshow(all_biases[h], cmap='viridis', vmin=vmin, vmax=vmax) for h in range(n_heads)]
+            for h in range(n_heads):
+                axes[h].set_title(f"Head {h} (slope={slopes[h]:.4f})")
+                axes[h].set_xlabel("Key position (j)")
+                axes[h].set_ylabel("Query position (i)")
+            for ax in axes[n_heads:]:
+                ax.axis("off")
+            cbar = fig.colorbar(ims[0], ax=axes[:n_heads], orientation='vertical', fraction=0.025, pad=0.04)
+            cbar.set_label("Bias")
+            plt.tight_layout()
+            plt.show()
+            """
+
     def split_heads(self, x):
         """Split heads for queries, keys and values"""
         return x.view(x.size(0), x.size(1), self.nhead, self.head_dim)
@@ -99,6 +124,7 @@ class CrossAttentionBlock(nn.Module):
                     q, k, v,
                     dropout_p=self.dropout,
                     causal=False,
+                    alibi_slopes=self.alibi_slopes if self.use_alibi else None
                 )  # (B, seq_len_q, nhead, head_dim)
                 
                 # Reshape back: (B, seq_len_q, d_model)
@@ -387,11 +413,14 @@ class CrossAttentionGeneVecEncoder(BaseGeneVecEncoder):
         embeddings_i = self.encode_region(gene_expr_i)  # (B, num_shared_genes, d_model)
         embeddings_j = self.encode_region(gene_expr_j)  # (B, num_shared_genes, d_model)
         
-        # Apply cross-attention layers with proper gradient flow
-        x = embeddings_i
+        # Apply cross-attention layers to updated embeddings
+        x_i, x_j = embeddings_i, embeddings_j
         for layer in self.cross_attn_layers:
-            x = layer(x, embeddings_j, embeddings_j)  # Update x for next layer
-        attn_output = x
+            x_i_next = layer(x_i, x_j, x_j)
+            x_j_next = layer(x_j, x_i, x_i)
+            x_i, x_j = x_i_next, x_j_next
+
+        attn_output = x_i
         
         # Pool the output
         pooled = self.apply_pooling(attn_output)

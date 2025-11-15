@@ -126,17 +126,15 @@ class FlashAttentionBlock(nn.Module):
                 )
         slopes = get_slopes(n_heads)
         return torch.tensor(slopes, dtype=torch.float32)
-    
-    """
-    # Note: Original slopes implementation for NeurIPS SMT. Splits heads into even local and global heads (4 heads --> 2 full global, 2 full local).
-    def build_alibi_slopes(n_heads):
+        """
+        # Note: Original slopes implementation for NeurIPS SMT. Splits heads into even local and global heads (4 heads --> 2 full global, 2 full local).
         slopes = []
         base = 2.0
         for i in range(n_heads):
             power = i // (n_heads // base)
             slopes.append(1.0 / (base ** power))
         return torch.tensor(slopes).float()
-    """
+        """
 
     def forward(self, x):
         with autocast(dtype=torch.bfloat16):

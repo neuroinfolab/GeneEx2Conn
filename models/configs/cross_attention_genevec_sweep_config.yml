@@ -55,7 +55,7 @@ best_parameters:
   input_dim:
     value: !!int 0
   expression_bins:
-    values: [100]
+    values: [5]
   genevec_type:
     values: ['gene2vec'] # 'gene2vec', 'coexpression', 'one_hot' (best)
   d_model:
