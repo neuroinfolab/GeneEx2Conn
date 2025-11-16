@@ -26,7 +26,6 @@ data/gene_emb/
 data/annotations/
 data/atlases/atl-schaefer2018/
 data/nilearn_data/
-data/glass/
 
 # File types
 *.sh
@@ -57,6 +56,7 @@ models/saved_models/
 !models/saved_models/iPA391_cls_spin.pt
 
 # Retain specific glass outputs
+data/glass/
 !data/glass/random_cv.gif
 !data/glass/spatial_cv.gif
 !data/glass/cv_split_s400_structural_connectivity_spatial_split_10-3.gif
