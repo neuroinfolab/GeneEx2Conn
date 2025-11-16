@@ -41,7 +41,7 @@ data/nilearn_data/
 .cursorignore
 
 # Saved models (include selected)
-models/saved_models/
+models/saved_models/*
 !models/saved_models/UKBB_base.pt
 !models/saved_models/UKBB_cls.pt
 !models/saved_models/UKBB_base_spin.pt
@@ -56,7 +56,7 @@ models/saved_models/
 !models/saved_models/iPA391_cls_spin.pt
 
 # Retain specific glass outputs
-data/glass/
+data/glass/*
 !data/glass/random_cv.gif
 !data/glass/spatial_cv.gif
 !data/glass/cv_split_s400_structural_connectivity_spatial_split_10-3.gif
