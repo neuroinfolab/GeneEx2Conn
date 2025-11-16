@@ -1,17 +1,24 @@
-# Omit
+# General
 *wandb
 sim/wandb/
 *slurm
 slurm-*
 *alexander-ratzan-new-york-university
 *arny
-
 __pycache__/
 .ipynb_checkpoints/
+
+# Notebooks to omit
 notebooks/quick_experiments/
+notebooks/HCP_UKBB_EDA+GLM/
+notebooks/NeurIPS_artifacts/schaefer_preds/
+notebooks/NeurIPS_artifacts/cls_case/
+
+# Simulation outputs
 sim/sim_results/
 sim/logs/
 
+# Data
 archive/
 data/compressed_transcriptomics/
 data/geneformer/*
@@ -19,22 +26,44 @@ data/gene_emb/
 data/annotations/
 data/atlases/atl-schaefer2018/
 data/nilearn_data/
+data/glass/
 
+# File types
 *.sh
 *.pickle
 **/*.pickle
 *.png
 **/*.png
+*.gif
 **/*.gif
 *.jpg
 **/*.jpg
 *.netrc
 .cursorignore
 
-# Manually include
-!glass/cv_split_s400_structural_connectivity_spatial_split_10-3.gif
-!glass/cv_split_s400_structural_connectivity_random_split_4.gif
-!glass/S400_LAMA1_expression.png
+# Saved models (include selected)
+models/saved_models/
+!models/saved_models/UKBB_base.pt
+!models/saved_models/UKBB_cls.pt
+!models/saved_models/UKBB_base_spin.pt
+!models/saved_models/UKBB_cls_spin.pt
+!models/saved_models/HCP_base.pt
+!models/saved_models/HCP_cls.pt
+!models/saved_models/HCP_base_spin.pt
+!models/saved_models/HCP_cls_spin.pt
+!models/saved_models/iPA391_base.pt
+!models/saved_models/iPA391_cls.pt
+!models/saved_models/iPA391_base_spin.pt
+!models/saved_models/iPA391_cls_spin.pt
+
+# Retain specific glass outputs
+!data/glass/random_cv.gif
+!data/glass/spatial_cv.gif
+!data/glass/cv_split_s400_structural_connectivity_spatial_split_10-3.gif
+!data/glass/cv_split_s400_structural_connectivity_random_split_4.gif
+!data/glass/S400_LAMA1_expression.png
+
+# Retain scripts
 !run_sim.sh
 !run_sim_parallel_smt_seq_noCV_array.sh
 !run_sim_parallel_smt_seq_CV_array.sh
