@@ -1,4 +1,8 @@
-Shield: [![CC BY-NC-SA 4.0][cc-by-nc-sa-shield]][cc-by-nc-sa]
+[![CC BY-NC-SA 4.0][cc-by-nc-sa-shield]][cc-by-nc-sa]
+[cc-by-nc-sa]: http://creativecommons.org/licenses/by-nc-sa/4.0/
+[cc-by-nc-sa-image]: https://licensebuttons.net/l/by-nc-sa/4.0/88x31.png
+[cc-by-nc-sa-shield]: https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg
+
 
 # GeneEx2Conn
 This repository contains code for [Predicting Functional Brain Connectivity with Context-Aware Deep Neural Networks](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=8UuFrz8AAAAJ&citation_for_view=8UuFrz8AAAAJ:eQOLeE2rZwMC) published at the Thirty-ninth Annual Conference on Neural Information Processing Systems (NeurIPS). Experimental code and modeling approaches are implemented herein to address the fundamental problem of predicting region-to-region human brain functional connectivity from gene expression and spatial information.
@@ -7,7 +11,13 @@ This repository contains code for [Predicting Functional Brain Connectivity with
 Core repository functionalities are detailed below:
 - **`/sim`**  
   - `sim.py` → simulation class defining features, targets, cross-validation, and run tracking  
-  - `null.py` → null spin brain map generation and evaluation
+  - `null.py` → null spin brain map generation and evaluation 
+- **`/data`**  
+  - `data_load.py` → load datasets and auxiliary data  
+  - `data_utils.py` → data utilities, core RegionPairDataset class used for training, and target augmentation helpers  
+  - `cv_split.py` → train-test split and cross-validation classes  
+  - `BHA2/`, `HCP/`, `UKBB/` → subset of population average connectomes and parcellated transcriptomes  
+  - `enigma/` → subsetted gene lists with known biological functions, null spin test indices and error metrics  
 - **`/models`**  
   - `rules_based.py`, `bilinear.py`, `pls.py`, `dynamic_mlp.py` → baseline methods
   - `smt.py` → FlashAttention based MHSA transformer architectures including the _Spatiomolecular Transformer (SMT)_
@@ -17,13 +27,7 @@ Core repository functionalities are detailed below:
   - `/saved_models/` → pretrained SMT models for each dataset  
   - `train_val.py` → global training/validation loop  
   - `/metrics/`  
-    - `eval.py` → evaluation class with 32+ prediction metrics  
-- **`/data`**  
-  - `data_load.py` → load datasets and auxiliary data  
-  - `data_utils.py` → data utilities, core RegionPairDataset class used for training, and target augmentation helpers  
-  - `cv_split.py` → train-test split and cross-validation classes  
-  - `BHA2/`, `HCP/`, `UKBB/` → subset of population average connectomes and parcellated transcriptomes  
-  - `enigma/` → subsetted biological function gene lists, null spin test indices and error metrics  
+    - `eval.py` → evaluation class with 32+ prediction metrics 
 - **`/notebooks`**  
   - `NeurIPS/` → Jupyter notebooks for analysis and figure creation
 
@@ -50,8 +54,8 @@ Careful train-test splits and null testing are critical to account for spatial a
 <div style="display: flex; justify-content: center;">
   <table>
     <tr>
-      <td><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/data/glass/random_cv.png" height="300"></td>
-      <td><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/data/glass/spatial_cv.gif" height="300"></td>
+      <td><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/data/glass/random_cv.gif" height="325"></td>
+      <td><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/data/glass/spatial_cv.gif" height="325"></td>
     </tr>
     <tr>
       <td align="center"><strong>Four-fold random split example</strong></td>
@@ -71,14 +75,14 @@ The proposed transformer-based architecture in [Predicting Functional Brain Conn
 - `smt_advanced.py` includes extensions to the base SMT by performing MHSA over encoded versions of the gene expression vectors, such as PCA, PLS, autoencoded embeddings. Attention pooling is used in most of these models to compress embeddings from the transformer block.
 - `smt_cross.py` implements compressed versions of the SMT operating at single gene resolution with a smaller inputted gene list. These models are more NLP style, seeking to learn a grammar over a learned vocabulary of select genes. They benefit from fewer parameters and may use region-to-region cross-attention in the encoding phase.
 <p align="center">
-  <img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/data/glass/NeurIPS_summary.png" height="400"><br>
+  <img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/data/glass/NeurIPS_summary.png" height="425"><br>
 </p>
 
 Models are optimized to minimize the mean-squared error of predictions with the target population average connectome. Pretrained models can be found in `models/saved_models`. An example of how to load a pretrained model can be found in `/notebooks/NeurIPS/NeurIPS_Fig5_embeddings.ipynb`. See the `save_model` argument in `single_sim_run()` for saving a new model. 
 
 ## Datasets & access
 - **Gene expression data:** The Allen Human Brain Atlas represents the most spatially resolved human gene expression dataset to date. Raw data is available [here](https://portal.brain-map.org/). This repo relies heavily on the [_abagen_](https://abagen.readthedocs.io/en/stable/index.html) package for AHBA preprocessing including normalizing, aggregating, and interpolating raw data into desired parcellations. Due to the size of the gene expression matrices, a sample csv file used for model training is made available for the coarsest parcellation resolution in `/data/BHA2/iPA_183`.
-- **Neuroimaging data:** Models can be fit to connectomes from several open source datasets. MPI-LEMON is pubicly accessible [here](https://github.com/compneurobilbao/bha2). Access to HCP can be requested [here](https://www.humanconnectome.org/study/hcp-young-adult/data-use-terms). Access to UKBB can be requested [here]{https://www.ukbiobank.ac.uk/use-our-data/apply-for-access/}. Population average connectomes are made available in `/data`. For access to underlying individualized connectomes please reach out with the appropriate data use agreements.
+- **Neuroimaging data:** Models can be fit to connectomes from several open source datasets. MPI-LEMON is pubicly accessible [here](https://github.com/compneurobilbao/bha2). Access to HCP can be requested [here](https://www.humanconnectome.org/study/hcp-young-adult/data-use-terms). Access to UKBB can be requested [here](https://www.ukbiobank.ac.uk/use-our-data/apply-for-access/). Population average connectomes are made available in `/data`. For access to underlying individualized connectomes please reach out with the appropriate data use agreements.
 
 ## Environment setup
 `GeneEx2Conn` is a multi-component scientific research repository. Minimal requirements for our code are available in `/env/GeneEx2Conn.yml` (see https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html for environment setup).
