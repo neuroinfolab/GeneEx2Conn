@@ -78,14 +78,14 @@ def days_ago_from_date(date_str):
 
 def weighted_mean_and_se(values, weights):
     """
-    Compute weighted mean and standard error for a set of values and weights.
+    Compute weighted mean and standard deviation for a set of values and weights.
     
     Args:
         values (np.ndarray): Array of values
         weights (list): List of weights corresponding to each value
         
     Returns:
-        tuple: (weighted_mean, weighted_standard_error)
+        tuple: (weighted_mean, weighted_standard_deviation)
     """
     # Convert to numpy arrays and handle NaN values
     values = np.array(values)
@@ -105,10 +105,10 @@ def weighted_mean_and_se(values, weights):
     # Calculate weighted variance
     weighted_var = np.sum(weights * (values - weighted_mean)**2) / (1 - np.sum(weights**2))
     
-    # Calculate weighted standard error
-    weighted_se = np.sqrt(weighted_var / len(values))
+    # Calculate weighted standard deviation
+    weighted_std = np.sqrt(weighted_var)
     
-    return weighted_mean, weighted_se
+    return weighted_mean, weighted_std
 
 def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='transcriptome', target='FC', gene_list='0.2', within_last=60, before_last=0, use_weighted=False, exclude='HCP', only_include='UKBB', return_history=False):
     """
@@ -131,9 +131,9 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
         return_history (bool): If True, return (summary_df, history_df) tuple
     
     Returns:
-        summary_df (pd.DataFrame): DataFrame with mean, std, stderr of all train/test metrics
+        summary_df (pd.DataFrame): DataFrame with mean, std, std of all train/test metrics
                                   If use_weighted=True and cv_type in ['schaefer', 'lobe'], 
-                                  includes weighted_mean and weighted_stderr rows
+                                  includes weighted_mean and weighted_std rows
         history_df (pd.DataFrame): Individual run data (only returned if return_history=True)
     """
     # Set time filters
@@ -245,8 +245,7 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
 
     summary_df = pd.DataFrame({
         "mean": df_clean.mean(),
-        "std": df_clean.std(),
-        "stderr": df_clean.sem()
+        "std": df_clean.std()
     }).T
     
     # Add weighted statistics if requested and applicable
@@ -254,16 +253,16 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
         weights = list(CV_WEIGHTS[cv_type].values())
         
         # Calculate weighted statistics for final_test_pearson_r
-        weighted_mean, weighted_se = weighted_mean_and_se(df_unique['final_test_pearson_r'].values, weights)
+        weighted_mean, weighted_std = weighted_mean_and_se(df_unique['final_test_pearson_r'].values, weights)
         summary_df.loc['weighted_mean', 'final_test_pearson_r'] = weighted_mean
-        summary_df.loc['weighted_stderr', 'final_test_pearson_r'] = weighted_se
+        summary_df.loc['weighted_std', 'final_test_pearson_r'] = weighted_std
         
         # Calculate weighted statistics for test_pearson_r if it exists
         if 'test_pearson_r' in df_clean.columns:
             test_pearson_values = df_unique['test_pearson_r'].values if 'test_pearson_r' in df_unique.columns else df_clean['test_pearson_r'].values
-            weighted_mean_test, weighted_se_test = weighted_mean_and_se(test_pearson_values, weights)
+            weighted_mean_test, weighted_std_test = weighted_mean_and_se(test_pearson_values, weights)
             summary_df.loc['weighted_mean', 'test_pearson_r'] = weighted_mean_test
-            summary_df.loc['weighted_stderr', 'test_pearson_r'] = weighted_se_test
+            summary_df.loc['weighted_std', 'test_pearson_r'] = weighted_std_test
 
     if return_history:
         return summary_df, history_df
@@ -409,7 +408,7 @@ def plot_model_barchart(summary_dict, metric="test_pearson_r", xlim=(0.1, 0.9), 
             plot_data.append({
                 "Model": display_name,
                 "Mean": df.loc["mean", metric],
-                "StdErr": df.loc["stderr", metric],
+                "Std": df.loc["std", metric],
                 "Highlighted": model_key in (highlight_models or [])
             })
 
@@ -434,7 +433,7 @@ def plot_model_barchart(summary_dict, metric="test_pearson_r", xlim=(0.1, 0.9), 
         plt.errorbar(
             x=row["Mean"],
             y=i,
-            xerr=row["StdErr"],
+            xerr=row["Std"],
             fmt='none',
             ecolor='black',
             capsize=3,
@@ -532,9 +531,9 @@ def plot_true_vs_null_model_barchart_w_legend(
                         "Model": display_name,
                         "Group": group_name,
                         "TrueMean": df_true.loc["mean", metric],
-                        "TrueStdErr": df_true.loc["stderr", metric],
+                        "TrueStd": df_true.loc["std", metric],
                         "NullMean": df_null.loc["mean", metric],
-                        "NullStdErr": df_null.loc["stderr", metric]
+                        "NullStd": df_null.loc["std", metric]
                     })
 
     plot_df = pd.DataFrame(plot_data)
@@ -567,7 +566,7 @@ def plot_true_vs_null_model_barchart_w_legend(
         ax.errorbar(
             x=row["TrueMean"],
             y=y,
-            xerr=row["TrueStdErr"],
+            xerr=row["TrueStd"],
             fmt='none',
             ecolor='black',
             capsize=1,
@@ -618,7 +617,7 @@ def plot_true_vs_null_model_barchart_w_legend(
             ax.errorbar(
                 x=row["NullMean"],
                 y=y,
-                xerr=row["NullStdErr"],
+                xerr=row["NullStd"],
                 fmt='none',
                 ecolor='black',
                 capsize=1,
@@ -693,9 +692,9 @@ def plot_true_vs_null_model_barchart(
                         "Model": display_name,
                         "Group": group_name,
                         "TrueMean": df_true.loc["mean", metric],
-                        "TrueStdErr": df_true.loc["stderr", metric],
+                        "TrueStd": df_true.loc["std", metric],
                         "NullMean": df_null.loc["mean", metric],
-                        "NullStdErr": df_null.loc["stderr", metric]
+                        "NullStd": df_null.loc["std", metric]
                     })
 
     plot_df = pd.DataFrame(plot_data)
@@ -731,7 +730,7 @@ def plot_true_vs_null_model_barchart(
             ax.errorbar(
                 x=x,
                 y=row["TrueMean"],
-                yerr=row["TrueStdErr"],
+                yerr=row["TrueStd"],
                 fmt='none',
                 ecolor='black',
                 capsize=1,
@@ -743,7 +742,7 @@ def plot_true_vs_null_model_barchart(
                 ax.text(
                     x,
                     row["TrueMean"] + 0.02,  # slight offset from bar end
-                    f"{row['TrueMean']:.3f} ± {row['TrueStdErr']:.3f}",
+                    f"{row['TrueMean']:.3f} ± {row['TrueStd']:.3f}",
                     ha="center",
                     va="bottom",
                     fontsize=label_fontsize * 0.8,  # Smaller font since showing both values
@@ -788,7 +787,7 @@ def plot_true_vs_null_model_barchart(
                 ax.errorbar(
                     x=x,
                     y=row["NullMean"],
-                    yerr=row["NullStdErr"],
+                    yerr=row["NullStd"],
                     fmt='none',
                     ecolor='black',
                     capsize=1,
@@ -810,7 +809,7 @@ def plot_true_vs_null_model_barchart(
             ax.errorbar(
                 x=row["TrueMean"],
                 y=y,
-                xerr=row["TrueStdErr"],
+                xerr=row["TrueStd"],
                 fmt='none',
                 ecolor='black',
                 capsize=1,
@@ -822,7 +821,7 @@ def plot_true_vs_null_model_barchart(
                 ax.text(
                     row["TrueMean"] + 0.02,  # slight offset from bar end
                     y,
-                    f"{row['TrueMean']:.3f} ± {row['TrueStdErr']:.3f}",
+                    f"{row['TrueMean']:.3f} ± {row['TrueStd']:.3f}",
                     va="center",
                     ha="left",
                     fontsize=label_fontsize * 0.8,  # Smaller font since showing both values
@@ -864,7 +863,7 @@ def plot_true_vs_null_model_barchart(
                 ax.errorbar(
                     x=row["NullMean"],
                     y=y,
-                    xerr=row["NullStdErr"],
+                    xerr=row["NullStd"],
                     fmt='none',
                     ecolor='black',
                     capsize=1,
@@ -958,9 +957,9 @@ def plot_true_vs_null_model_barchart_weighted(
                         "Model": display_name,
                         "Group": group_name,
                         "WeightedTrueMean": df_true.loc["weighted_mean", metric],
-                        "WeightedTrueStdErr": df_true.loc["weighted_stderr", metric],
+                        "WeightedTrueStd": df_true.loc["weighted_std", metric],
                         "WeightedNullMean": df_null.loc["weighted_mean", metric],
-                        "WeightedNullStdErr": df_null.loc["weighted_stderr", metric]
+                        "WeightedNullStd": df_null.loc["weighted_std", metric]
                     })
 
     plot_df = pd.DataFrame(plot_data)
@@ -996,7 +995,7 @@ def plot_true_vs_null_model_barchart_weighted(
             ax.errorbar(
                 x=x,
                 y=row["WeightedTrueMean"],
-                yerr=row["WeightedTrueStdErr"],
+                yerr=row["WeightedTrueStd"],
                 fmt='none',
                 ecolor='black',
                 capsize=1,
@@ -1044,7 +1043,7 @@ def plot_true_vs_null_model_barchart_weighted(
                 ax.errorbar(
                     x=x,
                     y=row["WeightedNullMean"],
-                    yerr=row["WeightedNullStdErr"],
+                    yerr=row["WeightedNullStd"],
                     fmt='none',
                     ecolor='black',
                     capsize=1,
@@ -1066,7 +1065,7 @@ def plot_true_vs_null_model_barchart_weighted(
             ax.errorbar(
                 x=row["WeightedTrueMean"],
                 y=y,
-                xerr=row["WeightedTrueStdErr"],
+                xerr=row["WeightedTrueStd"],
                 fmt='none',
                 ecolor='black',
                 capsize=1,
@@ -1112,7 +1111,7 @@ def plot_true_vs_null_model_barchart_weighted(
                 ax.errorbar(
                     x=row["WeightedNullMean"],
                     y=y,
-                    xerr=row["WeightedNullStdErr"],
+                    xerr=row["WeightedNullStd"],
                     fmt='none',
                     ecolor='black',
                     capsize=1,
@@ -1200,9 +1199,9 @@ def plot_final_subsetted_barchart(
                         "Model": display_name,
                         "Group": group_name,
                         "TrueMean": df_true.loc["mean", metric],
-                        "TrueStdErr": df_true.loc["stderr", metric],
+                        "TrueStd": df_true.loc["std", metric],
                         "NullMean": df_null.loc["mean", metric],
-                        "NullStdErr": df_null.loc["stderr", metric]
+                        "NullStd": df_null.loc["std", metric]
                     })
 
     plot_df = pd.DataFrame(plot_data)
@@ -1238,7 +1237,7 @@ def plot_final_subsetted_barchart(
             ax.errorbar(
                 x=x,
                 y=row["TrueMean"],
-                yerr=row["TrueStdErr"],
+                yerr=row["TrueStd"],
                 fmt='none',
                 ecolor='black',
                 capsize=2,
@@ -1312,7 +1311,7 @@ def plot_final_subsetted_barchart(
                 ax.errorbar(
                     x=x,
                     y=row["NullMean"],
-                    yerr=row["NullStdErr"],
+                    yerr=row["NullStd"],
                     fmt='none',
                     ecolor='black',
                     capsize=1,
@@ -1334,7 +1333,7 @@ def plot_final_subsetted_barchart(
             ax.errorbar(
                 x=row["TrueMean"],
                 y=y,
-                xerr=row["TrueStdErr"],
+                xerr=row["TrueStd"],
                 fmt='none',
                 ecolor='black',
                 capsize=2,
@@ -1394,7 +1393,7 @@ def plot_final_subsetted_barchart(
                 ax.errorbar(
                     x=row["NullMean"],
                     y=y,
-                    xerr=row["NullStdErr"],
+                    xerr=row["NullStd"],
                     fmt='none',
                     ecolor='black',
                     capsize=1,
