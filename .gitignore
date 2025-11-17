@@ -62,6 +62,7 @@ data/glass/*
 !data/glass/cv_split_s400_structural_connectivity_spatial_split_10-3.gif
 !data/glass/cv_split_s400_structural_connectivity_random_split_4.gif
 !data/glass/S400_LAMA1_expression.png
+!data/glass/NeurIPS_summary.png
 
 # Retain scripts
 !run_sim.sh

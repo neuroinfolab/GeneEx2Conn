@@ -57,7 +57,7 @@ best_parameters:
   expression_bins:
     values: [100]
   genevec_type:
-    values: ['gene2vec'] # 'gene2vec', 'coexpression', 'one_hot'
+    values: ['one_hot'] # 'gene2vec', 'coexpression', 'one_hot'
   roi_combination:
     values: ['concat']
   d_model:
