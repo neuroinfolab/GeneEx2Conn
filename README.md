@@ -4,11 +4,6 @@
 [cc-by-nc-sa-image]: https://licensebuttons.net/l/by-nc-sa/4.0/88x31.png
 [cc-by-nc-sa-shield]: https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg
 
-<!--
-This work is licensed under a
-[Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License][cc-by-nc-sa].
---!>
-
 # GeneEx2Conn
 This repository contains code for [Predicting Functional Brain Connectivity with Context-Aware Deep Neural Networks](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=8UuFrz8AAAAJ&citation_for_view=8UuFrz8AAAAJ:eQOLeE2rZwMC) published at the Thirty-ninth Annual Conference on Neural Information Processing Systems (NeurIPS). Experimental code and modeling approaches are implemented herein to address the fundamental problem of predicting region-to-region human brain functional connectivity from gene expression and spatial information.
 
