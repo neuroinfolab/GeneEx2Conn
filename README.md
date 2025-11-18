@@ -57,8 +57,8 @@ Careful train-test splits and null testing are critical to account for spatial a
 <div style="display: flex; justify-content: center;">
   <table>
     <tr>
-      <td><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/data/glass/random_cv.gif" height="325"></td>
-      <td><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/data/glass/spatial_cv.gif" height="325"></td>
+      <td><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/data/glass/random_cv.gif" height="375"></td>
+      <td><img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/data/glass/spatial_cv.gif" height="375"></td>
     </tr>
     <tr>
       <td align="center"><strong>Four-fold random split example</strong></td>
@@ -78,7 +78,7 @@ The proposed transformer-based architecture in [Predicting Functional Brain Conn
 - `smt_advanced.py` includes extensions to the base SMT by performing MHSA over encoded versions of the gene expression vectors, such as PCA, PLS, autoencoded embeddings. Attention pooling is used in most of these models to compress embeddings from the transformer block.
 - `smt_cross.py` implements compressed versions of the SMT operating at single gene resolution with a smaller inputted gene list. These models are more NLP style, seeking to learn a grammar over a learned vocabulary of select genes. They benefit from fewer parameters and may use region-to-region cross-attention in the encoding phase.
 <p align="center">
-  <img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/data/glass/NeurIPS_summary.png" height="425"><br>
+  <img src="https://github.com/neuroinfolab/GeneEx2Conn/blob/master/data/glass/NeurIPS_summary.png" height="450"><br>
 </p>
 
 Models are optimized to minimize the mean-squared error of predictions with the target population average connectome. Pretrained models can be found in `models/saved_models`. An example of how to load a pretrained model can be found in `/notebooks/NeurIPS/NeurIPS_Fig5_embeddings.ipynb`. See the `save_model` argument in `single_sim_run()` for saving a new model. 
