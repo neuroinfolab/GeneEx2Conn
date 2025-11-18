@@ -1,11 +1,13 @@
  [![CC BY-NC-SA 4.0][cc-by-nc-sa-shield]][cc-by-nc-sa]
 
-This work is licensed under a
-[Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License][cc-by-nc-sa].
-
 [cc-by-nc-sa]: http://creativecommons.org/licenses/by-nc-sa/4.0/
 [cc-by-nc-sa-image]: https://licensebuttons.net/l/by-nc-sa/4.0/88x31.png
 [cc-by-nc-sa-shield]: https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg
+
+<!--
+This work is licensed under a
+[Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License][cc-by-nc-sa].
+--!>
 
 # GeneEx2Conn
 This repository contains code for [Predicting Functional Brain Connectivity with Context-Aware Deep Neural Networks](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=8UuFrz8AAAAJ&citation_for_view=8UuFrz8AAAAJ:eQOLeE2rZwMC) published at the Thirty-ninth Annual Conference on Neural Information Processing Systems (NeurIPS). Experimental code and modeling approaches are implemented herein to address the fundamental problem of predicting region-to-region human brain functional connectivity from gene expression and spatial information.
@@ -53,7 +55,7 @@ single_sim_run(
 See `sim/sim_run.py` for further details. _Note: All Jupyter notebooks must be run from the root directory._
 
 ## Cross-validation
-Careful train-test splits and null testing are critical to account for spatial autocorrelation in population average brain maps. `/data/cv_split.py` implements 4 train-test split styles: random, spatial (based on euclidean coordinates), community (based on Louvain communities), schaefer (based on Schafer parcellation functional subnetworks). Random and spatial splits are visualized below for `random seed=42`.
+Careful train-test splits and null testing are critical to account for spatial autocorrelation in population average brain maps. `/data/cv_split.py` implements 4 train-test split styles: random, spatial (based on euclidean coordinates), community (based on Louvain communities), schaefer (based on Schaefer parcellation functional subnetworks). Random and spatial splits are visualized below for `random seed=42`.
 <div style="display: flex; justify-content: center;">
   <table>
     <tr>
