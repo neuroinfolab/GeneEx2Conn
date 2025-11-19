@@ -67,7 +67,7 @@ Training regions in gray; test regions in orange. Pairwise patterns are learned 
 
 ## Encoder-decoder architectures
 All models in this repository are implemented in PyTorch. Models generally follow the form `Y_i,j = decode(enc(x_i), enc(x_j))`.
-- Encoders: PCA, PLS, low-rank projection, autoencoder, transformer
+- Encoders: PCA, PLS, low-rank projection, autoencoder, 1D convolution, transformer
 - Decoders: bilinear layer, inner product, MLP task head
 
 The proposed transformer-based architecture in [Predicting Functional Brain Connectivity with Context-Aware Deep Neural Networks](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=8UuFrz8AAAAJ&citation_for_view=8UuFrz8AAAAJ:eQOLeE2rZwMC) is the Spatiomolecular Transformer (SMT).
