@@ -23,7 +23,7 @@ parameters:
   roi_combination:
     values: ['concat', 'add']
   pooling_mode:         # Output pooling method
-    values: ['attention']
+    values: ['linear']
   use_alibi:            # Use ALiBi positional biases
     values: [True, False]
   transformer_dropout:  # Dropout in attention blocks
@@ -61,16 +61,16 @@ best_parameters:
   roi_combination:
     values: ['concat']
   d_model:
-    values: [64]
+    values: [32]
   nhead:
-    values: [4] 
+    values: [2] 
   num_layers:
-    values: [4]
+    values: [2]
   deep_hidden_dims:
     values:
       - [256, 128, 64]
   pooling_mode:
-    values: ['attention'] # attention pooling recommended
+    values: ['linear'] # attention (d_model dim output), linear (num tokens dim output)
   use_alibi:
     values: [True]
   transformer_dropout:
@@ -81,14 +81,14 @@ best_parameters:
     values: [0.00009]
   weight_decay:
     values: [0.00001]
-  batch_size:
-    values: [1024]
-  epochs:
-    values: [200]
   aug_prob:
     values: [0.3]
   aug_style:
     values: ['curriculum_swap_linear_decay']
+  batch_size:
+    values: [1024]
+  epochs:
+    values: [100]
   lambda_sym:
     values: [0.00001]
   num_workers:

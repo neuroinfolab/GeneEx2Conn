@@ -316,7 +316,7 @@ def load_connectome(parcellation='S456', omit_subcortical=False, dataset='UKBB',
         region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv(f'./data/atlases/atlas-4{parcellation}Parcels_dseg_reformatted.csv').iterrows()]
         if measure == 'SC':
             print("Warning: SC measure not available for UKBB dataset, returning HCP S456 SC")
-            matrix = np.log1p(loadmat(f'./data/HCP1200/HCP1200_DTI/4{parcellation}/4{parcellation}_DTI_count.mat')['connectivity'])
+            matrix = np.log1p(loadmat(f'./data/HCP1200/4{parcellation}_DTI_count.mat')['connectivity'])
             matrix = matrix / matrix.max()
         elif measure=='FC_EXP_DECAY':
             matrix = np.array(pd.read_csv(f'./data/UKBB/UKBB_{parcellation}_FC_exp_decay.csv', header=None))
@@ -341,9 +341,9 @@ def load_connectome(parcellation='S456', omit_subcortical=False, dataset='UKBB',
         elif parcellation in ['S156', 'S456']:
             region_labels = [row['label_7network'] if pd.notna(row['label_7network']) else row['label'] for _, row in pd.read_csv(f'./data/atlases/atlas-4{parcellation}Parcels_dseg_reformatted.csv').iterrows()]
             if measure == 'FC':
-                matrix = np.loadtxt(f'./data/HCP1200/HCP1200_fMRI/HCP1200_{parcellation}_FC_mu.csv', delimiter=',')
+                matrix = np.loadtxt(f'./data/HCP1200/HCP1200_{parcellation}_FC_mu.csv', delimiter=',')
             elif measure == 'SC':
-                matrix = np.log1p(loadmat(f'./data/HCP1200/HCP1200_DTI/4{parcellation}/4{parcellation}_DTI_count.mat')['connectivity'])
+                matrix = np.log1p(loadmat(f'./data/HCP1200/4{parcellation}_DTI_count.mat')['connectivity'])
                 matrix = matrix / matrix.max()
         else:
             raise ValueError("HCP only supports S100/S156/S400/S456 parcellation")

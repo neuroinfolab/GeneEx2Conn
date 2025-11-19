@@ -21,9 +21,9 @@ parameters:
   genevec_type:
     values: ['gene2vec', 'one_hot']
   region_emb_init:      # Region embedding initialization
-    values: ['spatial', 'none']
+    values: ['none']
   pooling_mode:         # Output pooling method
-    values: ['attention']
+    values: ['linear']
   use_alibi:            # Use ALiBi positional biases
     values: [True, False]
   transformer_dropout:  # Dropout in attention blocks
@@ -55,9 +55,9 @@ best_parameters:
   input_dim:
     value: !!int 0
   expression_bins:
-    values: [5]
+    values: [100]
   genevec_type:
-    values: ['gene2vec'] # 'gene2vec', 'coexpression', 'one_hot'
+    values: ['one_hot'] # 'gene2vec', 'coexpression', 'one_hot'
   region_emb_init:
     values: ['none'] # 'spatial' initialization based on coordinates 
   d_model:
@@ -70,7 +70,7 @@ best_parameters:
     values:
       - [256, 128, 64]
   pooling_mode:
-    values: ['attention'] # attention pooling recommended
+    values: ['linear'] 
   use_alibi:
     values: [True]
   transformer_dropout:
@@ -82,11 +82,11 @@ best_parameters:
   weight_decay:
     values: [0.0001]
   batch_size:
-    values: [512]
+    values: [1024]
   epochs:
     values: [100]
   aug_prob:
-    values: [0.0]
+    values: [0.3]
   aug_style:
     values: ['curriculum_swap_linear_decay']
   lambda_sym:

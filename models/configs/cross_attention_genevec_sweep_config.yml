@@ -21,7 +21,7 @@ parameters:
   genevec_type:
     values: ['gene2vec', 'one_hot']
   pooling_mode:         # Output pooling method
-    values: ['attention']
+    values: ['linear']
   use_alibi:            # Use ALiBi positional biases
     values: [True, False]
   transformer_dropout:  # Dropout in attention blocks
@@ -55,9 +55,9 @@ best_parameters:
   input_dim:
     value: !!int 0
   expression_bins:
-    values: [5]
+    values: [100]
   genevec_type:
-    values: ['gene2vec'] # 'gene2vec', 'coexpression', 'one_hot' (best)
+    values: ['one_hot'] # 'gene2vec', 'coexpression', 'one_hot' (best)
   d_model:
     values: [32] # 64 is best
   nhead:

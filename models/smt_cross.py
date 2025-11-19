@@ -124,7 +124,8 @@ class CrossAttentionBlock(nn.Module):
                     q, k, v,
                     dropout_p=self.dropout,
                     causal=False,
-                    alibi_slopes=self.alibi_slopes if self.use_alibi else None
+                    alibi_slopes=self.alibi_slopes if self.use_alibi else None, 
+                    deterministic=True
                 )  # (B, seq_len_q, nhead, head_dim)
                 
                 # Reshape back: (B, seq_len_q, d_model)
@@ -933,6 +934,8 @@ class SelfAttentionGeneVecEncoder(BaseGeneVecEncoder):
             combined_repr = torch.cat([roi_i_repr, roi_j_repr], dim=-1)  # (B, 2*d_model)
         elif self.roi_combination == 'add':
             combined_repr = roi_i_repr + roi_j_repr  # (B, d_model)
+        elif self.roi_combination == 'mean':
+            combined_repr = (roi_i_repr + roi_j_repr) / 2  # (B, d_model)
         else:
             raise ValueError(f"Unknown ROI combination method: {self.roi_combination}")
 
