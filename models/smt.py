@@ -70,7 +70,7 @@ class BaseTransformerModel(nn.Module):
             prev_dim = hidden_dim
         return nn.Sequential(*deep_layers), nn.Linear(prev_dim, 1)
 
-    def predict(self, loader, collect_attn=False, save_attn_path=None):
+    def predict(self, loader, collect_attn=False, save_attn_path=None, layer_idx=-1):
         self.eval()
         predictions = []
         targets = []
@@ -82,7 +82,7 @@ class BaseTransformerModel(nn.Module):
         if collect_attn and not getattr(self, 'use_attention_pooling', False):
             # Use encoder-specific attention collection setup
             if hasattr(self.encoder, 'setup_attention_collection'):
-                self.encoder.setup_attention_collection()
+                self.encoder.setup_attention_collection(layer_idx=layer_idx)
             else:
                 # Fallback for older models
                 if hasattr(self.encoder, 'transformer_layers'):
@@ -105,7 +105,7 @@ class BaseTransformerModel(nn.Module):
                         # Use encoder-specific attention accumulation
                         batch_preds = out.cpu().numpy()
                         if hasattr(self.encoder, 'accumulate_attention_weights'):
-                            self.encoder.accumulate_attention_weights(is_first_batch=(batch_idx == 0))
+                            self.encoder.accumulate_attention_weights(is_first_batch=(batch_idx == 0), layer_idx=layer_idx)
                         else:
                             # Fallback for older models
                             if hasattr(self.encoder, 'transformer_layers'):
@@ -128,7 +128,7 @@ class BaseTransformerModel(nn.Module):
             else:
                 # Use encoder-specific attention processing
                 if hasattr(self.encoder, 'process_attention_weights'):
-                    avg_attn = self.encoder.process_attention_weights(total_batches, save_attn_path)
+                    avg_attn = self.encoder.process_attention_weights(total_batches, save_attn_path, layer_idx=layer_idx)
                 else:
                     # Fallback for older models
                     if hasattr(self.encoder, 'transformer_layers'):

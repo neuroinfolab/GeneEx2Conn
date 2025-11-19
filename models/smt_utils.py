@@ -155,6 +155,7 @@ class FlashAttentionBlock(nn.Module):
                 attn_output = flash_attn_qkvpacked_func(
                     qkv, dropout_p=0.0, causal=False,
                     alibi_slopes=self.alibi_slopes if self.use_alibi else None,
+                    deterministic=True # default is False
                 )
                 attn_output = attn_output.transpose(1, 2)
                 attn_output = self.merge_heads(attn_output)
@@ -422,47 +423,47 @@ def plot_cross_attention(avg_attn, genevec_dim=None):
     plt.tight_layout()
     plt.show()
 
-def collect_full_attention_heads(encoder_layers, save_attn_path=None):
-    """Enable full attention head collection"""
-    for layer in encoder_layers:
-        layer.store_attn = True
+def collect_full_attention_heads(encoder_layers, save_attn_path=None, layer_idx=-1):
+    """Enable full attention head collection for the target layer"""
+    target_layer = encoder_layers[layer_idx]
+    target_layer.store_attn = True
     return None
 
-def collect_full_cross_attention_heads(encoder_layers, save_attn_path=None):
-    """Enable full cross-attention head collection"""
-    for layer in encoder_layers:
-        layer.store_attn = True
+def collect_full_cross_attention_heads(encoder_layers, save_attn_path=None, layer_idx=-1):
+    """Enable full cross-attention head collection for the target layer"""
+    target_layer = encoder_layers[layer_idx]
+    target_layer.store_attn = True
     return None
 
-def accumulate_attention_weights(encoder_layers, is_first_batch=False):
-    """Accumulate attention weights during inference"""
-    last_layer = encoder_layers[-1]
-    attn_weights = last_layer.last_attn_weights # trained weights
+def accumulate_attention_weights(encoder_layers, is_first_batch=False, layer_idx=-1):
+    """Accumulate attention weights during inference for the target layer"""
+    target_layer = encoder_layers[layer_idx]
+    attn_weights = target_layer.last_attn_weights  # trained weights
     
     if attn_weights is not None:
         batch_avg = attn_weights.mean(dim=0)
-        if is_first_batch or not hasattr(last_layer, '_accumulated_attn'):
-            last_layer._accumulated_attn = batch_avg
+        if is_first_batch or not hasattr(target_layer, '_accumulated_attn'):
+            target_layer._accumulated_attn = batch_avg
         else:
-            last_layer._accumulated_attn += batch_avg
+            target_layer._accumulated_attn += batch_avg
 
-def accumulate_cross_attention_weights(encoder_layers, is_first_batch=False):
-    """Accumulate cross-attention weights during inference"""
-    last_layer = encoder_layers[-1]
-    attn_weights = last_layer.last_attn_weights # trained weights
+def accumulate_cross_attention_weights(encoder_layers, is_first_batch=False, layer_idx=-1):
+    """Accumulate cross-attention weights during inference for the target layer"""
+    target_layer = encoder_layers[layer_idx]
+    attn_weights = target_layer.last_attn_weights  # trained weights
     
     if attn_weights is not None:
         batch_avg = attn_weights.mean(dim=0)
-        if is_first_batch or not hasattr(last_layer, '_accumulated_attn'):
-            last_layer._accumulated_attn = batch_avg
+        if is_first_batch or not hasattr(target_layer, '_accumulated_attn'):
+            target_layer._accumulated_attn = batch_avg
         else:
-            last_layer._accumulated_attn += batch_avg
+            target_layer._accumulated_attn += batch_avg
 
-def process_full_attention_heads(encoder_layers, total_batches, save_attn_path=None, token_encoder_dim=None):
+def process_full_attention_heads(encoder_layers, total_batches, save_attn_path=None, token_encoder_dim=None, layer_idx=-1):
     """Process collected full attention head weights"""
-    # Extract last layer of transformer and accumulated average attention over all batches
-    last_layer = encoder_layers[-1]
-    avg_attn = getattr(last_layer, '_accumulated_attn', None)
+    # Extract specified layer of transformer and accumulated average attention over all batches
+    target_layer = encoder_layers[layer_idx]
+    avg_attn = getattr(target_layer, '_accumulated_attn', None)
     
     if avg_attn is not None and total_batches > 0:
         avg_attn = avg_attn / total_batches
@@ -479,11 +480,11 @@ def process_full_attention_heads(encoder_layers, total_batches, save_attn_path=N
     
     return avg_attn
 
-def process_full_cross_attention_heads(encoder_layers, total_batches, save_attn_path=None, genevec_dim=None):
+def process_full_cross_attention_heads(encoder_layers, total_batches, save_attn_path=None, genevec_dim=None, layer_idx=-1):
     """Process collected full cross-attention head weights"""
-    # Extract last layer of transformer and accumulated average attention over all batches
-    last_layer = encoder_layers[-1]
-    avg_attn = getattr(last_layer, '_accumulated_attn', None)
+    # Extract specified layer of transformer and accumulated average attention over all batches
+    target_layer = encoder_layers[layer_idx]
+    avg_attn = getattr(target_layer, '_accumulated_attn', None)
     
     if avg_attn is not None and total_batches > 0:
         avg_attn = avg_attn / total_batches

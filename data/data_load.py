@@ -1,5 +1,4 @@
 from env.imports import *
-# from sim.null import get_iPA_masks
 
 relative_data_path = os.path.normpath(os.getcwd() + os.sep + os.pardir) + '/GeneEx2Conn_data'
 absolute_data_path = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data'

@@ -125,7 +125,7 @@ class CrossAttentionBlock(nn.Module):
                     dropout_p=self.dropout,
                     causal=False,
                     alibi_slopes=self.alibi_slopes if self.use_alibi else None, 
-                    deterministic=True
+                    deterministic=True # default is False
                 )  # (B, seq_len_q, nhead, head_dim)
                 
                 # Reshape back: (B, seq_len_q, d_model)
@@ -387,13 +387,13 @@ class CrossAttentionGeneVecEncoder(BaseGeneVecEncoder):
         """Setup attention collection for cross-attention."""
         collect_full_cross_attention_heads(self.cross_attn_layers)
     
-    def accumulate_attention_weights(self, is_first_batch=False):
+    def accumulate_attention_weights(self, is_first_batch=False, layer_idx=-1):
         """Accumulate cross-attention weights."""
-        accumulate_cross_attention_weights(self.cross_attn_layers, is_first_batch=is_first_batch)
+        accumulate_cross_attention_weights(self.cross_attn_layers, is_first_batch=is_first_batch, layer_idx=layer_idx)
     
-    def process_attention_weights(self, total_batches, save_attn_path):
+    def process_attention_weights(self, total_batches, save_attn_path=None, layer_idx=-1):
         """Process accumulated cross-attention weights."""
-        return process_full_cross_attention_heads(self.cross_attn_layers, total_batches, save_attn_path, self.get_sequence_length())
+        return process_full_cross_attention_heads(self.cross_attn_layers, total_batches, save_attn_path, self.get_sequence_length(), layer_idx=layer_idx)
     
     def forward(self, gene_expr_i, gene_expr_j, coords_i, coords_j):
         """
@@ -621,13 +621,13 @@ class MixedAttentionGeneVecEncoder(BaseGeneVecEncoder):
         """Setup attention collection for self-attention."""
         collect_full_attention_heads(self.attn_layers)
     
-    def accumulate_attention_weights(self, is_first_batch=False):
+    def accumulate_attention_weights(self, is_first_batch=False, layer_idx=-1):
         """Accumulate self-attention weights."""
-        accumulate_attention_weights(self.attn_layers, is_first_batch=is_first_batch)
+        accumulate_attention_weights(self.attn_layers, is_first_batch=is_first_batch, layer_idx=layer_idx)
     
-    def process_attention_weights(self, total_batches, save_attn_path):
+    def process_attention_weights(self, total_batches, save_attn_path=None, layer_idx=-1):
         """Process accumulated self-attention weights."""
-        return process_full_attention_heads(self.attn_layers, total_batches, save_attn_path, self.get_sequence_length())
+        return process_full_attention_heads(self.attn_layers, total_batches, save_attn_path, self.get_sequence_length(), layer_idx=layer_idx)
 
     def get_region_embeddings_from_coords(self, coords_i, coords_j):
         """
@@ -883,18 +883,18 @@ class SelfAttentionGeneVecEncoder(BaseGeneVecEncoder):
         """Return self-attention layers for attention collection."""
         return self.attn_layers
     
-    def setup_attention_collection(self):
+    def setup_attention_collection(self, layer_idx=-1):
         """Setup attention collection for self-attention."""
-        collect_full_attention_heads(self.attn_layers)
+        collect_full_attention_heads(self.attn_layers, layer_idx=layer_idx)
     
-    def accumulate_attention_weights(self, is_first_batch=False):
+    def accumulate_attention_weights(self, is_first_batch=False, layer_idx=-1):
         """Accumulate self-attention weights."""
-        accumulate_attention_weights(self.attn_layers, is_first_batch=is_first_batch)
+        accumulate_attention_weights(self.attn_layers, is_first_batch=is_first_batch, layer_idx=layer_idx)
     
-    def process_attention_weights(self, total_batches, save_attn_path):
+    def process_attention_weights(self, total_batches, save_attn_path=None, layer_idx=-1):
         """Process accumulated self-attention weights."""
-        return process_full_attention_heads(self.attn_layers, total_batches, save_attn_path, self.get_sequence_length())
-
+        return process_full_attention_heads(self.attn_layers, total_batches, save_attn_path, self.get_sequence_length(), layer_idx=layer_idx)
+    
     def forward(self, gene_expr_i, gene_expr_j, coords_i=None, coords_j=None):
         """
         Forward pass with independent ROI processing and pooling.
