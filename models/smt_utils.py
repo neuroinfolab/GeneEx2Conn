@@ -155,7 +155,7 @@ class FlashAttentionBlock(nn.Module):
                 attn_output = flash_attn_qkvpacked_func(
                     qkv, dropout_p=0.0, causal=False,
                     alibi_slopes=self.alibi_slopes if self.use_alibi else None,
-                    deterministic=True # default is False
+                    deterministic=False # default is False
                 )
                 attn_output = attn_output.transpose(1, 2)
                 attn_output = self.merge_heads(attn_output)

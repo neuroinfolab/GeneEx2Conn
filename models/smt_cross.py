@@ -125,7 +125,7 @@ class CrossAttentionBlock(nn.Module):
                     dropout_p=self.dropout,
                     causal=False,
                     alibi_slopes=self.alibi_slopes if self.use_alibi else None, 
-                    deterministic=True # default is False
+                    deterministic=False # default is False
                 )  # (B, seq_len_q, nhead, head_dim)
                 
                 # Reshape back: (B, seq_len_q, d_model)

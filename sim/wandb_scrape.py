@@ -110,14 +110,28 @@ def weighted_mean_and_se(values, weights):
     
     return weighted_mean, weighted_std
 
-def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='transcriptome', target='FC', gene_list='0.2', within_last=60, before_last=0, use_weighted=False, exclude='HCP', only_include='UKBB', return_history=False):
+def fetch_and_summarize_wandb_runs(
+    model,
+    cv_type,
+    null_model,
+    feature_type='transcriptome',
+    target='FC',
+    gene_list='0.2',
+    within_last=60,
+    before_last=0,
+    use_weighted=False,
+    error_type='std_err',
+    exclude='HCP',
+    only_include='UKBB',
+    return_history=False
+):
     """
     Fetches wandb runs matching specific tags and summarizes their final train/test metrics.
     Handles different CV types with their expected number of runs:
     - random/spatial: 40 runs
     - schaefer: 9 runs  
     - lobe: 6 runs
-    
+
     Args:
         model (str): Model name, e.g., 'bilinear_CM'
         cv_type (str): CV type, one of: 'random', 'spatial', 'schaefer', 'lobe'
@@ -127,19 +141,20 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
         within_last (int): Search for runs within this many days ago (default: 60)
         before_last (int): Exclude runs from this many days ago (default: 0)
         use_weighted (bool): Whether to compute weighted statistics for schaefer/lobe CV
+        error_type (str): Select dispersion measure: 'std_dev' (default), or 'std_err'
         exclude (str): Dataset to exclude from search (default: 'HCP')
         return_history (bool): If True, return (summary_df, history_df) tuple
-    
+
     Returns:
-        summary_df (pd.DataFrame): DataFrame with mean, std, std of all train/test metrics
-                                  If use_weighted=True and cv_type in ['schaefer', 'lobe'], 
-                                  includes weighted_mean and weighted_std rows
+        summary_df (pd.DataFrame): DataFrame with mean and selected error (std or sem) of all train/test metrics.
+                                   If use_weighted=True and cv_type in ['schaefer', 'lobe'],
+                                   includes weighted_mean and weighted_[std/sem] rows.
         history_df (pd.DataFrame): Individual run data (only returned if return_history=True)
     """
     # Set time filters
     end_time = datetime.now() - timedelta(days=before_last)
     start_time = datetime.now() - timedelta(days=within_last)
-    
+
     # Set expected number of runs based on cv_type
     if cv_type == "schaefer":
         expected_runs = 9
@@ -147,7 +162,7 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
         expected_runs = 6
     else:  # random or spatial
         expected_runs = 40
-    
+
     filters = {
         "tags": {
             "$all": [
@@ -161,12 +176,12 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
             ],
         },
         "created_at": {
-            "$gte": start_time.isoformat(), 
+            "$gte": start_time.isoformat(),
             "$lte": end_time.isoformat()
         },
         "state": "finished"
     }
-    
+
     # Add exclusion filter if specified
     if exclude != "":
         filters["tags"]["$nin"] = [f"dataset_{exclude}"]
@@ -176,7 +191,7 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
 
     print(f"🔍 Fetching runs for: model={model}, cv_type={cv_type}, null_model={null_model}, feature_type={feature_type}")
     runs = api.runs(project_path, filters=filters, order="-created_at")
-    
+
     run_data = []
     for run in runs:
         metrics = {}
@@ -188,7 +203,7 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
         # Only consider runs with meaningful final_test_metrics
         if "final_test_metrics" not in summary:
             continue
-        
+
         for k, v in summary.get('final_train_metrics', {}).items():
             if isinstance(v, (int, float)):
                 metrics[f'train_{k}'] = v
@@ -200,15 +215,15 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
         metrics['run_name'] = run.name
         metrics['run_id'] = run.id
         metrics['final_test_pearson_r'] = pearson
-        
+
         # Extract fold number for weighted calculations
         if use_weighted and cv_type in ['schaefer', 'lobe']:
             fold_match = re.search(r'fold(\d+)', run.name)
             if fold_match:
                 metrics['fold'] = int(fold_match.group(1))
-        
+
         run_data.append(metrics)
-    
+
     df = pd.DataFrame(run_data)
 
     if len(df) < expected_runs:
@@ -236,33 +251,60 @@ def fetch_and_summarize_wandb_runs(model, cv_type, null_model, feature_type='tra
 
     # Store history before cleaning for aggregation
     history_df = df_unique.copy()
-    
+
     # Clean and summarize
     columns_to_drop = ["run_name", "run_id", "final_test_pearson_r"]
     if 'fold' in df_unique.columns:
         columns_to_drop.append("fold")
     df_clean = df_unique.drop(columns=columns_to_drop, errors="ignore")
 
-    summary_df = pd.DataFrame({
-        "mean": df_clean.mean(),
-        "std": df_clean.std()
-    }).T
-    
+    # Choose which error/dispersion measure to use
+    if error_type == "std_err":
+        error_func = lambda x: x.std() / np.sqrt(len(x))
+    elif error_type == "std_dev":
+        error_func = lambda x: x.std()
+    else:
+        raise ValueError(f"Unknown error_type '{error_type}'; must be 'std_err' or 'std_dev'.")
+
+    # Use only real valued columns for summary (avoid 'object' dtypes from missing values)
+    if len(df_clean) > 0:
+        numeric_columns = df_clean.select_dtypes(include=[np.number]).columns
+    else:
+        numeric_columns = []
+
+    summary_dict = {}
+    for col in numeric_columns:
+        summary_dict.setdefault("mean", {})[col] = df_clean[col].mean()
+        summary_dict.setdefault("std", {})[col] = error_func(df_clean[col])  # always use 'std' label
+
+    summary_df = pd.DataFrame(summary_dict).T
+
     # Add weighted statistics if requested and applicable
     if use_weighted and cv_type in ['schaefer', 'lobe']:
         weights = list(CV_WEIGHTS[cv_type].values())
-        
-        # Calculate weighted statistics for final_test_pearson_r
+
+        # Calculate weighted stats for final_test_pearson_r
         weighted_mean, weighted_std = weighted_mean_and_se(df_unique['final_test_pearson_r'].values, weights)
         summary_df.loc['weighted_mean', 'final_test_pearson_r'] = weighted_mean
-        summary_df.loc['weighted_std', 'final_test_pearson_r'] = weighted_std
-        
+
+        # Weighted error: use std or sem as per error_type, but always store under 'std'
+        if error_type == "sem":
+            # For sem: weighted_std / sqrt(sum(weights)), but weights sum to 1, so use len(weights)
+            weighted_sem = weighted_std / np.sqrt(len(weights))
+            summary_df.loc['std', 'final_test_pearson_r'] = weighted_sem
+        else:
+            summary_df.loc['std', 'final_test_pearson_r'] = weighted_std
+
         # Calculate weighted statistics for test_pearson_r if it exists
-        if 'test_pearson_r' in df_clean.columns:
+        if 'test_pearson_r' in df_clean.columns or 'test_pearson_r' in df_unique.columns:
             test_pearson_values = df_unique['test_pearson_r'].values if 'test_pearson_r' in df_unique.columns else df_clean['test_pearson_r'].values
             weighted_mean_test, weighted_std_test = weighted_mean_and_se(test_pearson_values, weights)
             summary_df.loc['weighted_mean', 'test_pearson_r'] = weighted_mean_test
-            summary_df.loc['weighted_std', 'test_pearson_r'] = weighted_std_test
+            if error_type == "sem":
+                weighted_sem_test = weighted_std_test / np.sqrt(len(weights))
+                summary_df.loc['std', 'test_pearson_r'] = weighted_sem_test
+            else:
+                summary_df.loc['std', 'test_pearson_r'] = weighted_std_test
 
     if return_history:
         return summary_df, history_df
@@ -1151,7 +1193,19 @@ def plot_final_subsetted_barchart(
     ylim=(0.1, 0.9),
     overlay_style="ratio",  # "alpha", "hatch", or "ratio"
     horizontal=False,
-    title=None
+    title=None, 
+    model_groups={
+        'Non-Linear': {
+            'dynamic_mlp': 'MLP',
+            'shared_transformer': 'SMT',
+            'dynamic_mlp_coords': 'MLP w/ coords',
+            'shared_transformer_cls': 'SMT w/ [CLS]'
+        },
+        'Bilinear': {
+            'pls_bilineardecoder': 'Bilinear PLS',
+            'bilinear_lowrank': 'Bilinear Low-Rank',
+        }
+    }
 ):
     """
     Create a final subsetted bar chart with customizable model groups and performance axis limits.
@@ -1168,23 +1222,9 @@ def plot_final_subsetted_barchart(
     Returns:
         dict: Group-to-color mapping for external legend construction
     """
-    
-    # Manually defined model groups - can be easily modified here
-    model_groups = {
-        'Non-Linear': {
-            'dynamic_mlp': 'MLP',
-            'shared_transformer': 'SMT',
-            'dynamic_mlp_coords': 'MLP w/ coords',
-            'shared_transformer_cls': 'SMT w/ [CLS]'
-        },
-        'Bilinear': {
-            'pls_bilineardecoder': 'Bilinear PLS',
-            'bilinear_lowrank': 'Bilinear Low-Rank',
-        }
-    }
 
-    base_fontsize = 22
-    label_fontsize = base_fontsize * 0.7
+    base_fontsize = 20
+    label_fontsize = base_fontsize * 0.6
     plt.rcParams.update({'font.size': base_fontsize})
 
     # Prepare plot data
@@ -1215,6 +1255,9 @@ def plot_final_subsetted_barchart(
     palette = sns.color_palette("viridis", n_colors=12, desat=1.0)[2::4]
     group_color_map = {group: color for group, color in zip(unique_groups, palette)}
 
+    # Uniform errorbar linewidth
+    errorbar_linewidth = 1.5
+
     # Plotting - adjust figure size based on orientation
     if horizontal:
         plt.figure(figsize=(7, 5), dpi=300)
@@ -1241,7 +1284,7 @@ def plot_final_subsetted_barchart(
                 fmt='none',
                 ecolor='black',
                 capsize=2,
-                linewidth=2,
+                linewidth=errorbar_linewidth,
                 zorder=2
             )
 
@@ -1261,22 +1304,24 @@ def plot_final_subsetted_barchart(
             else:
                 # Show true performance for all models if alpha style, otherwise only best model
                 if overlay_style == "alpha":
-                    # Show true performance above all bars for alpha overlay
+                    # Show true performance above all bars for alpha overlay, remove leading zero
+                    true_text = f"{row['TrueMean']:.2f}".replace('0.', '.')
                     ax.text(
                         x,
                         row["TrueMean"] + 0.025,  # Increased spacing from bar
-                        f"{row['TrueMean']:.2f}",
+                        true_text,
                         ha="center",
                         va="bottom",
                         fontsize=label_fontsize,  # Increased font size
                         color="black"
                     )
                 elif i == len(plot_df) - 1:
-                    # Show only true performance for best model (rightmost) for other styles
+                    # Show only true performance for best model (rightmost) for other styles, remove leading zero
+                    true_text = f"{row['TrueMean']:.2f}".replace('0.', '.')
                     ax.text(
                         x,
                         row["TrueMean"] + 0.025,  # Increased spacing from bar
-                        f"{row['TrueMean']:.2f}",
+                        true_text,
                         ha="center",
                         va="bottom",
                         fontsize=label_fontsize,  # Increased font size
@@ -1314,8 +1359,8 @@ def plot_final_subsetted_barchart(
                     yerr=row["NullStd"],
                     fmt='none',
                     ecolor='black',
-                    capsize=1,
-                    linewidth=1,
+                    capsize=2,
+                    linewidth=errorbar_linewidth,
                     linestyle='--',
                     zorder=4
                 )
@@ -1337,7 +1382,7 @@ def plot_final_subsetted_barchart(
                 fmt='none',
                 ecolor='black',
                 capsize=2,
-                linewidth=2,
+                linewidth=errorbar_linewidth,
                 zorder=2
             )
 
@@ -1357,10 +1402,11 @@ def plot_final_subsetted_barchart(
             else:
                 # Show only true performance for best model (topmost)
                 if i == 0:
+                    true_text = f"{row['TrueMean']:.2f}".replace('0.', '.')
                     ax.text(
                         row["TrueMean"],
                         y - 0.4,
-                        f"{row['TrueMean']:.2f}",
+                        true_text,
                         va="bottom",
                         ha="center",
                         fontsize=label_fontsize,
@@ -1396,27 +1442,27 @@ def plot_final_subsetted_barchart(
                     xerr=row["NullStd"],
                     fmt='none',
                     ecolor='black',
-                    capsize=1,
-                    linewidth=1,
+                    capsize=2,
+                    linewidth=errorbar_linewidth,
                     linestyle='--',
                     zorder=4
                 )
 
-    # Set axis properties based on orientation with hard-coded limits
-    range_size = ylim[1] - ylim[0]
-    if range_size % 0.2 == 0:
-        tick_interval = 0.2
-    else:
-        tick_interval = 0.1
-    
+    # Set axis properties based on orientation with y-axis ticks every 0.2
+    tick_interval = 0.2
+
     if horizontal:
         ax.set_ylim(*ylim)
         ax.set_yticks(np.arange(ylim[0], ylim[1] + tick_interval/2, tick_interval))
         ax.set_ylabel("Pearson-r", fontsize=label_fontsize)
         ax.set_xticks(range(len(plot_df)))
-        ax.set_xticklabels(plot_df["Model"], fontsize=label_fontsize, rotation=45, ha='right')
+        ax.set_xticklabels(plot_df["Model"], fontsize=label_fontsize-4, rotation=45, ha='right')
         ax.tick_params(axis='y', labelsize=label_fontsize)
-        ax.tick_params(axis='x', labelsize=label_fontsize, length=0)  # Remove tick marks but keep labels
+        # Draw small ticks under each bar (to help align the model titles)
+        for i in range(len(plot_df)):
+            ax.plot([i, i], [ylim[0], ylim[0] - 0.01], color="black", lw=1.5, clip_on=False)  # Small vertical tick
+        ax.tick_params(axis='x', labelsize=label_fontsize, length=0)  # Remove normal tick marks but keep labels
+
     else:
         ax.set_xlim(*ylim)
         ax.set_xticks(np.arange(ylim[0], ylim[1] + tick_interval/2, tick_interval))
@@ -1428,7 +1474,7 @@ def plot_final_subsetted_barchart(
 
     # Add title if provided
     if title:
-        plt.title(title, fontsize=base_fontsize-4, pad=30)
+        plt.title(title, fontsize=base_fontsize-4, pad=25)
 
     sns.despine()
     plt.tight_layout()
