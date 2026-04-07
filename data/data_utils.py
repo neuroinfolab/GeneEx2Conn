@@ -1,0 +1,515 @@
+from env.imports import *
+from torch.utils.data import WeightedRandomSampler, DataLoader, TensorDataset, Dataset
+
+# DATA HELPERS
+def reconstruct_connectome(Y, symmetric=True):
+    """
+    Reconstructs the full connectome matrix from a given input vector Y.
+
+    Parameters:
+    Y (numpy.ndarray): Input vector representing the connectome.
+    symmetric (bool): Whether to make the connectome symmetric. Default is True.
+
+    Returns:
+    numpy.ndarray: Reconstructed connectome matrix, symmetric if specified.
+    """
+    num_regions = math.floor(np.sqrt(Y.shape[0]))
+
+    Y_temp_upper = reconstruct_upper_triangle(Y[0::2], num_regions)
+    column_of_zeros = np.zeros((num_regions, 1))
+    row_of_zeros = np.zeros((1, num_regions + 1))
+    matrix_with_column = np.concatenate((column_of_zeros, Y_temp_upper), axis=1)
+    Y_temp_upper = np.concatenate((matrix_with_column, row_of_zeros), axis=0)
+
+    Y_temp_lower = reconstruct_upper_triangle(Y[1::2], num_regions)
+    Y_temp_lower = Y_temp_lower.T
+    row_of_zeros = np.zeros((1, num_regions))
+    column_of_zeros = np.zeros((num_regions + 1, 1))
+    matrix_with_row = np.concatenate((row_of_zeros, Y_temp_lower), axis=0)
+    Y_temp_lower = np.concatenate((matrix_with_row, column_of_zeros), axis=1)
+
+    Y_connectome = Y_temp_upper + Y_temp_lower
+    if symmetric:
+        Y_connectome = make_symmetric(Y_connectome)
+    
+    return Y_connectome
+
+def reconstruct_upper_triangle(vector, num_regions):
+    """
+    Reconstructs an upper triangular matrix from a given vector.
+
+    Parameters:
+    vector (numpy.ndarray): Input vector representing the upper triangle of a matrix.
+    num_regions (int): Number of regions in the matrix.
+
+    Returns:
+    numpy.ndarray: Reconstructed upper triangular matrix.
+    """
+    matrix = np.zeros((num_regions, num_regions))
+    vector_index = 0
+    
+    for i in range(num_regions):
+        for j in range(i, num_regions):
+            matrix[i, j] = vector[vector_index]
+            vector_index += 1
+            
+    return matrix
+
+def make_symmetric(matrix):
+    """
+    Ensures the matrix is symmetric by averaging the matrix with its transpose.
+
+    Parameters:
+    matrix (numpy.ndarray): Input matrix.
+
+    Returns:
+    numpy.ndarray: Symmetric matrix.
+    """
+    return (matrix + matrix.T) / 2
+
+# DATA PREPROCESSING
+def expand_X_symmetric(X):
+    """
+    Expands the X matrix symmetrically by combining features from pairs of regions.
+    For each pair of regions, creates two rows by concatenating their features in both orders.
+
+    Parameters:
+    X (numpy.ndarray): Input matrix of gene expressions, shape (num_regions, num_genes)
+                      where num_regions is the number of brain regions and 
+                      num_genes is the number of gene features per region
+
+    Returns:
+    numpy.ndarray: Expanded symmetric matrix, shape (region pairs * 2, 2 * num_genes)
+                  where region pairs = (num_regions choose 2)
+                  Each row contains concatenated features from two regions
+                  For each region pair (i,j), creates rows [features_i|features_j] and [features_j|features_i]
+    """
+    num_regions, num_genes = X.shape
+    region_combinations = list(combinations(range(num_regions), 2))
+    num_combinations = len(region_combinations)  # Equal to (num_regions * (num_regions-1))/2
+
+    expanded_X = np.zeros((num_combinations * 2, 2 * num_genes))
+    
+    for i, (region1, region2) in enumerate(region_combinations):
+        expanded_X[i * 2] = np.concatenate((X[region1], X[region2]))
+        expanded_X[i * 2 + 1] = np.concatenate((X[region2], X[region1]))
+
+    return expanded_X
+
+def expand_Y_symmetric(Y):
+    """
+    Expands the Y matrix symmetrically by extracting pairwise connectivity values.
+
+    Parameters:
+    Y (numpy.ndarray): Input matrix of connectome values, shape (num_regions, num_regions)
+                      where num_regions is the number of brain regions
+
+    Returns:
+    numpy.ndarray: Expanded symmetric vector, shape (region pairs * 2,)
+                  where region pairs = (num_regions choose 2) = (num_regions * (num_regions-1))/2
+                  For each region pair (i,j), contains both Y[i,j] and Y[j,i] values
+                  Total length is num_regions * (num_regions-1)
+    """
+    num_regions = Y.shape[0]
+    region_combinations = list(combinations(range(num_regions), 2))
+    num_combinations = len(region_combinations)  # Equal to (num_regions * (num_regions-1))/2
+    
+    expanded_Y = np.zeros(num_combinations * 2)  # Length = num_regions * (num_regions-1)
+    
+    for i, (region1, region2) in enumerate(region_combinations):
+        expanded_Y[i * 2] = Y[region1, region2]
+        expanded_Y[i * 2 + 1] = Y[region2, region1]
+    
+    return expanded_Y
+
+def expand_X_symmetric_spatial_null(X, include_coord=True):
+    """
+    Expands X matrix to extract coordinates, euclidean distances and structural connectivity values for each pair of regions.
+    
+    Parameters:
+    X (numpy.ndarray): Array where first 3 columns are coordinates and remaining columns contain structural connectivity matrix
+    include_coord (bool): Whether to include coordinates of regions i and j in output
+        
+    Returns:
+    numpy.ndarray: Matrix containing coordinates (if include_coord=True), euclidean distances and structural connectivity values for each region pair
+    """
+    coords = X[:, :3]  # First 3 columns are coordinates
+    Y_sc = X[:, 3:]   # Remaining columns are structural connectivity
+    
+    num_regions = coords.shape[0]
+    region_combinations = list(combinations(range(num_regions), 2))
+    num_combinations = len(region_combinations)
+    
+    if include_coord:
+        expanded_X = np.zeros((num_combinations * 2, 8))  # 3 coords i + 3 coords j + dist + sc
+    else:
+        expanded_X = np.zeros((num_combinations * 2, 2))  # just dist + sc
+    
+    for i, (region1, region2) in enumerate(region_combinations):
+        # Calculate euclidean distance between regions
+        dist = np.linalg.norm(coords[region1] - coords[region2])
+        
+        # Get structural connectivity values
+        sc_value = Y_sc[region1, region2]
+        
+        if include_coord:
+            # Store values for region1 -> region2
+            expanded_X[i * 2, 0:3] = coords[region1]  # coords of region i
+            expanded_X[i * 2, 3:6] = coords[region2]  # coords of region j
+            expanded_X[i * 2, 6] = dist
+            expanded_X[i * 2, 7] = sc_value
+            
+            # Store values for region2 -> region1
+            expanded_X[i * 2 + 1, 0:3] = coords[region2]  # coords of region i
+            expanded_X[i * 2 + 1, 3:6] = coords[region1]  # coords of region j
+            expanded_X[i * 2 + 1, 6] = dist
+            expanded_X[i * 2 + 1, 7] = sc_value
+        else:
+            # Store just distance and connectivity
+            expanded_X[i * 2, 0] = dist
+            expanded_X[i * 2, 1] = sc_value
+            expanded_X[i * 2 + 1, 0] = dist
+            expanded_X[i * 2 + 1, 1] = sc_value
+    
+    return expanded_X
+
+def expand_X_symmetric_transcriptome_spatial_null(X, feature_dims):
+    """
+    Expands X matrix to extract features for each pair of regions.
+    
+    Parameters:
+    X (numpy.ndarray): Array containing concatenated features:
+        - Coordinates
+        - Structural connectivity matrix 
+        - Gene PCA components
+        - Gene expression matrix
+    feature_dims (list): List of dimensions for each feature type [coords_dim, sc_dim, pca_dim, gene_dim]
+        
+    Returns:
+    numpy.ndarray: Matrix containing distances, connectivity values, and correlations for each region pair
+    """
+    start_idx = 0
+    coords = X[:, start_idx:start_idx + feature_dims[0]]
+    
+    start_idx += feature_dims[0]
+    Y_sc = X[:, start_idx:start_idx + feature_dims[1]]
+    
+    start_idx += feature_dims[1]
+    gene_pca = X[:, start_idx:start_idx + feature_dims[2]]
+    
+    start_idx += feature_dims[2]
+    gene_expr = X[:, start_idx:start_idx + feature_dims[3]]
+    
+    num_regions = coords.shape[0]
+    region_combinations = list(combinations(range(num_regions), 2))
+    num_combinations = len(region_combinations)
+    
+    # 4 features: distance, SC, PCA correlation, gene correlation
+    expanded_X = np.zeros((num_combinations * 2, 4))
+    
+    for i, (region1, region2) in enumerate(region_combinations):
+        # Calculate euclidean distance between regions
+        dist = np.linalg.norm(coords[region1] - coords[region2])
+        
+        # Get structural connectivity values
+        sc_value = Y_sc[region1, region2]
+        
+        # Calculate correlations
+        pca_corr = np.corrcoef(gene_pca[region1, :], gene_pca[region2, :])[0,1]
+        gene_corr = np.corrcoef(gene_expr[region1, :], gene_expr[region2, :])[0,1]
+        
+        # Store values for both directions
+        expanded_X[i * 2, 0] = dist
+        expanded_X[i * 2, 1] = sc_value
+        expanded_X[i * 2, 2] = pca_corr
+        expanded_X[i * 2, 3] = gene_corr
+        
+        expanded_X[i * 2 + 1, 0] = dist
+        expanded_X[i * 2 + 1, 1] = sc_value 
+        expanded_X[i * 2 + 1, 2] = pca_corr
+        expanded_X[i * 2 + 1, 3] = gene_corr
+    
+    return expanded_X
+
+def expand_X_symmetric_shared(X_train1, X_train2, Y_train2):
+    """
+    Expands rectangular X matrix symmetrically (including shared test regions).
+
+    Parameters:
+    X_train1 (numpy.ndarray): Square training matrix.
+    X_train2 (numpy.ndarray): Rectangular training matrix connecting to shared test regions.
+    Y_train2 (numpy.ndarray): Rectangular connectivity matrix.
+
+    Returns:
+    tuple: Expanded symmetric X and Y matrices.
+    """
+    train_size, num_regions = X_train2.shape
+    test_size = X_train2.shape[1]
+    num_combinations = train_size * test_size * 2
+    
+    expanded_X = np.zeros((num_combinations, 2 * num_regions))
+    expanded_Y = np.zeros(num_combinations)
+
+    index = 0
+    for i in range(train_size):
+        for j in range(test_size):
+            expanded_X[index] = np.hstack((X_train2[i], X_train1[j]))
+            expanded_Y[index] = Y_train2[i, j]
+            index += 1
+
+            expanded_X[index] = np.hstack((X_train1[j], X_train2[i]))
+            expanded_Y[index] = Y_train2[i, j]
+            index += 1
+    
+    return expanded_X, expanded_Y
+
+def expand_shared_matrices(X_train, X_train2, Y_train2, Y_train_feats1=np.nan, Y_train_feats2=np.nan, incl_conn=False):
+    """
+    Expands matrices X_train and X_train2 to create X_train_shared, and expands Y_train2 accordingly.
+    Includes connectivity profiles as features accordingly.
+
+    Parameters:
+    X_train (numpy.ndarray): Training gene expression matrix.
+    X_train2 (numpy.ndarray): Shared rectangular training matrix.
+    Y_train2 (numpy.ndarray): Rectangular connectivity matrix.
+    Y_train_feats1 (numpy.ndarray, optional): Connectivity features for X_train.
+    Y_train_feats2 (numpy.ndarray, optional): Connectivity features for X_train2.
+    incl_conn (bool, optional): Flag to include connectivity profiles.
+
+    Returns:
+    tuple: Expanded shared X and Y matrices.
+    """
+    train_size, num_genes = X_train.shape
+    test_size = X_train2.shape[0]
+
+    if not incl_conn:
+        expanded_size = train_size * test_size * 2
+        X_train_shared = np.empty((expanded_size, num_genes * 2))
+        Y_expanded = np.empty(expanded_size)
+
+        index = 0
+        for i in range(train_size):
+            for j in range(test_size):
+                X_train_shared[index] = np.hstack((X_train[i], X_train2[j]))
+                Y_expanded[index] = Y_train2[i, j]
+                index += 1
+
+                X_train_shared[index] = np.hstack((X_train2[j], X_train[i]))
+                Y_expanded[index] = Y_train2[i, j]
+                index += 1
+    else:
+        num_regions = Y_train2.shape[0]
+        num_combinations = train_size * test_size * 2
+        X_train_shared = np.empty((num_combinations, 2 * (num_genes + num_regions)))
+        Y_expanded = np.empty(num_combinations)
+
+        index = 0
+        for i in range(train_size):
+            for j in range(test_size):
+                X_train_shared[index] = np.hstack([X_train[i], Y_train_feats1[i], X_train2[j], Y_train_feats2[j]])
+                Y_expanded[index] = Y_train2[i, j]
+                index += 1
+
+                X_train_shared[index] = np.hstack([X_train2[j], Y_train_feats2[j], X_train[i], Y_train_feats1[i]])
+                Y_expanded[index] = Y_train2[i, j]
+                index += 1
+
+    return X_train_shared, Y_expanded
+
+# DATA LOADING 
+def create_data_loader(X, y, batch_size, device, shuffle=True, weight=False):
+    X = torch.FloatTensor(X).to(device)
+    y = torch.FloatTensor(y).to(device)
+    dataset = TensorDataset(X, y)
+    
+    # Handle class imbalance for binary classification, but only during training
+    if len(y.unique()) == 2 and weight:
+        # Calculate class weights
+        class_counts = torch.bincount(y.long())
+        print('class counts', class_counts)
+        total_samples = len(y)
+        class_weights = total_samples / (2 * class_counts)
+        print(f'Class weights - 0: {class_weights[0]:.4f}, 1: {class_weights[1]:.4f}')
+        sample_weights = class_weights[y.long()]
+
+        # Create weighted sampler
+        sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True
+        )
+        return DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=0)
+    
+    # For validation or non-binary cases, use regular DataLoader
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=0)
+
+# TEMPORARY 
+from data.data_load import load_transcriptome
+# Load AHBA sample data
+AHBA_samples_df = pd.read_csv('/scratch/asr655/neuroinformatics/GeneEx2Conn_data/human_samples_files/AHBA_srs_samples.csv')
+# Get valid genes from transcriptome
+_, valid_genes = load_transcriptome(
+    parcellation='S456',
+    gene_list='0.2',
+    dataset='AHBA',
+    return_valid_genes=True,
+    sort_genes='refgenome'
+)
+# Extract gene columns and compute stds
+gene_cols = [col for col in AHBA_samples_df.columns if col in valid_genes]
+gene_stds = torch.tensor(
+    AHBA_samples_df[gene_cols].std().values,
+    dtype=torch.float32)
+
+def augment_batch_X(batch_X, noise_scale=0.04):
+    '''
+    Adds random noise to gene expression values scaled by per-gene stds.
+    '''
+    num_genes = len(gene_stds)
+    X1, X2 = torch.chunk(batch_X, chunks=2, dim=1)
+
+    noise1 = torch.randn_like(X1) * gene_stds * noise_scale
+    noise2 = torch.randn_like(X2) * gene_stds * noise_scale
+    noisy_batch = torch.cat((X1 + noise1, X2 + noise2), dim=1)
+    
+    return noisy_batch
+
+def augment_batch_y(batch_idx, dataset, device, verbose=False):
+    '''
+    Helper function to swap out targets of a population batch with individualized targets from population data
+    '''
+    start_time = time.time()    
+    
+    # Convert expanded index to upper triangle index
+    batch_idx = batch_idx - (batch_idx % 2) 
+    # Convert to tuple index of true connectome
+    true_pairs = np.array([dataset.expanded_idx_to_true_pair[idx.item()] for idx in batch_idx])
+    # Convert tuple index to expanded index for population data (might be different indexing system)
+    pop_edge_indices = np.array([dataset.upper_tri_map[tuple(pair)] for pair in true_pairs])
+    # Get mask for all subjects for these edges
+    valid_subjects_mask = dataset.masks[:, pop_edge_indices]
+    # For each edge, randomly select a subject with valid data for that edge
+    random_subjects = np.array([
+        np.random.choice(np.where(valid_subjects_mask[:, i])[0])
+        for i in range(len(pop_edge_indices))])
+    # Use vectorized indexing to store edge values for selected subjects
+    batch_y = torch.tensor(dataset.connectomes[random_subjects, pop_edge_indices], dtype=torch.float32).to(device)    
+    
+    pop_time = time.time() - start_time
+    if verbose:
+        print(f"Augmentation time: {pop_time:.2f} seconds")
+    
+    # Return augmented target batch of shape (batch_size,)
+    return batch_y
+
+def swap_batch_with_strong_edges(dataset, allowed_indices, batch_size, strong_thresh=0.3,
+                                 target_side_aug=False, device="cpu"):
+    """
+    Sample a batch of strong edges (|y| > threshold) from RegionPairDataset,
+    restricted to allowed_indices (e.g., train_indices) to prevent leakage.
+
+    Args:
+        dataset (RegionPairDataset): Full dataset (not a Subset).
+        allowed_indices (array-like): Indices in expanded dataset allowed for sampling (train indices only).
+        batch_size (int): Size of the batch to return.
+        strong_thresh (float): Threshold above which an edge is considered strong (positive or negative).
+        target_side_aug (bool): If True, replace targets with individual-level values.
+        device (str): Device to move tensors to.
+    
+    Returns:
+        batch_X, batch_y, batch_coords, batch_idx
+    """
+    # Ensure allowed_indices is a numpy array
+    allowed_indices = np.array(allowed_indices, dtype=np.int64)
+
+    # Identify strong edge indices in the full dataset
+    y_vals = dataset.Y_expanded.numpy()
+    strong_idx_all = np.where(np.abs(y_vals) > strong_thresh)[0]
+
+    # Intersect with allowed indices to avoid leakage
+    strong_idx = np.intersect1d(strong_idx_all, allowed_indices)
+
+    if len(strong_idx) < batch_size:
+        raise ValueError(f"Only {len(strong_idx)} eligible strong edges found; batch size is {batch_size}.")
+
+    # Sample random indices from eligible strong edges
+    sampled_idx = np.random.choice(strong_idx, size=batch_size, replace=False)
+    
+    # Fetch items from full dataset
+    batch = [dataset[idx] for idx in sampled_idx]
+    batch_X, batch_y, batch_coords, _ = zip(*batch)
+
+    batch_X = torch.stack(batch_X).to(device)
+    batch_y = torch.stack(batch_y).to(device)
+    batch_coords = torch.stack(batch_coords).to(device)
+    batch_idx = torch.tensor(sampled_idx, dtype=torch.long).to(device)
+    if target_side_aug:
+        # === Target-side augmentation ===
+        batch_y = augment_batch_y(batch_idx, dataset, device)
+
+    return batch_X, batch_y, batch_coords, batch_idx
+
+
+class RegionPairDataset(Dataset):
+    def __init__(self, X, Y, coords, valid2true_mapping, dataset, parcellation, valid_genes):
+        self.X = torch.tensor(X, dtype=torch.float32)
+        self.Y = torch.tensor(Y, dtype=torch.float32)
+        self.coords = torch.tensor(coords, dtype=torch.float32)
+        self.valid_genes = valid_genes
+        self.valid_indices = np.array(list(valid2true_mapping.keys()), dtype=np.int32) # subset indices
+        self.true_indices = np.array(list(valid2true_mapping.values()), dtype=np.int32) # full dataset indices
+
+        self.X_expanded = torch.tensor(expand_X_symmetric(X), dtype=torch.float32)
+        self.Y_expanded = torch.tensor(expand_Y_symmetric(Y), dtype=torch.float32)
+        self.coords_expanded = torch.tensor(expand_X_symmetric(coords), dtype=torch.float32)
+        self.distances_expanded = torch.sqrt(torch.sum((self.coords_expanded[:, :3] - self.coords_expanded[:, 3:])**2, dim=1))
+        self.valid_indices_expanded = expand_X_symmetric(self.valid_indices.reshape(-1,1)).astype(np.int32)
+        self.true_indices_expanded = expand_X_symmetric(self.true_indices.reshape(-1,1)).astype(np.int32)
+        valid_pairs = tuple(map(tuple, self.valid_indices_expanded))
+        true_pairs = tuple(map(tuple, self.true_indices_expanded))
+        
+        self.valid_pair_to_expanded_idx = dict(zip(valid_pairs, range(len(valid_pairs))))
+        self.true_pair_to_expanded_idx = dict(zip(true_pairs, range(len(true_pairs))))
+        self.expanded_idx_to_valid_pair = {v: k for k, v in self.valid_pair_to_expanded_idx.items()}
+        self.expanded_idx_to_true_pair = {v: k for k, v in self.true_pair_to_expanded_idx.items()}
+    
+        # Load individualized connectomes
+        self.dataset = dataset
+        if self.dataset == 'UKBB':
+            data_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data/Penn_UKBB_data/npy/S456'
+        elif self.dataset == 'HCP':
+            data_dir = '/scratch/asr655/neuroinformatics/GeneEx2Conn_data/HCP1200/HCP1200_fMRI/npy/'
+        elif self.dataset == 'BHA2':
+            data_dir = f'/scratch/asr655/neuroinformatics/GeneEx2Conn_data/BHA2/{parcellation}/npy'
+        self.connectomes = np.load(f'{data_dir}/connectomes_upper.npy', allow_pickle=True)
+        self.masks = np.load(f'{data_dir}/masks.npy', allow_pickle=True)
+        self.subject_ids = np.load(f'{data_dir}/subject_ids.npy', allow_pickle=True)
+        self.upper_tri_map = np.load(f'{data_dir}/upper_triangle_index_map.npy', allow_pickle=True)
+        self.upper_tri_map = self.upper_tri_map.item()
+        
+    def __len__(self):
+        return len(self.X_expanded)
+        
+    def __getitem__(self, idx):
+        # return features, target, coords, and index in expanded dataset (can be used to map to true region pairs)
+        return self.X_expanded[idx], self.Y_expanded[idx], self.coords_expanded[idx], idx
+        
+    def get_all_data(self, idx):
+        return {
+            'features': self.X_expanded[idx],
+            'target': self.Y_expanded[idx], 
+            'coords': self.coords_expanded[idx],
+            'valid_idx': self.valid_indices_expanded[idx],
+            'true_idx': self.true_indices_expanded[idx]
+        }
+        
+    def get_by_valid_indices(self, idx1, idx2):
+        # Get data for a specific valid index pair using the mapping
+        pair_idx = self.valid_pair_to_expanded_idx[(idx1, idx2)]
+        return self.__getitem__(pair_idx)
+        
+    def get_by_true_indices(self, idx1, idx2):
+        # Get data for a specific true index pair using the mapping
+        # This is really only for returning target data
+        pair_idx = self.true_pair_to_expanded_idx[(idx1, idx2)]
+        return self.__getitem__(pair_idx)
