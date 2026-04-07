@@ -1,0 +1,46 @@
+name: pls_bilineardecoder
+method: random
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+# SMALL GRID 
+parameters:
+  input_dim: 
+    value: !!int 0
+  n_components:
+    values: [5, 10, 12, 25, 30, 50]
+  max_iter:
+    values: [1000]
+  scale:
+    values: [True]
+  optimize_encoder:
+    values: [False]
+  learning_rate:
+    values: [0.003]
+  batch_size:
+    values: [512]
+  weight_decay:
+    values: [0.001, 0.01, 0.1, 1.0]
+  epochs:
+    values: [100]
+
+best_parameters:
+  input_dim: 
+    value: !!int 0
+  n_components:
+    values: [25]
+  max_iter:
+    values: [1000]
+  scale:
+    values: [True]
+  optimize_encoder:
+    values: [False]
+  learning_rate:
+    values: [0.003]
+  batch_size:
+    values: [512]
+  weight_decay:
+    values: [0.01]
+  epochs:
+    values: [100]

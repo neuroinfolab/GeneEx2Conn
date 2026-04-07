@@ -1,0 +1,47 @@
+name: bilinear_lowrank
+method: grid
+metric:
+  name: mean_val_loss
+  goal: minimize
+
+# SMALL GRID 
+parameters:
+  input_dim: 
+    value: !!int 0
+  activation:
+    values: ['none']
+  learning_rate:
+    values: [0.0001]
+  batch_size:
+    values: [256]
+  regularization:
+    values: ['l2']
+  lambda_reg:
+    values: [0.001] #, 0.001, .0001, .00001
+  shared_weights:
+    values: [True]
+  reduced_dim:
+    values: [5, 8, 10, 15, 20, 25]
+  epochs:
+    values: [125] # [100, 125, 150]
+
+# BEST
+best_parameters:
+  input_dim: 
+    value: !!int 0
+  activation:
+    values: ['none'] 
+  learning_rate:
+    values: [0.0001]
+  batch_size:
+    values: [256]
+  regularization:
+    values: ['l2']
+  lambda_reg:
+    values: [0.001] 
+  shared_weights:
+    values: [True]
+  reduced_dim:
+    values: [10]
+  epochs:
+    values: [125]
