@@ -1,0 +1,93 @@
+# General
+*wandb
+sim/wandb/
+*slurm
+slurm-*
+*alexander-ratzan-new-york-university
+*arny
+__pycache__/
+.ipynb_checkpoints/
+
+# Notebooks to omit
+notebooks/quick_experiments/
+notebooks/HCP_UKBB_EDA+GLM/
+notebooks/NeurIPS_artifacts/schaefer_preds/
+notebooks/NeurIPS_artifacts/cls_case/
+notebooks/OHBM/ohbm_distance_runner*
+notebooks/OHBM/*preds*
+
+# Simulation outputs
+sim/sim_results/
+sim/logs/
+
+# Data
+archive/
+data/compressed_transcriptomics/
+data/geneformer/*
+data/gene_emb/
+data/annotations/
+data/atlases/atl-schaefer2018/
+data/nilearn_data/
+
+# File types
+*.sh
+*.pickle
+**/*.pickle
+*.png
+**/*.png
+*.gif
+**/*.gif
+*.jpg
+**/*.jpg
+*.netrc
+.cursorignore
+
+# Saved models (include selected)
+models/saved_models/*
+!models/saved_models/UKBB_base.pt
+!models/saved_models/UKBB_cls.pt
+!models/saved_models/UKBB_base_spin.pt
+!models/saved_models/UKBB_cls_spin.pt
+!models/saved_models/HCP_base.pt
+!models/saved_models/HCP_cls.pt
+!models/saved_models/HCP_base_spin.pt
+!models/saved_models/HCP_cls_spin.pt
+!models/saved_models/iPA391_base.pt
+!models/saved_models/iPA391_cls.pt
+!models/saved_models/iPA391_base_spin.pt
+!models/saved_models/iPA391_cls_spin.pt
+
+# Retain specific glass outputs
+data/glass/*
+!data/glass/random_cv.gif
+!data/glass/spatial_cv.gif
+!data/glass/random_cv_text.gif
+!data/glass/spatial_cv_text.gif
+!data/glass/cv_split_s400_structural_connectivity_spatial_split_10-3.gif
+!data/glass/cv_split_s400_structural_connectivity_random_split_4.gif
+!data/glass/S400_LAMA1_expression.png
+!data/glass/NeurIPS_summary.png
+!data/glass/SMT_schematic.png
+
+# Retain scripts
+!run_sim.sh
+!run_sim_parallel_smt_seq_noCV_array.sh
+!run_sim_parallel_smt_seq_CV_array.sh
+!run_sim_parallel_smt_cls_seq_noCV_array.sh
+!run_sim_parallel_smt_cls_seq_CV_array.sh
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Sensitive notebooks and directories
+UKBB_EDA.ipynb
+**/UKBB_EDA.ipynb
+transcriptome_harmonization_EDA.ipynb
+**/transcriptome_harmonization_EDA.ipynb
+notebooks/
+notebooks/NeurIPS_artifacts/
+notebooks/demos/quick_csv_demo.ipynb
+notebooks/HCP_UKBB_EDA+GLM/
+data/UKBB/
+.git_corrupted/

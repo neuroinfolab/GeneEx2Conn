@@ -1,0 +1,165 @@
+from env.imports import *
+import torch.backends.cudnn as cudnn
+from torch.cuda.amp import autocast, GradScaler
+from data.data_utils import augment_batch_y, augment_batch_X, swap_batch_with_strong_edges
+torch.set_float32_matmul_precision('high')
+
+def train_model(model, train_loader, val_loader, epochs, criterion, optimizer, patience=100, scheduler=None, train_scheduler=None, save_model=None, verbose=True, dataset=None, wandb_run=None):        
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    for i in range(torch.cuda.device_count()):
+        print(f"GPU {i}: {torch.cuda.get_device_name(i)} - Memory Allocated: {torch.cuda.memory_allocated(i)/1024**3:.2f} GB")
+    cudnn.benchmark = True  # Auto-tune GPU kernels
+    scaler = GradScaler()  # Enable FP16 training for faster training - set to None for regular training
+    
+    train_history = {"train_loss": [], "val_loss": []}
+    best_val_loss = float("inf")
+    best_model_state = None  # Store the best model state
+    patience_counter = 0  # Counts epochs without improvement
+    
+    for epoch in range(epochs):
+        start_time = time.time() if (epoch + 1) % 5 == 0 else None    
+        
+        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler=scaler, dataset=dataset, scheduler=train_scheduler)
+        train_history["train_loss"].append(train_loss)
+        
+        if val_loader:
+            val_loss = evaluate(model, val_loader, criterion, device, scheduler)
+            train_history["val_loss"].append(val_loss)
+
+            # Early stopping
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                print(f"Best val loss so far at epoch {epoch+1}: {best_val_loss:.4f}")
+                best_model_state = model.state_dict()  # Save best model
+                patience_counter = 0  # Reset counter if improvement
+            else:
+                patience_counter += 1  # Increment counter if no improvement
+
+            if patience_counter >= patience or epoch == epochs - 1:
+                model.load_state_dict(best_model_state)  # Rewind to best model
+                predictions, targets = model.predict(val_loader)
+                pearson_corr = pearsonr(predictions, targets)[0]
+                
+                if save_model is not None:
+                    save_path = os.path.join('models', 'saved_models')
+                    os.makedirs(save_path, exist_ok=True)                    
+                    model_path = os.path.join(save_path, f'{save_model}.pt')
+                    torch.save(model.state_dict(), model_path)
+                    print(f"Saved best model to {model_path}")
+                
+                if patience_counter >= patience:
+                    print(f"\nEarly stopping triggered at epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}, Pearson Correlation: {pearson_corr:.4f}")
+                else:
+                    print(f"\nReached final epoch {epoch+1}. Restoring best model with Val Loss: {best_val_loss:.4f}, Pearson Correlation: {pearson_corr:.4f}")
+                break
+        
+        if wandb_run is not None:
+            wandb_run.log({'train_loss': train_loss, 'val_loss': val_loss})
+        
+        if verbose and (epoch + 1) % 5 == 0:
+            epoch_time = time.time() - start_time
+            try: 
+                print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Time: {epoch_time:.2f}s")
+            except: 
+                print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.4f}, Time per epoch: {epoch_time:.2f}s")
+
+    return train_history
+
+def train_epoch(model, train_loader, criterion, optimizer, device, epoch, scaler=None, dataset=None, scheduler=None):
+    model.train()
+    total_train_loss = 0
+
+    for batch_X, batch_y, batch_coords, batch_idx in train_loader:
+        if dataset is not None and model.aug_style != 'none':
+            # Target-side augmentation with probability based on aug_style
+            aug_prob = model.aug_prob
+            if 'linear_decay' in model.aug_style:
+                aug_prob = model.aug_prob * (1 - epoch/model.epochs)
+            elif 'linear_increase' in model.aug_style:
+                aug_prob = model.aug_prob * (epoch/model.epochs)
+            elif 'linear_peak' in model.aug_style:
+                # Increase linearly to midpoint then decrease linearly
+                midpoint = model.epochs / 2
+                if epoch <= midpoint:
+                    aug_prob = model.aug_prob * (epoch/midpoint)
+                else:
+                    aug_prob = model.aug_prob * (1 - (epoch-midpoint)/midpoint)
+            elif 'constant' in model.aug_style or 'constant_feature_side' in model.aug_style:
+                aug_prob = model.aug_prob
+                
+            if np.random.random() < aug_prob:
+                if model.aug_style == 'constant_feature_side':
+                    batch_X = augment_batch_X(batch_X)
+                elif 'curriculum_swap' in model.aug_style:
+                    # full batch swap with strong edges + optional target-side augmentation
+                    batch_X, batch_y, batch_coords, batch_idx = swap_batch_with_strong_edges(
+                        dataset=dataset,
+                        allowed_indices=model.train_indices,   # <- train indices only
+                        batch_size=batch_X.shape[0],
+                        strong_thresh=0.3,
+                        target_side_aug=True,
+                        device=device)
+                else:
+                    batch_y = augment_batch_y(batch_idx, dataset, device)
+        
+        batch_X = batch_X.to(device)
+        batch_y = batch_y.to(device)
+        batch_coords = batch_coords.to(device)
+        
+        optimizer.zero_grad()
+        if scaler is not None: # Mixed precision training path (Default)
+            with autocast(dtype=torch.bfloat16):
+                try: # smt
+                    predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
+                except:
+                    predictions = model(batch_X).squeeze()
+                
+                # Try to pass additional args for SymmetricLoss, fallback to standard loss
+                try:
+                    loss = criterion(predictions, batch_y, model, batch_X, batch_coords, batch_idx, dataset)
+                except TypeError:
+                    loss = criterion(predictions, batch_y)
+                    
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+        else: # Regular training path
+            try: # smt
+                predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
+            except:
+                predictions = model(batch_X).squeeze()
+            loss = criterion(predictions, batch_y)   
+            loss.backward()
+            optimizer.step()
+
+        total_train_loss += loss.item()
+    
+    return total_train_loss / len(train_loader)
+
+def evaluate(model, val_loader, criterion, device, scheduler=None):
+    model.eval()
+    total_val_loss = 0
+    with torch.no_grad():
+        for batch_X, batch_y, batch_coords, batch_idx in val_loader:
+            batch_X = batch_X.to(device)
+            batch_y = batch_y.to(device)
+            batch_coords = batch_coords.to(device)
+        
+            try: # smt
+                predictions = model(batch_X, batch_coords, batch_idx).squeeze() # model forward pass selectively processes relevant data
+            except:
+                predictions = model(batch_X).squeeze()
+            val_loss = criterion(predictions, batch_y)            
+            total_val_loss += val_loss.item()
+            
+    mean_val_loss = total_val_loss / len(val_loader)
+
+    if scheduler is not None:
+        prev_lr = scheduler.optimizer.param_groups[0]['lr']
+        scheduler.step(mean_val_loss)
+        new_lr = scheduler.optimizer.param_groups[0]['lr']
+        if new_lr < prev_lr:
+            print(f"\nLR REDUCED: {prev_lr:.6f} → {new_lr:.6f} at Val Loss: {mean_val_loss:.6f}")
+
+    return mean_val_loss
